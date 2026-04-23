@@ -1,0 +1,20 @@
+Bundle Manifest
+
+Core files:
+- SKILL.md
+- INSTALL.txt
+- PUBLISH.txt
+
+Reference files:
+- references/output_schema.md
+- references/safety_policy.md
+
+Example files:
+- examples/sample_input_excerpt.txt
+- examples/sample_character_profile.json
+- examples/sample_relations.json
+
+Packaging intent:
+- Self-contained skill-definition bundle
+- No required runtime download from external repositories
+

@@ -1,0 +1,20 @@
+ClawHub Publish Notes
+
+Suggested metadata:
+- Type: OpenClaw Skill
+- Name: zaomeng-skill
+- Display Name: 造梦技能
+- Version: 1.0.2
+- Category: Writing / Roleplay / Character Simulation
+
+Risk posture:
+- Self-contained skill-definition package
+- No mandatory external code fetch in runtime instructions
+- Explicit safety policy included
+
+Pre-publish checks:
+1. SKILL.md frontmatter is valid.
+2. Output schema and safety files are present.
+3. Examples are coherent with schema.
+4. No credentials or secrets in bundle.
+

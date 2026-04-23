@@ -99,6 +99,11 @@ hermes-skill/               # Hermes 适配
 
 MIT
 
+## Acknowledgements
+
+- Thanks to [`alchaincyf/nuwa-skill`](https://github.com/alchaincyf/nuwa-skill) for open-sourcing a clear skill packaging pattern (`SKILL.md + references + examples`) that informed this project's ClawHub publish bundle design.
+- This project adapts those publishing/organization ideas to Dreamforge's local-rule-engine character distillation workflow.
+
 ## 发布前检查清单
 
 - 仓库已包含 `skills/zaomeng-skill/SKILL.md`

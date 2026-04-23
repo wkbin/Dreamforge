@@ -1,0 +1,29 @@
+{
+  "name": "林黛玉",
+  "core_traits": ["敏感", "聪慧", "自尊"],
+  "values": {
+    "勇气": 6,
+    "智慧": 8,
+    "善良": 7,
+    "忠诚": 8,
+    "野心": 3,
+    "正义": 6,
+    "自由": 7,
+    "责任": 6
+  },
+  "speech_style": "言辞锋利但情绪克制，常带反讽。",
+  "typical_lines": ["你最会哄人。"],
+  "decision_rules": ["感到被轻视→先反讽防御，再观察对方诚意"],
+  "arc": {
+    "start": {"勇气": 5},
+    "mid": {"勇气": 6, "trigger_event": "争执与和解"},
+    "end": {"勇气": 7, "final_state": "更愿意表达真实需求"}
+  },
+  "evidence": {
+    "descriptions": ["林黛玉冷笑"],
+    "dialogues": ["你最会哄人。"],
+    "thoughts": []
+  },
+  "confidence": 0.76
+}
+

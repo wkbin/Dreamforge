@@ -1,0 +1,22 @@
+Install Notes (ClawHub Package)
+
+This bundle is designed as a self-contained skill definition package.
+It does not require downloading external repositories during skill execution.
+
+Required files in this folder:
+- SKILL.md
+- references/output_schema.md
+- references/safety_policy.md
+- examples/sample_input_excerpt.txt
+- examples/sample_character_profile.json
+- examples/sample_relations.json
+
+Optional local integration:
+- If you already host Dreamforge locally, map this skill to your local commands.
+- Keep execution policy local-only by default.
+
+Quick validation checklist:
+1) SKILL.md frontmatter has name + description.
+2) Output keys strictly follow output_schema.md.
+3) Safety rules are present and enforceable.
+
