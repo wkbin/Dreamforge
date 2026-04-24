@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.core.config import Config
 from src.modules.chat_engine import ChatEngine
+from src.modules.distillation import NovelDistiller
 from src.modules.relationships import RelationshipExtractor
 from src.utils.file_utils import save_json
 
@@ -76,6 +77,51 @@ class RelationBehaviorTests(unittest.TestCase):
             self.assertEqual(session["characters"], ["林黛玉", "贾宝玉"])
             self.assertEqual(session["state"]["relation_matrix"]["林黛玉_贾宝玉"]["trust"], 8)
             self.assertNotIn("哈利", session["characters"])
+
+    def test_distill_with_explicit_characters_uses_two_char_aliases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+            novel_path = root / "honglou.txt"
+            novel_path.write_text(
+                "\u9edb\u7389\u770b\u7740\u5b9d\u7389\uff0c\u6ca1\u6709\u8bf4\u8bdd\u3002"
+                "\u5b9d\u7389\u7b11\u9053\uff1a\u201c\u4f60\u53c8\u60f3\u591a\u4e86\u3002\u201d"
+                "\u9edb\u7389\u5fc3\u91cc\u4e00\u9178\uff0c\u5374\u8fd8\u662f\u770b\u7740\u4ed6\u3002",
+                encoding="utf-8",
+            )
+
+            distiller = NovelDistiller(config)
+            result = distiller.distill(
+                str(novel_path),
+                characters=["\u6797\u9edb\u7389", "\u8d3e\u5b9d\u7389"],
+            )
+
+            self.assertGreater(result["\u6797\u9edb\u7389"]["evidence"]["description_count"], 0)
+            self.assertGreater(result["\u8d3e\u5b9d\u7389"]["evidence"]["dialogue_count"], 0)
+
+    def test_relationship_extractor_matches_two_char_aliases(self):
+        extractor = RelationshipExtractor(Config())
+        alias_map = {
+            "\u6797\u9edb\u7389": ["\u6797\u9edb\u7389", "\u9edb\u7389"],
+            "\u8d3e\u5b9d\u7389": ["\u8d3e\u5b9d\u7389", "\u5b9d\u7389"],
+            "\u859b\u5b9d\u9497": ["\u859b\u5b9d\u9497", "\u5b9d\u9497"],
+        }
+        chunk = (
+            "\u9edb\u7389\u770b\u7740\u5b9d\u7389\uff0c\u6ca1\u6709\u8bf4\u8bdd\u3002"
+            "\u5b9d\u9497\u8fd9\u65f6\u624d\u8fdb\u95e8\u3002"
+            "\u9edb\u7389\u53c8\u5bf9\u5b9d\u7389\u8bf4\uff0c\u4f60\u8be5\u56de\u53bb\u4e86\u3002"
+        )
+
+        pairs = extractor._extract_pair_interactions(
+            chunk,
+            ["\u6797\u9edb\u7389", "\u8d3e\u5b9d\u7389", "\u859b\u5b9d\u9497"],
+            alias_map=alias_map,
+        )
+
+        self.assertIn("\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389", pairs)
+        self.assertEqual(len(pairs["\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389"]), 2)
+        self.assertNotIn("\u6797\u9edb\u7389_\u859b\u5b9d\u9497", pairs)
+        self.assertNotIn("\u859b\u5b9d\u9497_\u8d3e\u5b9d\u7389", pairs)
 
 
 if __name__ == "__main__":

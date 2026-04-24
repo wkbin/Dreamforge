@@ -85,16 +85,19 @@ class NovelDistiller:
         novel_id = novel_id_from_input(novel_path)
 
         target_characters = [c.strip() for c in characters if c.strip()] if characters else None
+        allow_sparse_alias = bool(target_characters)
         if not target_characters:
             target_characters = self._extract_top_characters(text)
+            allow_sparse_alias = False
         if not target_characters:
             raise ValueError("No character candidates were extracted from the novel text")
+        alias_map = self._build_alias_map(text, target_characters, allow_sparse_alias=allow_sparse_alias)
 
         aggregated = {name: self._empty_bucket() for name in target_characters}
         arc_points: Dict[str, List[Tuple[int, Dict[str, int]]]] = defaultdict(list)
 
         for idx, chunk in enumerate(chunks):
-            chunk_evidence, chunk_values = self._extract_from_chunk(chunk, target_characters)
+            chunk_evidence, chunk_values = self._extract_from_chunk(chunk, alias_map)
             for name in target_characters:
                 bucket = aggregated[name]
                 evidence = chunk_evidence.get(name)
@@ -196,6 +199,58 @@ class NovelDistiller:
         max_characters = int(self.config.get("distillation.max_characters", 10))
         return filtered[:max_characters]
 
+    def _build_alias_map(
+        self,
+        text: str,
+        character_names: List[str],
+        allow_sparse_alias: bool = False,
+    ) -> Dict[str, List[str]]:
+        alias_owners: Dict[str, List[str]] = defaultdict(list)
+        for name in character_names:
+            for alias in self._candidate_aliases(name):
+                alias_owners[alias].append(name)
+
+        alias_map: Dict[str, List[str]] = {}
+        for name in character_names:
+            aliases = [name]
+            for alias in self._candidate_aliases(name):
+                if alias_owners.get(alias) != [name]:
+                    continue
+                if not self._alias_is_reliable(text, alias, allow_sparse_alias=allow_sparse_alias):
+                    continue
+                aliases.append(alias)
+            alias_map[name] = aliases
+        return alias_map
+
+    @staticmethod
+    def _candidate_aliases(name: str) -> List[str]:
+        if len(name) < 3:
+            return []
+        alias = name[-2:]
+        if len(alias) < 2 or alias == name:
+            return []
+        return [alias]
+
+    def _alias_is_reliable(self, text: str, alias: str, allow_sparse_alias: bool = False) -> bool:
+        if len(alias) < 2 or alias in self.STOP_NAMES:
+            return False
+        min_mentions = 1 if allow_sparse_alias else 2
+        return self._count_token_mentions(text, alias) >= min_mentions
+
+    def _text_mentions_any_alias(self, text: str, aliases: List[str]) -> bool:
+        return any(self._contains_token(text, alias) for alias in aliases)
+
+    @staticmethod
+    def _contains_token(text: str, token: str) -> bool:
+        if not token:
+            return False
+        return token in text
+
+    def _count_token_mentions(self, text: str, token: str) -> int:
+        if not token:
+            return 0
+        return text.count(token)
+
     @staticmethod
     def _looks_like_name(name: str) -> bool:
         if len(name) < 2 or len(name) > 4:
@@ -209,23 +264,24 @@ class NovelDistiller:
         return {"descriptions": [], "dialogues": [], "thoughts": []}
 
     def _extract_from_chunk(
-        self, chunk: str, character_names: List[str]
+        self, chunk: str, alias_map: Dict[str, List[str]]
     ) -> Tuple[Dict[str, Dict[str, List[str]]], Dict[str, Dict[str, int]]]:
         sentences = split_sentences(chunk)
         evidence_map: Dict[str, Dict[str, List[str]]] = {}
         value_map: Dict[str, Dict[str, int]] = {}
         dims = self.config.get("distillation.values_dimensions", [])
 
-        for name in character_names:
+        for name, aliases in alias_map.items():
             evidence = self._empty_bucket()
             values_acc: List[Dict[str, int]] = []
 
             for i, sent in enumerate(sentences):
                 prev_sent = sentences[i - 1] if i > 0 else ""
                 next_sent = sentences[i + 1] if i + 1 < len(sentences) else ""
-                contains_name = name in sent
+                contains_name = self._text_mentions_any_alias(sent, aliases)
                 pronoun_hit = any(p in sent for p in ("他", "她")) and (
-                    name in prev_sent or name in next_sent
+                    self._text_mentions_any_alias(prev_sent, aliases)
+                    or self._text_mentions_any_alias(next_sent, aliases)
                 )
                 if not (contains_name or pronoun_hit):
                     continue

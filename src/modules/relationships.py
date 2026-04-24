@@ -43,6 +43,7 @@ class RelationshipExtractor:
         novel_id = novel_id_from_input(novel_path)
 
         characters = self.distiller._extract_top_characters(text)
+        alias_map = self.distiller._build_alias_map(text, characters, allow_sparse_alias=False)
         relation_buckets: Dict[str, Dict[str, Any]] = defaultdict(
             lambda: {
                 "trust_samples": [],
@@ -54,11 +55,11 @@ class RelationshipExtractor:
         )
 
         for chunk in chunks:
-            present = [name for name in characters if name in chunk]
+            present = [name for name in characters if self.distiller._text_mentions_any_alias(chunk, alias_map[name])]
             if len(present) < 2:
                 continue
             present = sorted(set(present))
-            pair_interactions = self._extract_pair_interactions(chunk, present)
+            pair_interactions = self._extract_pair_interactions(chunk, present, alias_map=alias_map)
 
             for a, b in itertools.combinations(present, 2):
                 key = "_".join(sorted([a, b]))
@@ -111,11 +112,19 @@ class RelationshipExtractor:
             counter[v] += 1
         return sorted(counter.items(), key=lambda x: x[1], reverse=True)[0][0]
 
-    def _extract_pair_interactions(self, chunk: str, present: List[str]) -> Dict[str, List[str]]:
+    def _extract_pair_interactions(
+        self,
+        chunk: str,
+        present: List[str],
+        alias_map: Optional[Dict[str, List[str]]] = None,
+    ) -> Dict[str, List[str]]:
         sents = split_sentences(chunk)
         pairs: Dict[str, List[str]] = defaultdict(list)
+        alias_map = alias_map or {name: [name] for name in present}
         for sent in sents:
-            hit = sorted(set(name for name in present if name in sent))
+            hit = sorted(
+                set(name for name in present if self.distiller._text_mentions_any_alias(sent, alias_map.get(name, [name])))
+            )
             if len(hit) < 2:
                 continue
             cleaned = re.sub(r"\s+", " ", sent).strip()
