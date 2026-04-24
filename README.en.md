@@ -362,6 +362,52 @@ clawhub-zaomeng-skill/
 tests/test_relation_behavior.py
 ```
 
+## Persona Files
+
+`distill` now exports more than `*.json`.
+
+For each character, the system also creates an editable persona bundle under:
+
+- `data/characters/<novel_id>/<character>/SOUL.md`
+- `data/characters/<novel_id>/<character>/NAVIGATION.md`
+- `data/characters/<novel_id>/<character>/IDENTITY.md`
+- `data/characters/<novel_id>/<character>/AGENTS.md`
+- `data/characters/<novel_id>/<character>/MEMORY.md`
+- `data/characters/<novel_id>/<character>/RELATIONS.md`
+
+Matching `*.generated.md` files are kept beside them so you can compare generated defaults with your hand-edited version.
+
+Runtime now reads `NAVIGATION.generated.md` first, then applies `NAVIGATION.md` overrides, then loads only the files declared in `load_order`. Optional layers such as `GOALS.md`, `STYLE.md`, `TRAUMA.md`, and `RELATIONS.md` are created only when distillation or later editing actually needs them.
+
+These files act as runtime inputs:
+
+- `NAVIGATION.md`: the persona entrypoint and routing map; it declares load order, which files are active, and which behavior should be sourced from which file
+- `SOUL.md`: identity anchor, soul goal, worldview, speech constraints, taboo topics, forbidden behaviors
+- `GOALS.md`: optional long-term drive, decision pressure, and strategic preference layer
+- `STYLE.md`: optional wording, cadence, signature phrases, and emotional surface layer
+- `TRAUMA.md`: optional scars, taboo triggers, and hard boundaries layer
+- `IDENTITY.md`: experience, typical lines, decision habits, emotional style
+- `AGENTS.md`: group-chat rules, silence boundaries, and runtime behavior rules after navigation is resolved
+- `MEMORY.md`: stable memory, user edits, notable interactions, relationship updates
+- `RELATIONS.md`: per-character editable relation overlay for trust, affection, appellations, conflict focus, and interaction style
+
+Runtime loading now prefers the editable persona files and merges them back into the character profile. Editing these files directly changes later replies.
+
+## Runtime Memory Writes
+
+This version also writes character constraints back during chat, not only through manual file edits:
+
+- If a user prompt contains durable guidance such as `记住`, `以后`, `不要`, `改成`, `纠正`, or `必须`, and it explicitly names a character, that guidance is appended to the target character's `MEMORY.md`
+- `/correct character|target|original|corrected|reason` still writes to `data/corrections/`, and now also writes into the target character's `MEMORY.md`
+- These memory entries are loaded again on later turns and can affect cadence, taboo boundaries, value emphasis, and behavior constraints
+
+Recommended workflow:
+
+- Use explicit durable prompts when you want long-term behavior shaping
+- Use `/correct` when you want to pin a clear anti-OOC correction
+- Edit `NAVIGATION.md` when you want to change which persona files are active or their load order
+- Edit `SOUL.md` / `MEMORY.md` directly when you want full manual control
+
 ## License
 
 [MIT](LICENSE)

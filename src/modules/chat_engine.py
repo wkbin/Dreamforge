@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from src.core.config import Config
 from src.core.llm_client import LLMClient
+from src.modules.distillation import NovelDistiller
 from src.modules.reflection import ReflectionEngine
 from src.modules.speaker import Speaker
 from src.utils.file_utils import (
@@ -19,6 +21,7 @@ from src.utils.file_utils import (
     normalize_character_name,
     normalize_relation_key,
     novel_id_from_input,
+    safe_filename,
     save_json,
 )
 
@@ -116,8 +119,9 @@ class ChatEngine:
             self.print_correction_hint(session)
 
     def observe_once(self, session: Dict[str, Any], user_msg: str) -> List[tuple[str, str]]:
-        responders = self._active_characters(session, speaker="Narrator", context=user_msg)
-        return self._run_turn(session, "Narrator", user_msg, responders)
+        speaker, normalized_msg = self._resolve_observe_turn(session, user_msg)
+        responders = self._active_characters(session, speaker=speaker, context=normalized_msg)
+        return self._run_turn(session, speaker, normalized_msg, responders)
 
     def act_once(self, session: Dict[str, Any], character: str, user_msg: str) -> List[tuple[str, str]]:
         controlled = self._resolve_character_name(character, session["characters"])
@@ -152,6 +156,7 @@ class ChatEngine:
             raise ValueError("消息不能为空。")
 
         session["history"].append({"speaker": speaker, "message": message, "ts": int(time.time())})
+        self._persist_runtime_guidance(session, speaker, message)
         self._remember_focus_targets(session, speaker, responders)
         profiles = self._load_character_profiles(session.get("novel_id"))
 
@@ -225,6 +230,7 @@ class ChatEngine:
                 corrected_message=corrected,
                 reason=reason,
             )
+            self._persist_correction_memory(session, character, target, original, corrected, reason)
             print(f"纠错已记录: {item['character']} -> {item.get('target') or '任意对象'}")
             return True
         return False
@@ -317,6 +323,57 @@ class ChatEngine:
         save_json(self.sessions_dir / f"{session['id']}.json", session)
         self._save_relation_snapshot(session)
 
+    def _persist_runtime_guidance(self, session: Dict[str, Any], speaker: str, message: str) -> None:
+        if speaker not in self.SYSTEM_SPEAKERS:
+            return
+        if not self._looks_like_persistent_guidance(message):
+            return
+        for character in session.get("characters", []):
+            if not self._message_mentions_character(message, character):
+                continue
+            note = f"用户提示：{message.strip()}"
+            self._append_memory_entry(session.get("novel_id"), character, "user_edits", note)
+
+    @staticmethod
+    def _looks_like_persistent_guidance(message: str) -> bool:
+        durable_tokens = ("记住", "设定", "人设", "以后", "别再", "不要再", "改成", "纠正", "必须", "不要", "应该")
+        return any(token in message for token in durable_tokens) and "？" not in message and "?" not in message
+
+    def _message_mentions_character(self, message: str, character: str) -> bool:
+        aliases = [character] + self._candidate_aliases(character)
+        return any(alias and alias in message for alias in aliases)
+
+    def _persist_correction_memory(
+        self,
+        session: Dict[str, Any],
+        character: str,
+        target: str,
+        original: str,
+        corrected: str,
+        reason: str,
+    ) -> None:
+        note = f"纠正：原句={original}；修正={corrected}；原因={reason or 'inline_command'}"
+        self._append_memory_entry(session.get("novel_id"), character, "user_edits", note)
+        self._append_memory_entry(session.get("novel_id"), character, "notable_interactions", note)
+        if target:
+            target_note = f"与{target}相关的纠正：{corrected}"
+            self._append_memory_entry(session.get("novel_id"), character, "relationship_updates", target_note)
+
+    def _append_memory_entry(self, novel_id: Optional[str], character: str, field: str, note: str) -> None:
+        if not novel_id or not character or not note.strip():
+            return
+        normalized_name = normalize_character_name(character)
+        persona_dir = ensure_dir(self.characters_dir / novel_id / safe_filename(normalized_name))
+        memory_file = persona_dir / "MEMORY.md"
+        if not memory_file.exists():
+            memory_file.write_text(
+                "# MEMORY\n\n## Stable Memory\n\n## Mutable Notes\n",
+                encoding="utf-8",
+            )
+        NovelDistiller.refresh_persona_navigation(persona_dir, normalized_name)
+        with memory_file.open("a", encoding="utf-8") as handle:
+            handle.write(f"- {field}: {note.strip()}\n")
+
     def _load_character_profiles(self, novel_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         profiles: Dict[str, Dict[str, Any]] = {}
         if not self.characters_dir.exists():
@@ -335,6 +392,7 @@ class ChatEngine:
                     if item_novel_id == novel_id or item_novel_id is None:
                         canonical_name = normalize_character_name(item["name"])
                         item["name"] = canonical_name
+                        item = self._merge_persona_bundle(item, scoped_dir if novel_id else self.characters_dir)
                         profiles[canonical_name] = self._merge_profile_item(profiles.get(canonical_name), item)
                 return profiles
         else:
@@ -346,8 +404,226 @@ class ChatEngine:
             if item and isinstance(item, dict) and item.get("name"):
                 canonical_name = normalize_character_name(item["name"])
                 item["name"] = canonical_name
+                item = self._merge_persona_bundle(item, file.parent)
                 profiles[canonical_name] = self._merge_profile_item(profiles.get(canonical_name), item)
         return profiles
+
+    def _merge_persona_bundle(self, profile: Dict[str, Any], base_dir: Path) -> Dict[str, Any]:
+        merged = dict(profile)
+        persona_dir = base_dir / safe_filename(merged.get("name", ""))
+        if not persona_dir.exists():
+            return merged
+
+        for base_name, source in self._resolve_persona_sources(persona_dir):
+            if base_name == "RELATIONS":
+                continue
+            parsed = self._parse_persona_markdown(source)
+            merged = self._apply_persona_overrides(merged, parsed)
+        return merged
+
+    def _resolve_persona_sources(self, persona_dir: Path) -> List[tuple[str, Path]]:
+        descriptor = self._load_navigation_descriptor(persona_dir)
+        order = descriptor.get("runtime", {}).get("load_order", []) or list(NovelDistiller.DEFAULT_NAV_LOAD_ORDER)
+        sources: List[tuple[str, Path]] = []
+        seen = set()
+
+        for base_name in order:
+            normalized = str(base_name or "").strip().upper()
+            if not normalized or normalized in seen:
+                continue
+            meta = descriptor.get("files", {}).get(normalized, {})
+            if str(meta.get("status", "")).strip().lower() == "inactive":
+                continue
+            source = self._resolve_persona_file_path(persona_dir, normalized, meta)
+            if not source:
+                continue
+            sources.append((normalized, source))
+            seen.add(normalized)
+
+        for base_name in NovelDistiller.DEFAULT_NAV_LOAD_ORDER:
+            if base_name in seen:
+                continue
+            meta = descriptor.get("files", {}).get(base_name, {})
+            if str(meta.get("status", "")).strip().lower() == "inactive":
+                continue
+            source = self._resolve_persona_file_path(persona_dir, base_name, meta)
+            if not source:
+                continue
+            sources.append((base_name, source))
+            seen.add(base_name)
+
+        return sources
+
+    def _resolve_persona_file_path(self, persona_dir: Path, base_name: str, meta: Dict[str, Any]) -> Optional[Path]:
+        editable_name = str(meta.get("file", f"{base_name}.md")).strip() or f"{base_name}.md"
+        fallback_name = str(meta.get("fallback", f"{base_name}.generated.md")).strip() or f"{base_name}.generated.md"
+        editable = persona_dir / editable_name
+        if editable.exists():
+            return editable
+        fallback = persona_dir / fallback_name
+        if fallback.exists():
+            return fallback
+        return None
+
+    def _load_navigation_descriptor(self, persona_dir: Path) -> Dict[str, Any]:
+        descriptor = self._default_navigation_descriptor()
+        generated = persona_dir / "NAVIGATION.generated.md"
+        editable = persona_dir / "NAVIGATION.md"
+        for source in (generated, editable):
+            if not source.exists():
+                continue
+            parsed = self._parse_navigation_markdown(source)
+            descriptor = self._merge_navigation_descriptor(descriptor, parsed)
+        return descriptor
+
+    @staticmethod
+    def _default_navigation_descriptor() -> Dict[str, Any]:
+        files = {
+            base_name: {
+                "file": f"{base_name}.md",
+                "fallback": f"{base_name}.generated.md",
+            }
+            for base_name in NovelDistiller.DEFAULT_NAV_LOAD_ORDER
+        }
+        return {
+            "runtime": {"load_order": list(NovelDistiller.DEFAULT_NAV_LOAD_ORDER)},
+            "files": files,
+        }
+
+    def _merge_navigation_descriptor(
+        self,
+        base: Dict[str, Any],
+        overlay: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        merged = {
+            "runtime": dict(base.get("runtime", {})),
+            "files": {
+                key: dict(value) if isinstance(value, dict) else {}
+                for key, value in base.get("files", {}).items()
+            },
+        }
+        runtime_overlay = overlay.get("runtime", {}) if isinstance(overlay.get("runtime", {}), dict) else {}
+        if runtime_overlay.get("load_order"):
+            merged["runtime"]["load_order"] = self._parse_navigation_order(runtime_overlay["load_order"])
+        for key, value in runtime_overlay.items():
+            if key == "load_order":
+                continue
+            merged["runtime"][key] = value
+        files_overlay = overlay.get("files", {}) if isinstance(overlay.get("files", {}), dict) else {}
+        for base_name, payload in files_overlay.items():
+            entry = dict(merged["files"].get(base_name, {}))
+            if isinstance(payload, dict):
+                entry.update(payload)
+            merged["files"][base_name] = entry
+        return merged
+
+    @staticmethod
+    def _parse_navigation_markdown(path: Path) -> Dict[str, Any]:
+        parsed: Dict[str, Any] = {"runtime": {}, "files": {}}
+        current_section = ""
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if line.startswith("## "):
+                current_section = line[3:].strip().upper()
+                if current_section and current_section != "RUNTIME":
+                    parsed["files"].setdefault(current_section, {})
+                continue
+            if not line.startswith("- ") or ":" not in line:
+                continue
+            key, value = line[2:].split(":", 1)
+            key = key.strip()
+            value = value.strip()
+            if not value:
+                continue
+            if current_section == "RUNTIME":
+                parsed["runtime"][key] = value
+            elif current_section:
+                parsed["files"].setdefault(current_section, {})[key] = value
+        return parsed
+
+    @staticmethod
+    def _parse_navigation_order(value: Any) -> List[str]:
+        text = str(value or "").strip()
+        if not text:
+            return list(NovelDistiller.DEFAULT_NAV_LOAD_ORDER)
+        parts = [item.strip().upper() for item in re.split(r"->|,|\|", text) if item.strip()]
+        return parts or list(NovelDistiller.DEFAULT_NAV_LOAD_ORDER)
+
+    @staticmethod
+    def _parse_persona_markdown(path: Path) -> Dict[str, Any]:
+        parsed: Dict[str, Any] = {}
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line.startswith("- ") or ":" not in line:
+                continue
+            key, value = line[2:].split(":", 1)
+            key = key.strip()
+            value = value.strip()
+            if not value:
+                continue
+            if key in parsed and parsed[key]:
+                parsed[key] = f"{parsed[key]}；{value}"
+            else:
+                parsed[key] = value
+        return parsed
+
+    def _apply_persona_overrides(self, profile: Dict[str, Any], parsed: Dict[str, Any]) -> Dict[str, Any]:
+        merged = dict(profile)
+        list_fields = {
+            "core_traits",
+            "typical_lines",
+            "decision_rules",
+            "signature_phrases",
+            "forbidden_fillers",
+            "taboo_topics",
+            "forbidden_behaviors",
+            "user_edits",
+            "notable_interactions",
+            "relationship_updates",
+            "canon_memory",
+        }
+        dict_targets = {
+            "cadence": ("speech_habits", "cadence"),
+            "signature_phrases": ("speech_habits", "signature_phrases"),
+            "forbidden_fillers": ("speech_habits", "forbidden_fillers"),
+            "anger_style": ("emotion_profile", "anger_style"),
+            "joy_style": ("emotion_profile", "joy_style"),
+            "grievance_style": ("emotion_profile", "grievance_style"),
+        }
+        direct_fields = {
+            "identity_anchor",
+            "soul_goal",
+            "speech_style",
+            "thinking_style",
+            "worldview",
+            "life_experience",
+        }
+
+        for key, value in parsed.items():
+            if not value:
+                continue
+            if key == "canon_memory":
+                merged["life_experience"] = self._split_persona_value(value)
+                continue
+            if key in dict_targets:
+                parent, child = dict_targets[key]
+                bucket = dict(merged.get(parent, {})) if isinstance(merged.get(parent, {}), dict) else {}
+                bucket[child] = self._split_persona_value(value) if key in list_fields else value
+                merged[parent] = bucket
+                continue
+            if key in direct_fields:
+                if key == "life_experience":
+                    merged[key] = self._split_persona_value(value)
+                else:
+                    merged[key] = value
+                continue
+            if key in list_fields:
+                merged[key] = self._split_persona_value(value)
+        return merged
+
+    @staticmethod
+    def _split_persona_value(value: str) -> List[str]:
+        return [item.strip() for item in re.split(r"[；;]\s*", value) if item.strip()]
 
     @staticmethod
     def _merge_profile_item(existing: Optional[Dict[str, Any]], incoming: Dict[str, Any]) -> Dict[str, Any]:
@@ -418,10 +694,71 @@ class ChatEngine:
     ) -> Dict[str, Any]:
         rel_file = self._relation_file_for_novel(novel_id)
         if not rel_file:
+            base = {}
+        else:
+            rel = load_json(rel_file, default={})
+            normalized = {normalize_relation_key(key): value for key, value in rel.items()}
+            base = normalized.get(self._pair_key(normalize_character_name(speaker), normalize_character_name(target)), {})
+        return self._merge_relation_overlay(base, speaker, target, novel_id)
+
+    def _merge_relation_overlay(
+        self,
+        relation_state: Dict[str, Any],
+        speaker: str,
+        target: str,
+        novel_id: Optional[str],
+    ) -> Dict[str, Any]:
+        merged = dict(relation_state or {})
+        overlay = self._load_relation_markdown_overlay(speaker, target, novel_id)
+        if not overlay:
+            return merged
+        for key in ("trust", "affection", "power_gap"):
+            if key in overlay:
+                try:
+                    merged[key] = int(overlay[key])
+                except (TypeError, ValueError):
+                    pass
+        for key in ("conflict_point", "typical_interaction"):
+            if overlay.get(key):
+                merged[key] = overlay[key]
+        appellation = overlay.get("appellation_to_target", "")
+        if appellation:
+            appellations = dict(merged.get("appellations", {})) if isinstance(merged.get("appellations", {}), dict) else {}
+            appellations[f"{speaker}->{target}"] = appellation
+            merged["appellations"] = appellations
+        return merged
+
+    def _load_relation_markdown_overlay(self, speaker: str, target: str, novel_id: Optional[str]) -> Dict[str, str]:
+        if not novel_id:
             return {}
-        rel = load_json(rel_file, default={})
-        normalized = {normalize_relation_key(key): value for key, value in rel.items()}
-        return normalized.get(self._pair_key(normalize_character_name(speaker), normalize_character_name(target)), {})
+        persona_dir = self.characters_dir / novel_id / safe_filename(normalize_character_name(speaker))
+        descriptor = self._load_navigation_descriptor(persona_dir) if persona_dir.exists() else self._default_navigation_descriptor()
+        meta = descriptor.get("files", {}).get("RELATIONS", {})
+        if str(meta.get("status", "")).strip().lower() == "inactive":
+            return {}
+        path = self._resolve_persona_file_path(persona_dir, "RELATIONS", meta) if persona_dir.exists() else None
+        if not path:
+            return {}
+        parsed = self._parse_relation_markdown(path)
+        target_key = normalize_character_name(target)
+        if target_key in parsed:
+            return parsed[target_key]
+        return {}
+
+    def _parse_relation_markdown(self, path: Path) -> Dict[str, Dict[str, str]]:
+        result: Dict[str, Dict[str, str]] = {}
+        current_target = ""
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if line.startswith("## "):
+                current_target = normalize_character_name(line[3:].strip())
+                result.setdefault(current_target, {})
+                continue
+            if not current_target or not line.startswith("- ") or ":" not in line:
+                continue
+            key, value = line[2:].split(":", 1)
+            result[current_target][key.strip()] = value.strip()
+        return result
 
     def _get_relation_state(self, session: Dict[str, Any], speaker: str, target: str) -> Dict[str, Any]:
         if not target:
@@ -488,6 +825,34 @@ class ChatEngine:
         turns = int(self.config.get("chat_engine.max_history_turns", 10))
         keep = max(10, turns * (len(self._active_characters(session)) + 1))
         session["history"] = session["history"][-keep:]
+
+    def _resolve_observe_turn(self, session: Dict[str, Any], user_msg: str) -> tuple[str, str]:
+        message = user_msg.strip()
+        if not message:
+            return "Narrator", user_msg
+
+        for name in session["characters"]:
+            aliases = [name] + self._candidate_aliases(name)
+            for alias in aliases:
+                stripped = self._strip_explicit_speaker_prefix(message, alias)
+                if stripped == message:
+                    continue
+                normalized = stripped.strip() or message
+                return name, normalized
+        return "Narrator", user_msg
+
+    @staticmethod
+    def _strip_explicit_speaker_prefix(message: str, alias: str) -> str:
+        escaped = re.escape(alias)
+        patterns = (
+            rf"^\s*[“\"'「『]?\s*{escaped}\s*[：:，,]\s*",
+            rf"^\s*[“\"'「『]?\s*{escaped}\s*(?:说道|说|道|问道|问|答道|答|曰|开口道|笑道|沉声道|朗声道|轻声道)\s*[：:，,]?\s*",
+        )
+        for pattern in patterns:
+            updated = re.sub(pattern, "", message, count=1)
+            if updated != message:
+                return updated
+        return message
 
     @staticmethod
     def _candidate_aliases(name: str) -> List[str]:

@@ -34,3 +34,18 @@ description: Hermes 适配器，用于 zaomeng 的本地规则型中文小说人
 - 关系抽取：`python -m src.core.main extract --novel <路径> [--force]`
 - 查看角色：`python -m src.core.main view --character <角色名> [--novel <路径>]`
 - 保存纠错：`python -m src.core.main correct --session <id> --message <原句> --corrected <修正句>`
+
+## 人格文件与记忆说明
+
+- `distill` 现在除了角色 JSON，还会为每个角色生成可编辑人格文件：
+  - `NAVIGATION.md`
+  - `SOUL.md`
+  - `IDENTITY.md`
+  - `AGENTS.md`
+  - `MEMORY.md`
+  - `RELATIONS.md`
+- 这些文件位于 `data/characters/<novel_id>/<角色名>/`
+- 运行时会先读取 `NAVIGATION.generated.md`，再应用 `NAVIGATION.md` 覆写，并按 `load_order` 加载人格文件
+- `GOALS.md` / `STYLE.md` / `TRAUMA.md` / `RELATIONS.md` 属于可选层，蒸馏或后续编辑确实需要时才会创建
+- 用户在群聊里给出的长期约束提示，以及 `/correct` 产生的纠正，也会写入对应角色的 `MEMORY.md`
+- 所以 Hermes 不要假设角色设定只存在于 JSON；如果需要解释行为，请把这些人格文件也视作有效设定来源

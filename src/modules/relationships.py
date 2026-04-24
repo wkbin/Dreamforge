@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from src.core.config import Config
 from src.core.llm_client import LLMClient
 from src.modules.distillation import NovelDistiller
-from src.utils.file_utils import ensure_dir, novel_id_from_input, save_json
+from src.utils.file_utils import ensure_dir, novel_id_from_input, safe_filename, save_json
 from src.utils.text_parser import load_novel_text, split_sentences
 from src.utils.token_counter import TokenCounter
 
@@ -210,6 +210,7 @@ class RelationshipExtractor:
             out_dir = ensure_dir(Path(self.config.get_path("relations")) / novel_id)
             file = out_dir / f"{novel_id}_relations.json"
             save_json(file, relations)
+            self._export_relation_bundle(relations, novel_id)
             return
 
         out = Path(output_path)
@@ -218,3 +219,50 @@ class RelationshipExtractor:
         else:
             out_dir = ensure_dir(out)
             save_json(out_dir / (Path(novel_path).stem + "_relations.json"), relations)
+        self._export_relation_bundle(relations, novel_id)
+
+    def _export_relation_bundle(self, relations: Dict[str, Dict[str, Any]], novel_id: str) -> None:
+        by_character: Dict[str, List[tuple[str, Dict[str, Any]]]] = defaultdict(list)
+        for pair_key, payload in relations.items():
+            names = pair_key.split("_")
+            if len(names) != 2:
+                continue
+            a, b = names
+            by_character[a].append((b, payload))
+            by_character[b].append((a, payload))
+
+        characters_root = ensure_dir(Path(self.config.get_path("characters")) / novel_id)
+        for name, items in by_character.items():
+            persona_dir = ensure_dir(characters_root / safe_filename(name))
+            generated = persona_dir / "RELATIONS.generated.md"
+            editable = persona_dir / "RELATIONS.md"
+            content = self._render_relations_md(name, items)
+            generated.write_text(content, encoding="utf-8")
+            if not editable.exists():
+                editable.write_text(content, encoding="utf-8")
+            self.distiller.refresh_persona_navigation(persona_dir, name)
+
+    @staticmethod
+    def _render_relations_md(name: str, items: List[tuple[str, Dict[str, Any]]]) -> str:
+        lines = [
+            "# RELATIONS",
+            "<!-- Editable relation overlay. Runtime prefers this file over RELATIONS.generated.md. -->",
+            "",
+            f"角色: {name}",
+            "",
+        ]
+        for target, payload in sorted(items, key=lambda item: item[0]):
+            appellations = payload.get("appellations", {}) if isinstance(payload.get("appellations", {}), dict) else {}
+            lines.extend(
+                [
+                    f"## {target}",
+                    f"- trust: {payload.get('trust', 5)}",
+                    f"- affection: {payload.get('affection', 5)}",
+                    f"- power_gap: {payload.get('power_gap', 0)}",
+                    f"- conflict_point: {payload.get('conflict_point', '')}",
+                    f"- typical_interaction: {payload.get('typical_interaction', '')}",
+                    f"- appellation_to_target: {appellations.get(f'{name}->{target}', '')}",
+                    "",
+                ]
+            )
+        return "\n".join(lines).rstrip() + "\n"

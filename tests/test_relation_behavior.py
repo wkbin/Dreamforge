@@ -308,6 +308,36 @@ class RelationBehaviorTests(unittest.TestCase):
             )
             self.assertEqual(len(restored["history"]), 2)
 
+    def test_observe_once_uses_explicit_character_prefix_as_speaker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+            config.update({"chat_engine": {"max_speakers_per_turn": 4}})
+
+            save_json(
+                root / "characters" / "sanguo" / "\u5218\u5907.json",
+                {"name": "\u5218\u5907", "speech_style": "\u514b\u5236", "typical_lines": [], "values": {}},
+            )
+            save_json(
+                root / "characters" / "sanguo" / "\u5f20\u98de.json",
+                {"name": "\u5f20\u98de", "speech_style": "\u76f4\u767d", "typical_lines": [], "values": {}},
+            )
+            save_json(
+                root / "characters" / "sanguo" / "\u5173\u7fbd.json",
+                {"name": "\u5173\u7fbd", "speech_style": "\u514b\u5236", "typical_lines": [], "values": {}},
+            )
+
+            engine = ChatEngine(config)
+            engine.speaker.generate = Mock(side_effect=lambda character_profile, **_: f"{character_profile['name']}\u56de\u5e94")
+            session = engine.create_session("sanguo.txt", "observe")
+
+            replies = engine.observe_once(session, "\u5218\u5907\uff1a\u4e8c\u4f4d\u8d24\u5f1f\uff0c\u4eca\u65e5\u603b\u7b97\u5f97\u7247\u523b\u6e05\u95f2\u3002")
+
+            self.assertEqual(sorted(name for name, _ in replies), ["\u5173\u7fbd", "\u5f20\u98de"])
+            restored = engine.restore_session(session["id"])
+            self.assertEqual(restored["history"][0]["speaker"], "\u5218\u5907")
+            self.assertEqual(restored["history"][0]["message"], "\u4e8c\u4f4d\u8d24\u5f1f\uff0c\u4eca\u65e5\u603b\u7b97\u5f97\u7247\u523b\u6e05\u95f2\u3002")
+
     def test_act_once_requires_identifiable_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -486,6 +516,370 @@ class RelationBehaviorTests(unittest.TestCase):
 
         self.assertIn("二弟", reply)
         self.assertNotIn("关羽，", reply)
+
+    def test_speaker_profiles_produce_distinct_voices(self):
+        speaker = Speaker(Config())
+        context = "\u4e8c\u4f4d\u8d24\u5f1f\uff0c\u6211\u4eec\u662f\u5426\u5e94\u5f53\u8054\u5408\u5b59\u6743\uff1f"
+
+        liubei_reply = speaker.generate(
+            character_profile={
+                "name": "\u5218\u5907",
+                "core_traits": ["\u4ec1\u539a", "\u514b\u5236"],
+                "speech_style": "\u8bed\u8a00\u94fa\u9648\uff0c\u6574\u4f53\u514b\u5236\u3002",
+                "typical_lines": ["\u767e\u59d3\u6d41\u79bb\u5931\u6240\uff0c\u624d\u662f\u6211\u6700\u4e0d\u613f\u89c1\u4e4b\u4e8b\u3002"],
+                "decision_rules": ["\u540c\u4f34\u53d7\u538b\u2192\u503e\u5411\u4e3b\u52a8\u4ecb\u5165"],
+                "values": {"\u8d23\u4efb": 9, "\u5584\u826f": 8, "\u5fe0\u8bda": 8, "\u667a\u6167": 7},
+            },
+            context=context,
+            history=[],
+            target_name="\u5173\u7fbd",
+            relation_state={"affection": 8, "trust": 8, "hostility": 0, "ambiguity": 3},
+        )
+
+        zhangfei_reply = speaker.generate(
+            character_profile={
+                "name": "\u5f20\u98de",
+                "core_traits": ["\u8c6a\u723d", "\u52c7\u6562"],
+                "speech_style": "\u8bed\u8a00\u76f4\u767d\uff0c\u60c5\u7eea\u5916\u9732\u3002",
+                "typical_lines": ["\u54e5\u54e5\u82e5\u6709\u53f7\u4ee4\uff0c\u6211\u5148\u4e0a\u524d\u3002"],
+                "decision_rules": ["\u540c\u4f34\u53d7\u538b\u2192\u503e\u5411\u4e3b\u52a8\u4ecb\u5165"],
+                "values": {"\u52c7\u6c14": 9, "\u5fe0\u8bda": 8, "\u8d23\u4efb": 6, "\u667a\u6167": 4},
+            },
+            context=context,
+            history=[],
+            target_name="\u5218\u5907",
+            relation_state={"affection": 8, "trust": 8, "hostility": 0, "ambiguity": 3},
+        )
+
+        self.assertNotEqual(liubei_reply, zhangfei_reply)
+        self.assertTrue(any(token in liubei_reply for token in ("\u9000\u8def", "\u4f17\u4eba", "\u767e\u59d3", "\u7740\u843d")))
+        self.assertTrue(any(token in zhangfei_reply for token in ("\u4e0d\u8eb2", "\u5411\u524d", "\u5144\u5f1f", "\u81ea\u5df1\u4eba")))
+
+    def test_speaker_reacts_to_taboo_topic(self):
+        speaker = Speaker(Config())
+        reply = speaker.generate(
+            character_profile={
+                "name": "\u5173\u7fbd",
+                "core_traits": ["\u5fe0\u8bda", "\u8c28\u614e"],
+                "speech_style": "\u514b\u5236",
+                "typical_lines": [],
+                "decision_rules": [],
+                "values": {"\u5fe0\u8bda": 9, "\u6b63\u4e49": 8},
+                "taboo_topics": ["\u80cc\u53db", "\u5931\u4fe1"],
+            },
+            context="\u82e5\u4e3a\u4fdd\u5168\u81ea\u8eab\uff0c\u80cc\u53db\u4e00\u6b21\u53c8\u4f55\u59a8\uff1f",
+            history=[],
+            target_name="\u5218\u5907",
+            relation_state={"affection": 7, "trust": 8, "hostility": 0, "ambiguity": 3},
+        )
+
+        self.assertTrue(any(token in reply for token in ("\u80cc\u53db", "\u754c\u7ebf", "\u4e0d\u80fd\u5f53\u4f5c\u5bfb\u5e38\u8bdd")))
+
+    def test_distiller_profiles_include_voice_and_boundary_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+            novel_path = root / "mini.txt"
+            novel_path.write_text(
+                "\u5218\u5907\u8bf4\uff1a\u201c\u767e\u59d3\u672a\u5b89\uff0c\u6211\u4e0d\u80fd\u5148\u56fe\u81ea\u4fbf\u3002\u201d"
+                "\u5173\u7fbd\u9053\uff1a\u201c\u5927\u4e49\u5f53\u524d\uff0c\u5931\u4fe1\u4e4b\u4e8b\u4e0d\u53ef\u4e3a\u3002\u201d",
+                encoding="utf-8",
+            )
+
+            distiller = NovelDistiller(config)
+            result = distiller.distill(str(novel_path), characters=["\u5218\u5907", "\u5173\u7fbd"])
+            liubei = result["\u5218\u5907"]
+
+            self.assertIn("worldview", liubei)
+            self.assertIn("thinking_style", liubei)
+            self.assertIn("speech_habits", liubei)
+            self.assertIn("emotion_profile", liubei)
+            self.assertIn("taboo_topics", liubei)
+            self.assertIn("forbidden_behaviors", liubei)
+
+    def test_distiller_exports_persona_bundle_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+            novel_path = root / "mini.txt"
+            novel_path.write_text(
+                "\u5218\u5907\u8bf4\uff1a\u201c\u767e\u59d3\u672a\u5b89\uff0c\u6211\u4e0d\u80fd\u5148\u56fe\u81ea\u4fbf\u3002\u201d",
+                encoding="utf-8",
+            )
+
+            distiller = NovelDistiller(config)
+            distiller.distill(str(novel_path), characters=["\u5218\u5907"])
+
+            persona_dir = root / "characters" / "mini" / "\u5218\u5907"
+            self.assertTrue((persona_dir / "SOUL.generated.md").exists())
+            self.assertTrue((persona_dir / "IDENTITY.generated.md").exists())
+            self.assertTrue((persona_dir / "AGENTS.generated.md").exists())
+            self.assertTrue((persona_dir / "MEMORY.generated.md").exists())
+            self.assertTrue((persona_dir / "NAVIGATION.generated.md").exists())
+            self.assertTrue((persona_dir / "NAVIGATION.md").exists())
+            self.assertTrue((persona_dir / "SOUL.md").exists())
+
+    def test_relationship_extractor_exports_relation_markdown_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            extractor = RelationshipExtractor(config)
+            extractor._export_relation_bundle(
+                {
+                    "\u5218\u5907_\u5173\u7fbd": {
+                        "trust": 8,
+                        "affection": 7,
+                        "power_gap": 0,
+                        "conflict_point": "\u540c\u76df\u53d6\u820d",
+                        "typical_interaction": "\u5148\u8bae\u8f7b\u91cd\uff0c\u518d\u5b9a\u8fdb\u9000",
+                        "appellations": {"\u5218\u5907->\u5173\u7fbd": "\u4e8c\u5f1f"},
+                    }
+                },
+                "mini",
+            )
+
+            self.assertTrue((root / "characters" / "mini" / "\u5218\u5907" / "RELATIONS.generated.md").exists())
+            self.assertTrue((root / "characters" / "mini" / "\u5218\u5907" / "RELATIONS.md").exists())
+            nav_text = (root / "characters" / "mini" / "\u5218\u5907" / "NAVIGATION.generated.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("## RELATIONS", nav_text)
+            self.assertIn("- status: active", nav_text)
+
+    def test_relation_markdown_override_changes_runtime_relation_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            save_json(
+                root / "characters" / "sanguo" / "\u5218\u5907.json",
+                {"name": "\u5218\u5907", "speech_style": "\u514b\u5236", "typical_lines": [], "core_traits": ["\u4ec1\u539a"], "values": {}},
+            )
+            save_json(
+                root / "characters" / "sanguo" / "\u5173\u7fbd.json",
+                {"name": "\u5173\u7fbd", "speech_style": "\u514b\u5236", "typical_lines": [], "core_traits": ["\u5fe0\u8bda"], "values": {}},
+            )
+            save_json(
+                root / "relations" / "sanguo" / "sanguo_relations.json",
+                {
+                    "\u5218\u5907_\u5173\u7fbd": {
+                        "trust": 5,
+                        "affection": 5,
+                        "power_gap": 0,
+                        "appellations": {"\u5218\u5907->\u5173\u7fbd": "\u5173\u7fbd"},
+                    }
+                },
+            )
+            relation_dir = root / "characters" / "sanguo" / "\u5218\u5907"
+            relation_dir.mkdir(parents=True, exist_ok=True)
+            (relation_dir / "RELATIONS.md").write_text(
+                "# RELATIONS\n\n"
+                "## \u5173\u7fbd\n"
+                "- trust: 9\n"
+                "- affection: 8\n"
+                "- appellation_to_target: \u4e8c\u5f1f\n",
+                encoding="utf-8",
+            )
+
+            engine = ChatEngine(config)
+            state = engine._get_relation_state_from_disk("\u5218\u5907", "\u5173\u7fbd", "sanguo")
+
+            self.assertEqual(state["trust"], 9)
+            self.assertEqual(state["affection"], 8)
+            self.assertEqual(state["appellations"]["\u5218\u5907->\u5173\u7fbd"], "\u4e8c\u5f1f")
+
+    def test_navigation_load_order_controls_persona_override_priority(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            save_json(
+                root / "characters" / "sanguo" / "\u5218\u5907.json",
+                {"name": "\u5218\u5907", "speech_style": "\u57fa\u7ebf", "typical_lines": [], "core_traits": ["\u4ec1\u539a"], "values": {}},
+            )
+            persona_dir = root / "characters" / "sanguo" / "\u5218\u5907"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "NAVIGATION.md").write_text(
+                "# NAVIGATION\n\n"
+                "## Runtime\n"
+                "- load_order: SOUL -> STYLE -> MEMORY\n",
+                encoding="utf-8",
+            )
+            (persona_dir / "SOUL.md").write_text("# SOUL\n\n- speech_style: \u514b\u5236\n", encoding="utf-8")
+            (persona_dir / "STYLE.md").write_text("# STYLE\n\n- speech_style: \u76f4\u767d\n", encoding="utf-8")
+            (persona_dir / "MEMORY.md").write_text("# MEMORY\n", encoding="utf-8")
+
+            engine = ChatEngine(config)
+            profile = engine._load_character_profiles("sanguo")["\u5218\u5907"]
+
+            self.assertEqual(profile["speech_style"], "\u76f4\u767d")
+
+    def test_navigation_can_disable_optional_persona_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            save_json(
+                root / "characters" / "sanguo" / "\u5173\u7fbd.json",
+                {"name": "\u5173\u7fbd", "speech_style": "\u514b\u5236", "typical_lines": [], "core_traits": ["\u5fe0\u8bda"], "values": {}},
+            )
+            persona_dir = root / "characters" / "sanguo" / "\u5173\u7fbd"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "NAVIGATION.md").write_text(
+                "# NAVIGATION\n\n"
+                "## Runtime\n"
+                "- load_order: STYLE -> SOUL -> MEMORY\n\n"
+                "## STYLE\n"
+                "- status: inactive\n",
+                encoding="utf-8",
+            )
+            (persona_dir / "STYLE.md").write_text("# STYLE\n\n- speech_style: \u76f4\u767d\n", encoding="utf-8")
+            (persona_dir / "MEMORY.md").write_text("# MEMORY\n", encoding="utf-8")
+
+            engine = ChatEngine(config)
+            profile = engine._load_character_profiles("sanguo")["\u5173\u7fbd"]
+
+            self.assertEqual(profile["speech_style"], "\u514b\u5236")
+
+    def test_navigation_can_link_relation_overlay_to_custom_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            save_json(
+                root / "characters" / "sanguo" / "\u5218\u5907.json",
+                {"name": "\u5218\u5907", "speech_style": "\u514b\u5236", "typical_lines": [], "core_traits": ["\u4ec1\u539a"], "values": {}},
+            )
+            save_json(
+                root / "characters" / "sanguo" / "\u5173\u7fbd.json",
+                {"name": "\u5173\u7fbd", "speech_style": "\u514b\u5236", "typical_lines": [], "core_traits": ["\u5fe0\u8bda"], "values": {}},
+            )
+            save_json(
+                root / "relations" / "sanguo" / "sanguo_relations.json",
+                {"\u5218\u5907_\u5173\u7fbd": {"trust": 5, "affection": 5, "power_gap": 0}},
+            )
+            persona_dir = root / "characters" / "sanguo" / "\u5218\u5907"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "NAVIGATION.md").write_text(
+                "# NAVIGATION\n\n"
+                "## RELATIONS\n"
+                "- status: active\n"
+                "- file: CUSTOM_RELATIONS.md\n",
+                encoding="utf-8",
+            )
+            (persona_dir / "CUSTOM_RELATIONS.md").write_text(
+                "# RELATIONS\n\n"
+                "## \u5173\u7fbd\n"
+                "- trust: 9\n"
+                "- affection: 8\n"
+                "- appellation_to_target: \u4e8c\u5f1f\n",
+                encoding="utf-8",
+            )
+
+            engine = ChatEngine(config)
+            state = engine._get_relation_state_from_disk("\u5218\u5907", "\u5173\u7fbd", "sanguo")
+
+            self.assertEqual(state["trust"], 9)
+            self.assertEqual(state["affection"], 8)
+            self.assertEqual(state["appellations"]["\u5218\u5907->\u5173\u7fbd"], "\u4e8c\u5f1f")
+
+    def test_chat_engine_prefers_editable_persona_bundle_overrides(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            save_json(
+                root / "characters" / "sanguo" / "\u5218\u5907.json",
+                {
+                    "name": "\u5218\u5907",
+                    "speech_style": "\u514b\u5236",
+                    "typical_lines": [],
+                    "core_traits": ["\u4ec1\u539a"],
+                    "values": {"\u8d23\u4efb": 8},
+                },
+            )
+            persona_dir = root / "characters" / "sanguo" / "\u5218\u5907"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "SOUL.md").write_text(
+                "# SOUL\n\n"
+                "- soul_goal: \u66ff\u5929\u4e0b\u4eba\u5b88\u4f4f\u5b89\u8eab\u7acb\u547d\u4e4b\u6240\n"
+                "- taboo_topics: \u5f03\u6c11\uff1b\u80cc\u4fe1\n",
+                encoding="utf-8",
+            )
+
+            engine = ChatEngine(config)
+            profile = engine._load_character_profiles("sanguo")["\u5218\u5907"]
+
+            self.assertEqual(profile["soul_goal"], "\u66ff\u5929\u4e0b\u4eba\u5b88\u4f4f\u5b89\u8eab\u7acb\u547d\u4e4b\u6240")
+            self.assertEqual(profile["taboo_topics"], ["\u5f03\u6c11", "\u80cc\u4fe1"])
+
+    def test_runtime_guidance_prompt_persists_into_memory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+            config.update({"chat_engine": {"max_speakers_per_turn": 1}})
+
+            save_json(
+                root / "characters" / "sanguo" / "\u5173\u7fbd.json",
+                {"name": "\u5173\u7fbd", "speech_style": "\u514b\u5236", "typical_lines": [], "core_traits": ["\u5fe0\u8bda"], "values": {}},
+            )
+            save_json(
+                root / "characters" / "sanguo" / "\u5218\u5907.json",
+                {"name": "\u5218\u5907", "speech_style": "\u514b\u5236", "typical_lines": [], "core_traits": ["\u4ec1\u539a"], "values": {}},
+            )
+
+            engine = ChatEngine(config)
+            engine.speaker.generate = Mock(return_value="\u56de\u5e94")
+            session = engine.create_session("sanguo.txt", "observe")
+
+            engine.observe_once(session, "\u8bb0\u4f4f\uff1a\u5173\u7fbd\u8bf4\u8bdd\u8981\u66f4\u77ed\uff0c\u4e0d\u8981\u8f7b\u4f7b\u3002")
+
+            profile = engine._load_character_profiles("sanguo")["\u5173\u7fbd"]
+            self.assertTrue(any("\u8bb0\u4f4f" in item for item in profile.get("user_edits", [])))
+
+    def test_inline_correction_persists_into_memory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            save_json(
+                root / "characters" / "sanguo" / "\u5173\u7fbd.json",
+                {"name": "\u5173\u7fbd", "speech_style": "\u514b\u5236", "typical_lines": [], "core_traits": ["\u5fe0\u8bda"], "values": {}},
+            )
+            save_json(
+                root / "characters" / "sanguo" / "\u5218\u5907.json",
+                {"name": "\u5218\u5907", "speech_style": "\u514b\u5236", "typical_lines": [], "core_traits": ["\u4ec1\u539a"], "values": {}},
+            )
+
+            engine = ChatEngine(config)
+            session = engine.create_session("sanguo.txt", "observe")
+
+            handled = engine._handle_inline_command(
+                session,
+                "/correct \u5173\u7fbd|\u5218\u5907|\u5bb9\u6211\u518d\u60f3\u60f3|\u5927\u4e49\u5f53\u524d\uff0c\u4e0d\u53ef\u8f7b\u6613\u80cc\u4fe1|tone_fix",
+            )
+
+            self.assertTrue(handled)
+            profile = engine._load_character_profiles("sanguo")["\u5173\u7fbd"]
+            self.assertTrue(any("\u7ea0\u6b63" in item for item in profile.get("user_edits", [])))
+
+    def test_user_edits_can_change_voice_constraints(self):
+        speaker = Speaker(Config())
+        profile = {
+            "name": "\u5173\u7fbd",
+            "core_traits": ["\u5fe0\u8bda", "\u8c28\u614e"],
+            "speech_style": "\u514b\u5236",
+            "typical_lines": [],
+            "decision_rules": [],
+            "values": {"\u5fe0\u8bda": 9},
+            "user_edits": ["\u8bb0\u4f4f\uff1a\u5173\u7fbd\u8bf4\u8bdd\u8981\u66f4\u77ed\uff0c\u4e0d\u8981\u8f7b\u4f7b\uff0c\u8981\u66f4\u91cd\u4fe1\u4e49\u3002"],
+        }
+
+        voice = speaker._build_voice(profile)
+
+        self.assertEqual(voice["speech_habits"]["cadence"], "short")
+        self.assertIn("\u4e0d\u4f1a\u8f7b\u4f7b\u8c03\u7b11", voice["forbidden_behaviors"])
 
     def test_cli_chat_message_uses_single_turn_path(self):
         argv = [
