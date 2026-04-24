@@ -20,6 +20,12 @@ from src.utils.token_counter import TokenCounter
 class RelationshipExtractor:
     """Extract pairwise relationship graph from chunked novel text."""
 
+    APPELLATION_PATTERN = (
+        r"(大哥|二哥|三哥|四哥|大姐|二姐|三姐|大弟|二弟|三弟|贤弟|兄长|哥哥|姐姐|妹妹|弟弟|"
+        r"主公|将军|军师|丞相|先生|夫人|姑娘|公子|宝哥哥|林妹妹)"
+    )
+    SPEECH_VERBS = "道说问答笑喝叹唤"
+
     def __init__(self, config: Optional[Config] = None):
         self.config = config or Config()
         self.llm_client = LLMClient(self.config)
@@ -51,6 +57,7 @@ class RelationshipExtractor:
                 "power_gap_samples": [],
                 "conflict_points": [],
                 "interactions": [],
+                "appellations": defaultdict(list),
             }
         )
 
@@ -75,18 +82,27 @@ class RelationshipExtractor:
                 if scores["conflict_point"]:
                     bucket["conflict_points"].append(scores["conflict_point"])
                 bucket["interactions"].extend(interactions[:2])
+                for direction, term in scores.get("appellations", {}).items():
+                    if term:
+                        bucket["appellations"][direction].append(term)
 
         final_relations: Dict[str, Dict[str, Any]] = {}
         for key in sorted(relation_buckets.keys()):
-            b = relation_buckets[key]
+            bucket = relation_buckets[key]
             final_relations[key] = {
-                "trust": self._avg_int(b["trust_samples"], default=5),
-                "affection": self._avg_int(b["affection_samples"], default=5),
-                "power_gap": self._avg_int(b["power_gap_samples"], default=0),
-                "conflict_point": self._mode_text(b["conflict_points"], default="价值观差异"),
+                "trust": self._avg_int(bucket["trust_samples"], default=5),
+                "affection": self._avg_int(bucket["affection_samples"], default=5),
+                "power_gap": self._avg_int(bucket["power_gap_samples"], default=0),
+                "conflict_point": self._mode_text(bucket["conflict_points"], default="价值观差异"),
                 "typical_interaction": self._mode_text(
-                    b["interactions"], default="对话-试探-回应-暂时平衡"
+                    bucket["interactions"],
+                    default="对话-试探-回应-暂时平衡",
                 ),
+                "appellations": {
+                    direction: self._mode_text(terms, default="")
+                    for direction, terms in bucket["appellations"].items()
+                    if self._mode_text(terms, default="")
+                },
             }
 
         self._save_relations(final_relations, novel_path, output_path, novel_id)
@@ -108,9 +124,9 @@ class RelationshipExtractor:
         if not values:
             return default
         counter = defaultdict(int)
-        for v in values:
-            counter[v] += 1
-        return sorted(counter.items(), key=lambda x: x[1], reverse=True)[0][0]
+        for value in values:
+            counter[value] += 1
+        return sorted(counter.items(), key=lambda item: item[1], reverse=True)[0][0]
 
     def _extract_pair_interactions(
         self,
@@ -118,44 +134,44 @@ class RelationshipExtractor:
         present: List[str],
         alias_map: Optional[Dict[str, List[str]]] = None,
     ) -> Dict[str, List[str]]:
-        sents = split_sentences(chunk)
+        sentences = split_sentences(chunk)
         pairs: Dict[str, List[str]] = defaultdict(list)
         alias_map = alias_map or {name: [name] for name in present}
-        for sent in sents:
+        for sentence in sentences:
             hit = sorted(
-                set(name for name in present if self.distiller._text_mentions_any_alias(sent, alias_map.get(name, [name])))
+                set(name for name in present if self.distiller._text_mentions_any_alias(sentence, alias_map.get(name, [name])))
             )
             if len(hit) < 2:
                 continue
-            cleaned = re.sub(r"\s+", " ", sent).strip()
+            cleaned = re.sub(r"\s+", " ", sentence).strip()
             for a, b in itertools.combinations(hit, 2):
                 pairs["_".join([a, b])].append(cleaned)
         return pairs
 
-    @staticmethod
-    def _score_relation(chunk: str, a: str, b: str) -> Dict[str, Any]:
+    def _score_relation(self, chunk: str, a: str, b: str) -> Dict[str, Any]:
         local = chunk
         trust = 5
         affection = 5
         power_gap = 0
         conflict_point = ""
+        appellations = self._extract_appellations(local, a, b)
 
-        positive = ("相信", "信任", "依靠", "照顾", "保护", "安慰", "和好")
+        positive = ("信任", "相信", "依靠", "照顾", "保护", "安慰", "和好")
         negative = ("怀疑", "争执", "误会", "冲突", "冷战", "责备", "怨")
         power_high = (f"{a}命令{b}", f"{b}命令{a}", "压制", "服从", "主导")
         conflict_markers = ("家族", "婚约", "利益", "权力", "秘密", "背叛")
 
-        if any(x in local for x in positive):
+        if any(item in local for item in positive):
             trust += 2
             affection += 2
-        if any(x in local for x in negative):
+        if any(item in local for item in negative):
             trust -= 2
             affection -= 1
-        if any(x in local for x in power_high):
+        if any(item in local for item in power_high):
             power_gap += 2
-        for c in conflict_markers:
-            if c in local:
-                conflict_point = c
+        for marker in conflict_markers:
+            if marker in local:
+                conflict_point = marker
                 break
 
         return {
@@ -163,7 +179,25 @@ class RelationshipExtractor:
             "affection": max(0, min(10, affection)),
             "power_gap": max(-5, min(5, power_gap)),
             "conflict_point": conflict_point,
+            "appellations": appellations,
         }
+
+    def _extract_appellations(self, chunk: str, a: str, b: str) -> Dict[str, str]:
+        results: Dict[str, str] = {}
+        for speaker, target in ((a, b), (b, a)):
+            pattern = re.compile(
+                rf"{re.escape(speaker)}[^“”\"']{{0,12}}[{self.SPEECH_VERBS}][^“”\"']{{0,4}}[“\"](?P<quote>[^”\"]+)"
+            )
+            for match in pattern.finditer(chunk):
+                quote = match.group("quote").strip()
+                title_match = re.match(rf"^(?P<title>{self.APPELLATION_PATTERN})(?:[，,：:！!？?])?", quote)
+                if title_match:
+                    results[f"{speaker}->{target}"] = title_match.group("title")
+                    break
+                if quote.startswith(target):
+                    results[f"{speaker}->{target}"] = target
+                    break
+        return results
 
     def _save_relations(
         self,

@@ -72,6 +72,7 @@ class ReflectionEngine:
         }
         file = self.corrections_dir / f"correction_{session_id}_{payload['timestamp']}.json"
         save_json(file, payload)
+        payload["file_path"] = str(file)
         return payload
 
     def search_similar_corrections(

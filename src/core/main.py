@@ -201,6 +201,7 @@ class ZaomengCLI:
             for speaker, message in responses:
                 print(f"{speaker}: {message}")
             engine.print_turn_cost()
+            engine.print_correction_hint(session)
             return
 
         print("This is an interactive command. Prepare your first user turn before entering the session.")

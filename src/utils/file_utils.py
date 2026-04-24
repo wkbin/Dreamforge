@@ -8,7 +8,19 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-NOISE_NAME_SUFFIXES = {"说", "道", "笑", "听", "问", "看", "想", "叹", "喊", "叫", "哭", "忙"}
+NOISE_NAME_SUFFIXES = {"说", "道", "笑", "听", "问", "看", "想", "叫", "喊", "答", "哭"}
+CANONICAL_NAME_ALIASES = {
+    "关公": "关羽",
+    "云长": "关羽",
+    "玄德": "刘备",
+    "翼德": "张飞",
+    "孔明": "诸葛亮",
+    "卧龙": "诸葛亮",
+    "孟德": "曹操",
+}
+CANONICAL_TO_ALIASES: dict[str, list[str]] = {}
+for alias_name, canonical_name in CANONICAL_NAME_ALIASES.items():
+    CANONICAL_TO_ALIASES.setdefault(canonical_name, []).append(alias_name)
 
 
 def ensure_dir(path: str | Path) -> Path:
@@ -33,10 +45,7 @@ def _sanitize_json_value(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_sanitize_json_value(item) for item in value]
     if isinstance(value, dict):
-        return {
-            _sanitize_json_value(key): _sanitize_json_value(item)
-            for key, item in value.items()
-        }
+        return {_sanitize_json_value(key): _sanitize_json_value(item) for key, item in value.items()}
     return value
 
 
@@ -55,8 +64,14 @@ def safe_filename(name: str) -> str:
 def normalize_character_name(name: str) -> str:
     clean = str(name or "").strip()
     if len(clean) >= 3 and clean[-1] in NOISE_NAME_SUFFIXES:
-        return clean[:-1]
-    return clean
+        clean = clean[:-1]
+    return CANONICAL_NAME_ALIASES.get(clean, clean)
+
+
+def canonical_aliases(name: str) -> list[str]:
+    canonical = normalize_character_name(name)
+    aliases = CANONICAL_TO_ALIASES.get(canonical, [])
+    return [alias for alias in aliases if alias != canonical]
 
 
 def normalize_relation_key(key: str) -> str:
@@ -79,12 +94,18 @@ def find_character_file(
     novel_id: Optional[str] = None,
 ) -> list[Path]:
     root = Path(base_dir)
-    filename = f"{safe_filename(character_name)}.json"
+    normalized = normalize_character_name(character_name)
+    candidate_names = [character_name]
+    if normalized != character_name:
+        candidate_names.append(normalized)
+    filenames = [f"{safe_filename(name)}.json" for name in candidate_names]
 
     if novel_id:
-        scoped = root / novel_id / filename
-        return [scoped] if scoped.exists() else []
+        matches = [root / novel_id / filename for filename in filenames]
+        return [path for path in matches if path.exists()]
 
-    matches = list(root.glob(filename))
-    matches.extend(root.glob(f"*/{filename}"))
+    matches = []
+    for filename in filenames:
+        matches.extend(root.glob(filename))
+        matches.extend(root.glob(f"*/{filename}"))
     return sorted({path.resolve() for path in matches})

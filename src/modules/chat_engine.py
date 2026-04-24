@@ -13,6 +13,7 @@ from src.core.llm_client import LLMClient
 from src.modules.reflection import ReflectionEngine
 from src.modules.speaker import Speaker
 from src.utils.file_utils import (
+    canonical_aliases,
     ensure_dir,
     load_json,
     normalize_character_name,
@@ -87,6 +88,7 @@ class ChatEngine:
             responses = self.observe_once(session, user_msg)
             self._print_responses(responses)
             self.print_turn_cost()
+            self.print_correction_hint(session)
 
     def act_mode(self, session: Dict[str, Any], character: str) -> None:
         controlled = self._resolve_character_name(character, session["characters"])
@@ -111,6 +113,7 @@ class ChatEngine:
 
             self._print_responses(responses)
             self.print_turn_cost()
+            self.print_correction_hint(session)
 
     def observe_once(self, session: Dict[str, Any], user_msg: str) -> List[tuple[str, str]]:
         responders = self._active_characters(session, speaker="Narrator", context=user_msg)
@@ -132,6 +135,10 @@ class ChatEngine:
             f"[累计] token={summary['total_tokens']} "
             f"session=${summary['session_cost']:.4f} daily=${summary['daily_cost']:.4f}"
         )
+
+    @staticmethod
+    def print_correction_hint(session: Dict[str, Any]) -> None:
+        print(f"修正方式：/correct 角色|对象|原句|修正句|原因  或  correct --session {session['id']} ...")
 
     def _run_turn(
         self,
@@ -328,7 +335,7 @@ class ChatEngine:
                     if item_novel_id == novel_id or item_novel_id is None:
                         canonical_name = normalize_character_name(item["name"])
                         item["name"] = canonical_name
-                        profiles[canonical_name] = item
+                        profiles[canonical_name] = self._merge_profile_item(profiles.get(canonical_name), item)
                 return profiles
         else:
             files = sorted(self.characters_dir.glob("*.json"))
@@ -339,8 +346,36 @@ class ChatEngine:
             if item and isinstance(item, dict) and item.get("name"):
                 canonical_name = normalize_character_name(item["name"])
                 item["name"] = canonical_name
-                profiles[canonical_name] = item
+                profiles[canonical_name] = self._merge_profile_item(profiles.get(canonical_name), item)
         return profiles
+
+    @staticmethod
+    def _merge_profile_item(existing: Optional[Dict[str, Any]], incoming: Dict[str, Any]) -> Dict[str, Any]:
+        if not existing:
+            return incoming
+        current_score = len(existing.get("typical_lines", [])) + len(existing.get("core_traits", []))
+        incoming_score = len(incoming.get("typical_lines", [])) + len(incoming.get("core_traits", []))
+        if incoming_score > current_score:
+            merged = incoming.copy()
+            fallback = existing
+        else:
+            merged = existing.copy()
+            fallback = incoming
+
+        for key in ("core_traits", "typical_lines", "decision_rules"):
+            merged_values = list(merged.get(key, []))
+            seen = set(merged_values)
+            for item in fallback.get(key, []):
+                if item not in seen:
+                    merged_values.append(item)
+                    seen.add(item)
+            merged[key] = merged_values
+
+        if not merged.get("speech_style") and fallback.get("speech_style"):
+            merged["speech_style"] = fallback["speech_style"]
+        if not merged.get("values") and fallback.get("values"):
+            merged["values"] = fallback["values"]
+        return merged
 
     @staticmethod
     def _pair_key(a: str, b: str) -> str:
@@ -353,12 +388,16 @@ class ChatEngine:
                 if speaker == target:
                     continue
                 disk = self._get_relation_state_from_disk(speaker, target, novel_id) or {}
-                matrix[self._pair_key(speaker, target)] = {
+                state = {
                     "trust": int(disk.get("trust", 5)),
                     "affection": int(disk.get("affection", 5)),
                     "hostility": int(disk.get("hostility", max(0, 5 - int(disk.get("affection", 5))))),
                     "ambiguity": int(disk.get("ambiguity", 3)),
                 }
+                for key in ("conflict_point", "typical_interaction", "appellations"):
+                    if key in disk:
+                        state[key] = disk[key]
+                matrix[self._pair_key(speaker, target)] = state
         return matrix
 
     def _save_relation_snapshot(self, session: Dict[str, Any]) -> None:
@@ -454,6 +493,7 @@ class ChatEngine:
     def _candidate_aliases(name: str) -> List[str]:
         aliases: List[str] = []
         clean = normalize_character_name(name)
+        aliases.extend(canonical_aliases(clean))
         if len(clean) >= 3:
             given = clean[-2:]
             if len(given) == 2 and given != clean:

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.config import Config
 from src.core.llm_client import LLMClient
-from src.utils.file_utils import ensure_dir, novel_id_from_input, safe_filename, save_json
+from src.utils.file_utils import canonical_aliases, ensure_dir, novel_id_from_input, safe_filename, save_json
 from src.utils.text_parser import load_novel_text, split_sentences
 from src.utils.token_counter import TokenCounter
 
@@ -228,6 +228,7 @@ class NovelDistiller:
     def _candidate_aliases(name: str) -> List[str]:
         aliases: List[str] = []
         clean = str(name or "").strip()
+        aliases.extend(canonical_aliases(clean))
         if len(clean) >= 3:
             given = clean[-2:]
             if len(given) == 2 and given != clean:

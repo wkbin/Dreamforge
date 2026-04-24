@@ -10,9 +10,10 @@ from src.core.config import Config
 from src.core.main import ZaomengCLI
 from src.modules.chat_engine import ChatEngine
 from src.modules.distillation import NovelDistiller
+from src.modules.reflection import ReflectionEngine
 from src.modules.relationships import RelationshipExtractor
 from src.modules.speaker import Speaker
-from src.utils.file_utils import load_json, save_json
+from src.utils.file_utils import load_json, normalize_character_name, normalize_relation_key, save_json
 
 
 class RelationBehaviorTests(unittest.TestCase):
@@ -69,7 +70,17 @@ class RelationBehaviorTests(unittest.TestCase):
             )
             save_json(
                 root / "relations" / "novel_a" / "novel_a_relations.json",
-                {"\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389": {"trust": 8, "affection": 7, "power_gap": 0}},
+                {
+                    "\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389": {
+                        "trust": 8,
+                        "affection": 7,
+                        "power_gap": 0,
+                        "appellations": {
+                            "\u8d3e\u5b9d\u7389->\u6797\u9edb\u7389": "\u59b9\u59b9",
+                            "\u6797\u9edb\u7389->\u8d3e\u5b9d\u7389": "\u5b9d\u7389",
+                        },
+                    }
+                },
             )
             save_json(
                 root / "relations" / "novel_b" / "novel_b_relations.json",
@@ -82,6 +93,12 @@ class RelationBehaviorTests(unittest.TestCase):
             self.assertEqual(session["novel_id"], "novel_a")
             self.assertEqual(session["characters"], ["\u6797\u9edb\u7389", "\u8d3e\u5b9d\u7389"])
             self.assertEqual(session["state"]["relation_matrix"]["\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389"]["trust"], 8)
+            self.assertEqual(
+                session["state"]["relation_matrix"]["\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389"]["appellations"][
+                    "\u8d3e\u5b9d\u7389->\u6797\u9edb\u7389"
+                ],
+                "\u59b9\u59b9",
+            )
             self.assertNotIn("\u54c8\u5229", session["characters"])
 
     def test_distill_with_explicit_characters_uses_two_char_aliases(self):
@@ -178,6 +195,29 @@ class RelationBehaviorTests(unittest.TestCase):
             payload = load_json(target)
             self.assertEqual(payload["message"], "x?y")
 
+    def test_save_correction_returns_file_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+            reflection = ReflectionEngine(config)
+
+            item = reflection.save_correction(
+                session_id="abc123",
+                character="刘备",
+                target="关羽",
+                original_message="是否联吴？",
+                corrected_message="此事需先审时度势。",
+                reason="tone_fix",
+            )
+
+            self.assertIn("file_path", item)
+            self.assertTrue(Path(item["file_path"]).exists())
+
+    def test_normalize_character_name_maps_common_aliases(self):
+        self.assertEqual(normalize_character_name("关公"), "关羽")
+        self.assertEqual(normalize_character_name("云长"), "关羽")
+        self.assertEqual(normalize_relation_key("关公_刘备"), "关羽_刘备")
+
     def test_distiller_rejects_name_plus_dialogue_verb_noise(self):
         distiller = NovelDistiller(Config())
         self.assertFalse(distiller._looks_like_name("\u51e4\u59d0\u7b11"))
@@ -208,6 +248,33 @@ class RelationBehaviorTests(unittest.TestCase):
             self.assertIn("\u51e4\u59d0", session["characters"])
             self.assertNotIn("\u51e4\u59d0\u7b11", session["characters"])
             self.assertEqual(session["state"]["relation_matrix"]["\u51e4\u59d0_\u8d3e\u5b9d\u7389"]["trust"], 6)
+
+    def test_chat_engine_merges_canonical_alias_profiles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            save_json(
+                root / "characters" / "sanguo" / "关羽.json",
+                {"name": "关羽", "speech_style": "谨慎", "typical_lines": ["大义为先"], "core_traits": ["谨慎"], "values": {}},
+            )
+            save_json(
+                root / "characters" / "sanguo" / "关公.json",
+                {"name": "关公", "speech_style": "", "typical_lines": ["忠义不可失"], "core_traits": ["忠诚"], "values": {}},
+            )
+            save_json(
+                root / "characters" / "sanguo" / "刘备.json",
+                {"name": "刘备", "speech_style": "克制", "typical_lines": [], "core_traits": ["仁厚"], "values": {}},
+            )
+
+            engine = ChatEngine(config)
+            session = engine.create_session("sanguo.txt", "observe")
+
+            self.assertIn("关羽", session["characters"])
+            self.assertNotIn("关公", session["characters"])
+            profile = engine._load_character_profiles("sanguo")["关羽"]
+            self.assertIn("大义为先", profile["typical_lines"])
+            self.assertIn("忠义不可失", profile["typical_lines"])
 
     def test_observe_once_runs_single_turn_and_persists_session(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -371,6 +438,54 @@ class RelationBehaviorTests(unittest.TestCase):
         self.assertNotIn("\u58eb\u9690\u63a5\u4e86\u770b\u65f6", reply)
         self.assertNotIn("\u901a\u7075\u5b9d\u7389", reply)
         self.assertIn("\u6797\u9edb\u7389", reply)
+
+    def test_speaker_answers_decision_question_with_a_stance(self):
+        speaker = Speaker(Config())
+        profile = {
+            "name": "关羽",
+            "core_traits": ["谨慎"],
+            "speech_style": "克制",
+            "typical_lines": [],
+            "values": {},
+        }
+
+        reply = speaker.generate(
+            character_profile=profile,
+            context="二位贤弟，我们是否应该联合孙权对抗曹操？",
+            history=[],
+            target_name="刘备",
+            relation_state={"affection": 7, "trust": 8, "hostility": 0, "ambiguity": 4},
+        )
+
+        self.assertIn("依我看", reply)
+        self.assertTrue("定夺" in reply or "留" in reply or "能做" in reply)
+
+    def test_speaker_prefers_relation_specific_appellation(self):
+        speaker = Speaker(Config())
+        profile = {
+            "name": "刘备",
+            "core_traits": ["仁厚"],
+            "speech_style": "克制",
+            "typical_lines": [],
+            "values": {},
+        }
+
+        reply = speaker.generate(
+            character_profile=profile,
+            context="今日难得清闲。",
+            history=[],
+            target_name="关羽",
+            relation_state={
+                "affection": 8,
+                "trust": 8,
+                "hostility": 0,
+                "ambiguity": 3,
+                "appellations": {"刘备->关羽": "二弟"},
+            },
+        )
+
+        self.assertIn("二弟", reply)
+        self.assertNotIn("关羽，", reply)
 
     def test_cli_chat_message_uses_single_turn_path(self):
         argv = [
