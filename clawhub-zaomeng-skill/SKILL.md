@@ -114,17 +114,20 @@ Command-style trigger mapping:
 
 For `/chat`, validate the candidate reply against `speech_style`, `values`, and `decision_rules`. Rewrite once if needed; if it still conflicts, return `needs_revision`.
 
-## Interactive Execution Rules
+## Chat Execution Rules
 
-- Treat `/chat` as an interactive session, not as a one-shot batch task.
-- Before starting `/chat`, first confirm:
+- Prefer one-shot chat calls over interactive `/chat` when an agent can express the turn directly.
+- Canonical one-shot forms:
+  - `python -m src.core.main chat --novel <path-or-name> --mode observe --message "<prompt>"`
+  - `python -m src.core.main chat --novel <path-or-name> --mode act --character <name> --message "<prompt>"`
+- Use interactive `chat` only when the operator explicitly wants a live terminal session.
+- Before starting interactive `chat`, first confirm:
   - novel or source text scope
   - mode: `observe` or `act`
   - controlled character when mode is `act`
   - whether character distillation has already been completed
   - whether relation extraction has already been completed if relation-aware chat is expected
-- Before entering the session, tell the operator what the first user turn should be.
-- If the operator does not provide one, offer a starter turn:
+- If the operator does not provide a first turn, offer:
   - `observe`: `请让大家围绕这件事各说一句。`
   - `act`: `我先表态，你们再接。`
 - Do not claim PTY/input failure and do not auto-script stdin unless the operator explicitly asks for scripted execution.

@@ -115,7 +115,7 @@ python -m src.core.main extract --novel data/hongloumeng.txt --force
 ### 玩法二：观察模式
 
 ```bash
-python -m src.core.main chat --novel data/hongloumeng.txt --mode observe
+python -m src.core.main chat --novel data/hongloumeng.txt --mode observe --message "请让大家围绕黛玉初到贾府时的见面场景各说一句。"
 ```
 
 这个模式不是“自动无输入跑完”，而是交互式会话。你应该先给系统一个起始场景或一句引导语，例如：
@@ -133,7 +133,7 @@ python -m src.core.main chat --novel data/hongloumeng.txt --mode observe
 ### 玩法三：行动模式
 
 ```bash
-python -m src.core.main chat --novel data/hongloumeng.txt --mode act --character 林黛玉
+python -m src.core.main chat --novel data/hongloumeng.txt --mode act --character 林黛玉 --message "宝玉，你今日为何这样看我？"
 ```
 
 这个模式下你控制指定角色发言，其他角色回应。推荐直接输入一个具体意图，例如：
@@ -200,7 +200,7 @@ python -m src.core.main view --character 贾宝玉 --novel data/hongloumeng.txt
 ### 示例 1：观察黛玉与宝玉的互动
 
 ```bash
-python -m src.core.main chat --novel data/hongloumeng.txt --mode observe
+python -m src.core.main chat --novel data/hongloumeng.txt --mode observe --message "场景：荣国府内，黛玉初到贾府，宝玉第一次见到她。请让相关角色自然开口。"
 ```
 
 首轮输入可以这样写：
@@ -212,7 +212,7 @@ python -m src.core.main chat --novel data/hongloumeng.txt --mode observe
 ### 示例 2：你来扮演黛玉
 
 ```bash
-python -m src.core.main chat --novel data/hongloumeng.txt --mode act --character 林黛玉
+python -m src.core.main chat --novel data/hongloumeng.txt --mode act --character 林黛玉 --message "宝玉，你今日为何这样看我？"
 ```
 
 你可以输入：
@@ -294,7 +294,7 @@ chat_engine:
 ```bash
 python -m src.core.main distill --novel <path> [--characters A,B] [--output <dir>] [--force]
 python -m src.core.main extract --novel <path> [--output <path>] [--force]
-python -m src.core.main chat --novel <path-or-name> --mode observe|act [--character <name>] [--session <id>]
+python -m src.core.main chat --novel <path-or-name> --mode observe|act [--character <name>] [--session <id>] [--message <text>]
 python -m src.core.main view --character <name> [--novel <path-or-name>]
 python -m src.core.main correct --session <id> --message <raw> --corrected <fixed> [--character <name>] [--target <name>] [--reason <text>]
 ```

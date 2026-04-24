@@ -4,7 +4,7 @@ Suggested metadata:
 - Type: OpenClaw Skill
 - Name: zaomeng-skill
 - Display Name: 造梦技能
-- Version: 1.0.6
+- Version: 1.0.7
 - Category: Writing / Roleplay / Character Simulation
 
 Risk posture:
@@ -19,5 +19,6 @@ Pre-publish checks:
 4. No credentials or secrets in bundle.
 
 Release note:
+- 1.0.7: Added one-shot `chat --message` guidance for direct agent execution and aligned ClawHub chat rules.
 - 1.0.6: Clarified interactive chat and confirmation-gated execution rules for ClawHub skill usage.
 - 1.0.5: Aligned ClawHub package schema and examples with the current novel-scoped local workflow.

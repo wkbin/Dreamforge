@@ -14,22 +14,24 @@ description: Hermes Agent adapter for zaomeng local novel distillation, relation
 
 ## Invocation Mapping
 
-- Distillation: `python -m src.core.main distill --novel ...`
-- Relationship extraction: `python -m src.core.main extract --novel ...`
-- Session chat: `python -m src.core.main chat --novel ... --mode ...`
+- Distillation: `python -m src.core.main distill --novel ... [--characters A,B] [--force]`
+- Relationship extraction: `python -m src.core.main extract --novel ... [--force]`
+- Single-turn observe chat: `python -m src.core.main chat --novel ... --mode observe --message "..."`
+- Single-turn act chat: `python -m src.core.main chat --novel ... --mode act --character ... --message "..."`
+- Interactive chat: `python -m src.core.main chat --novel ... --mode ... [--character ...]`
 - Character view: `python -m src.core.main view --character ... [--novel ...]`
 - Manual correction: `python -m src.core.main correct --session ... --message ... --corrected ...`
 
-## Interactive Chat Rule
+## Chat Execution Rule
 
-- `chat` must be treated as an interactive terminal session.
-- Before running it, first confirm the novel, mode, and controlled character for `act` mode.
-- Also confirm whether character profiles already exist, and whether relation extraction has already been run if relation-aware chat is expected.
-- Before entering the session, tell the user what to type as the first turn.
-- If the user has no preference, offer a starter turn:
+- For agent-driven usage, prefer the non-interactive single-turn form with `--message`.
+- Use interactive `chat` only when the user explicitly wants to stay inside a terminal session.
+- Do not claim PTY failure and do not recover by scripting stdin when `--message` can express the request directly.
+- If relation-aware replies are expected, ensure `extract` has already been run.
+- If `act` mode is requested, require `--character`.
+- Recommended starter turns:
   - `observe`: `请让大家围绕这件事各说一句。`
   - `act`: `我先表态，你们再接。`
-- Do not try to recover by faking PTY input or writing an auto-input script unless the user explicitly requests scripted chat.
 
 ## Behavioral Constraints
 

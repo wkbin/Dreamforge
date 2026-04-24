@@ -80,35 +80,18 @@ class ChatEngine:
                     break
                 continue
 
-            session["history"].append({"speaker": "Narrator", "message": user_msg, "ts": int(time.time())})
-            profiles = self._load_character_profiles(session.get("novel_id"))
-            for name in self._active_characters(session, speaker="Narrator", context=user_msg):
-                profile = profiles.get(name, {"name": name})
-                target_name = self._infer_target(name, session["history"], session["characters"])
-                relation_state = self._get_relation_state(session, name, target_name)
-                reply = self.speaker.generate(
-                    character_profile=profile,
-                    context=user_msg,
-                    history=session["history"],
-                    target_name=target_name,
-                    relation_state=relation_state,
-                    relation_hint=self._relation_hint(name, session["characters"], session.get("novel_id")),
-                )
-                reply = self._guard_reply(profile, reply, relation_state, target_name)
-                print(f"{name}: {reply}")
-                session["history"].append(
-                    {"speaker": name, "target": target_name, "message": reply, "ts": int(time.time())}
-                )
-
-            self._trim_history(session)
-            self._update_state(session)
-            self._save_session(session)
-            self._print_turn_cost()
+            responses = self.observe_once(session, user_msg)
+            self._print_responses(responses)
+            self.print_turn_cost()
 
     def act_mode(self, session: Dict[str, Any], character: str) -> None:
-        print(f"进入 act 模式，你扮演 {character}。输入 /save /reflect /correct /quit")
+        controlled = self._resolve_character_name(character, session["characters"])
+        if controlled not in session["characters"]:
+            raise ValueError(f"Character '{character}' not found in this session.")
+
+        print(f"进入 act 模式，你扮演 {controlled}。输入 /save /reflect /correct /quit")
         while True:
-            user_msg = input(f"\n{character}(你): ").strip()
+            user_msg = input(f"\n{controlled}(你): ").strip()
             if not user_msg:
                 continue
             if self._handle_inline_command(session, user_msg):
@@ -116,35 +99,78 @@ class ChatEngine:
                     break
                 continue
 
-            responders = self._active_characters(session, speaker=character, context=user_msg)
-            if not responders:
-                print("未识别明确对话对象。请在下一句里点名角色，或先补充关系数据。")
+            try:
+                responses = self.act_once(session, controlled, user_msg)
+            except ValueError as exc:
+                print(exc)
                 continue
 
-            session["history"].append({"speaker": character, "message": user_msg, "ts": int(time.time())})
-            profiles = self._load_character_profiles(session.get("novel_id"))
-            for name in responders:
-                profile = profiles.get(name, {"name": name})
-                target_name = self._infer_target(name, session["history"], session["characters"])
-                relation_state = self._get_relation_state(session, name, target_name)
-                reply = self.speaker.generate(
-                    character_profile=profile,
-                    context=user_msg,
-                    history=session["history"],
-                    target_name=target_name,
-                    relation_state=relation_state,
-                    relation_hint=self._relation_hint(name, session["characters"], session.get("novel_id")),
-                )
-                reply = self._guard_reply(profile, reply, relation_state, target_name)
-                print(f"{name}: {reply}")
-                session["history"].append(
-                    {"speaker": name, "target": target_name, "message": reply, "ts": int(time.time())}
-                )
+            self._print_responses(responses)
+            self.print_turn_cost()
 
-            self._trim_history(session)
-            self._update_state(session)
-            self._save_session(session)
-            self._print_turn_cost()
+    def observe_once(self, session: Dict[str, Any], user_msg: str) -> List[tuple[str, str]]:
+        responders = self._active_characters(session, speaker="Narrator", context=user_msg)
+        return self._run_turn(session, "Narrator", user_msg, responders)
+
+    def act_once(self, session: Dict[str, Any], character: str, user_msg: str) -> List[tuple[str, str]]:
+        controlled = self._resolve_character_name(character, session["characters"])
+        if controlled not in session["characters"]:
+            raise ValueError(f"Character '{character}' not found in this session.")
+
+        responders = self._active_characters(session, speaker=controlled, context=user_msg)
+        if not responders:
+            raise ValueError("未识别到明确对话对象。请在消息里点名角色，或先补充关系数据。")
+        return self._run_turn(session, controlled, user_msg, responders)
+
+    def print_turn_cost(self) -> None:
+        summary = self.llm.get_cost_summary()
+        print(
+            f"[累计] token={summary['total_tokens']} "
+            f"session=${summary['session_cost']:.4f} daily=${summary['daily_cost']:.4f}"
+        )
+
+    def _run_turn(
+        self,
+        session: Dict[str, Any],
+        speaker: str,
+        user_msg: str,
+        responders: List[str],
+    ) -> List[tuple[str, str]]:
+        message = user_msg.strip()
+        if not message:
+            raise ValueError("消息不能为空。")
+
+        session["history"].append({"speaker": speaker, "message": message, "ts": int(time.time())})
+        profiles = self._load_character_profiles(session.get("novel_id"))
+
+        responses: List[tuple[str, str]] = []
+        for name in responders:
+            profile = profiles.get(name, {"name": name})
+            target_name = self._infer_target(name, session["history"], session["characters"])
+            relation_state = self._get_relation_state(session, name, target_name)
+            reply = self.speaker.generate(
+                character_profile=profile,
+                context=message,
+                history=session["history"],
+                target_name=target_name,
+                relation_state=relation_state,
+                relation_hint=self._relation_hint(name, session["characters"], session.get("novel_id")),
+            )
+            reply = self._guard_reply(profile, reply, relation_state, target_name)
+            responses.append((name, reply))
+            session["history"].append(
+                {"speaker": name, "target": target_name, "message": reply, "ts": int(time.time())}
+            )
+
+        self._trim_history(session)
+        self._update_state(session)
+        self._save_session(session)
+        return responses
+
+    @staticmethod
+    def _print_responses(responses: List[tuple[str, str]]) -> None:
+        for speaker, message in responses:
+            print(f"{speaker}: {message}")
 
     def _handle_inline_command(self, session: Dict[str, Any], command: str) -> bool:
         if command == "/quit":
@@ -266,13 +292,6 @@ class ChatEngine:
                 "ambiguity": state["ambiguity"],
             }
 
-    def _print_turn_cost(self) -> None:
-        summary = self.llm.get_cost_summary()
-        print(
-            f"[累计] token={summary['total_tokens']} "
-            f"session=${summary['session_cost']:.4f} daily=${summary['daily_cost']:.4f}"
-        )
-
     def _save_session(self, session: Dict[str, Any]) -> None:
         save_json(self.sessions_dir / f"{session['id']}.json", session)
         self._save_relation_snapshot(session)
@@ -348,10 +367,7 @@ class ChatEngine:
         if not rel_file:
             return {}
         rel = load_json(rel_file, default={})
-        normalized = {
-            normalize_relation_key(key): value
-            for key, value in rel.items()
-        }
+        normalized = {normalize_relation_key(key): value for key, value in rel.items()}
         return normalized.get(self._pair_key(normalize_character_name(speaker), normalize_character_name(target)), {})
 
     def _get_relation_state(self, session: Dict[str, Any], speaker: str, target: str) -> Dict[str, Any]:
@@ -468,6 +484,18 @@ class ChatEngine:
             reverse=True,
         )
 
+    def _resolve_character_name(self, raw_name: str, candidates: List[str]) -> str:
+        normalized = normalize_character_name(raw_name)
+        if normalized in candidates:
+            return normalized
+        matched = []
+        for name in candidates:
+            if normalized == name or normalized in self._candidate_aliases(name):
+                matched.append(name)
+        if len(matched) == 1:
+            return matched[0]
+        return normalized
+
     @staticmethod
     def _infer_target(speaker: str, history: List[Dict[str, Any]], all_chars: List[str]) -> str:
         for item in reversed(history):
@@ -501,13 +529,14 @@ class ChatEngine:
 
     @staticmethod
     def _rewrite_reply(reply: str, relation_state: Dict[str, Any], target_name: str) -> str:
+        target = target_name or "对方"
         hostility = int(relation_state.get("hostility", 0))
         affection = int(relation_state.get("affection", 5))
         ambiguity = int(relation_state.get("ambiguity", 3))
         if hostility >= 7:
-            return f"对{target_name or '对方'}，我把话说到这里，不必更近一步。"
+            return f"对{target}，我把话说到这里，不必更近一步。"
         if affection >= 8:
-            return f"对{target_name or '对方'}，我会把语气放缓，把话说明白。"
+            return f"对{target}，我会把语气放缓，把话说明白。"
         if ambiguity >= 7:
-            return f"对{target_name or '对方'}，我先留一点余地，不把话说死。"
+            return f"对{target}，我先留一点余地，不把话说死。"
         return f"{reply}（已按对象关系收束）"

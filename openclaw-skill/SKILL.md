@@ -9,21 +9,23 @@ Use these CLI commands as the canonical entrypoints:
 
 - `python -m src.core.main distill --novel <path> [--characters A,B] [--force]`
 - `python -m src.core.main extract --novel <path> [--output <path>] [--force]`
+- `python -m src.core.main chat --novel <path-or-name> --mode observe --message "<prompt>"`
+- `python -m src.core.main chat --novel <path-or-name> --mode act --character <name> --message "<prompt>"`
 - `python -m src.core.main chat --novel <path-or-name> --mode observe|act [--character <name>]`
 - `python -m src.core.main view --character <name> [--novel <path-or-name>]`
 - `python -m src.core.main correct --session <id> --message <raw> --corrected <fixed> [--character <name>]`
 
-## Interactive Chat Rule
+## Chat Execution Rule
 
-- `chat` is an interactive terminal session, not a fire-and-forget command.
-- Before running `chat`, first confirm:
+- Prefer `chat ... --message "..."` for agent-driven runs.
+- Treat plain `chat` without `--message` as an interactive terminal session.
+- Before running interactive `chat`, confirm:
   - novel path or novel name
   - mode: `observe` or `act`
   - controlled character when mode is `act`
   - whether `distill` has already been run
   - whether `extract` has already been run if relation-aware replies are desired
-- Before launching the session, tell the user what input they should type first.
-- Offer a simple starter turn when the user does not provide one:
+- Use these starter turns when the user does not provide one:
   - `observe`: `请让大家围绕这件事各说一句。`
   - `act`: `我先表态，你们再接。`
 - Do not claim PTY failure and do not simulate stdin or auto-script chat turns unless the user explicitly asks for that behavior.

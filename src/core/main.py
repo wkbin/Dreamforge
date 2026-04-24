@@ -57,19 +57,22 @@ class ZaomengCLI:
 
         chat_parser = subparsers.add_parser(
             "chat",
-            help="Start an interactive multi-character chat session",
+            help="Start an interactive or single-turn multi-character chat session",
             description=(
-                "Start an interactive chat session.\n\n"
+                "Start a chat session.\n\n"
                 "Prerequisites:\n"
                 "  1. Run `distill` first so character profiles exist.\n"
                 "  2. Run `extract` first if you want relation-aware replies.\n"
                 "  3. In `act` mode, pass `--character` for the role you control.\n\n"
+                "Usage modes:\n"
+                "  - Interactive: omit `--message` and chat in the terminal.\n"
+                "  - Single-turn: pass `--message` to run one turn and exit.\n\n"
                 "Starter inputs:\n"
                 "  observe: 请让大家围绕这件事各说一句。\n"
                 "  act: 我先表态，你们再接。"
             ),
             epilog=(
-                "Inline commands:\n"
+                "Inline commands in interactive mode:\n"
                 "  /save\n"
                 "  /reflect\n"
                 "  /correct 角色|对象|原句|修正句|原因\n"
@@ -81,6 +84,10 @@ class ZaomengCLI:
         chat_parser.add_argument("--mode", "-m", choices=["observe", "act"], default="observe")
         chat_parser.add_argument("--character", "-c", help="Controlled character in act mode")
         chat_parser.add_argument("--session", "-s", help="Restore an existing session ID")
+        chat_parser.add_argument(
+            "--message",
+            help="Run a single non-interactive turn and exit",
+        )
 
         view_parser = subparsers.add_parser("view", help="View a distilled character profile")
         view_parser.add_argument("--character", "-c", required=True, help="Character name")
@@ -171,15 +178,6 @@ class ZaomengCLI:
 
     def _handle_chat(self, args: argparse.Namespace) -> None:
         print("=== Chat Engine ===")
-        print("This is an interactive command. Prepare your first user turn before entering the session.")
-        if args.mode == "act":
-            role = args.character or "<character>"
-            print(f"Mode: act | Controlled role: {role}")
-            print("Starter input example: 我先表态，你们再接。")
-        else:
-            print("Mode: observe")
-            print("Starter input example: 请让大家围绕这件事各说一句。")
-        print("Inline commands: /save /reflect /correct /quit")
         engine = ChatEngine(self.config)
 
         if args.session:
@@ -188,14 +186,41 @@ class ZaomengCLI:
         else:
             print(f"Loading scoped profiles for: {args.novel}")
             session = engine.create_session(args.novel, args.mode)
+        session["mode"] = args.mode
 
+        if args.message:
+            responses = self._run_single_chat_turn(engine, session, args)
+            for speaker, message in responses:
+                print(f"{speaker}: {message}")
+            engine.print_turn_cost()
+            return
+
+        print("This is an interactive command. Prepare your first user turn before entering the session.")
         if args.mode == "act":
+            role = args.character or "<character>"
+            print(f"Mode: act | Controlled role: {role}")
+            print("Starter input example: 我先表态，你们再接。")
             if not args.character:
                 raise ValueError("--character is required in act mode")
             engine.act_mode(session, args.character)
             return
 
+        print("Mode: observe")
+        print("Starter input example: 请让大家围绕这件事各说一句。")
+        print("Inline commands: /save /reflect /correct /quit")
         engine.observe_mode(session)
+
+    @staticmethod
+    def _run_single_chat_turn(
+        engine: ChatEngine,
+        session: dict,
+        args: argparse.Namespace,
+    ) -> list[tuple[str, str]]:
+        if args.mode == "act":
+            if not args.character:
+                raise ValueError("--character is required in act mode")
+            return engine.act_once(session, args.character, args.message)
+        return engine.observe_once(session, args.message)
 
     def _handle_view(self, args: argparse.Namespace) -> None:
         characters_root = self.config.get_path("characters")

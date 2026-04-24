@@ -115,7 +115,7 @@ So even if the source text frequently uses `黛玉` and `宝玉` instead of full
 ### Pattern 2: Observe mode
 
 ```bash
-python -m src.core.main chat --novel data/hongloumeng.txt --mode observe
+python -m src.core.main chat --novel data/hongloumeng.txt --mode observe --message "Please let everyone speak around Daiyu's arrival at the Jia household."
 ```
 
 This is not a fire-and-forget command. It is an interactive session, so you should provide an opening prompt such as:
@@ -133,7 +133,7 @@ Useful for:
 ### Pattern 3: Act mode
 
 ```bash
-python -m src.core.main chat --novel data/hongloumeng.txt --mode act --character 林黛玉
+python -m src.core.main chat --novel data/hongloumeng.txt --mode act --character 林黛玉 --message "Baoyu, why are you looking at me like that today?"
 ```
 
 In this mode, you control the named character and others reply. Good first turns include:
@@ -200,7 +200,7 @@ This is especially useful for relationships with layered emotional history that 
 ### Example 1: Observe Daiyu and Baoyu
 
 ```bash
-python -m src.core.main chat --novel data/hongloumeng.txt --mode observe
+python -m src.core.main chat --novel data/hongloumeng.txt --mode observe --message "Scene: Inside Rongguo House, Daiyu has just arrived, and Baoyu is meeting her for the first time. Let the relevant characters begin naturally."
 ```
 
 Suggested first turn:
@@ -212,7 +212,7 @@ Scene: Inside Rongguo House, Daiyu has just arrived, and Baoyu is meeting her fo
 ### Example 2: You play Daiyu
 
 ```bash
-python -m src.core.main chat --novel data/hongloumeng.txt --mode act --character 林黛玉
+python -m src.core.main chat --novel data/hongloumeng.txt --mode act --character 林黛玉 --message "Baoyu, why are you looking at me like that today?"
 ```
 
 You might type:
@@ -294,7 +294,7 @@ Useful for:
 ```bash
 python -m src.core.main distill --novel <path> [--characters A,B] [--output <dir>] [--force]
 python -m src.core.main extract --novel <path> [--output <path>] [--force]
-python -m src.core.main chat --novel <path-or-name> --mode observe|act [--character <name>] [--session <id>]
+python -m src.core.main chat --novel <path-or-name> --mode observe|act [--character <name>] [--session <id>] [--message <text>]
 python -m src.core.main view --character <name> [--novel <path-or-name>]
 python -m src.core.main correct --session <id> --message <raw> --corrected <fixed> [--character <name>] [--target <name>] [--reason <text>]
 ```

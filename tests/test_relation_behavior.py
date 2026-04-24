@@ -4,8 +4,10 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from src.core.config import Config
+from src.core.main import ZaomengCLI
 from src.modules.chat_engine import ChatEngine
 from src.modules.distillation import NovelDistiller
 from src.modules.relationships import RelationshipExtractor
@@ -33,16 +35,19 @@ class RelationBehaviorTests(unittest.TestCase):
     def test_extract_pair_interactions_requires_same_sentence(self):
         extractor = RelationshipExtractor(Config())
         chunk = (
-            "林黛玉看着贾宝玉，没有说话。"
-            "薛宝钗这时才进门。"
-            "林黛玉又对贾宝玉说，你该回去了。"
+            "\u6797\u9edb\u7389\u770b\u7740\u8d3e\u5b9d\u7389\uff0c\u6ca1\u6709\u8bf4\u8bdd\u3002"
+            "\u859b\u5b9d\u9497\u8fd9\u65f6\u624d\u8fdb\u95e8\u3002"
+            "\u6797\u9edb\u7389\u53c8\u5bf9\u8d3e\u5b9d\u7389\u8bf4\uff0c\u4f60\u8be5\u56de\u53bb\u4e86\u3002"
         )
-        pairs = extractor._extract_pair_interactions(chunk, ["林黛玉", "贾宝玉", "薛宝钗"])
+        pairs = extractor._extract_pair_interactions(
+            chunk,
+            ["\u6797\u9edb\u7389", "\u8d3e\u5b9d\u7389", "\u859b\u5b9d\u9497"],
+        )
 
-        self.assertIn("林黛玉_贾宝玉", pairs)
-        self.assertEqual(len(pairs["林黛玉_贾宝玉"]), 2)
-        self.assertNotIn("林黛玉_薛宝钗", pairs)
-        self.assertNotIn("薛宝钗_贾宝玉", pairs)
+        self.assertIn("\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389", pairs)
+        self.assertEqual(len(pairs["\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389"]), 2)
+        self.assertNotIn("\u6797\u9edb\u7389_\u859b\u5b9d\u9497", pairs)
+        self.assertNotIn("\u859b\u5b9d\u9497_\u8d3e\u5b9d\u7389", pairs)
 
     def test_chat_engine_scopes_profiles_and_relations_by_novel(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -50,33 +55,33 @@ class RelationBehaviorTests(unittest.TestCase):
             config = self.make_config(root)
 
             save_json(
-                root / "characters" / "novel_a" / "林黛玉.json",
-                {"name": "林黛玉", "speech_style": "克制", "typical_lines": [], "values": {}},
+                root / "characters" / "novel_a" / "\u6797\u9edb\u7389.json",
+                {"name": "\u6797\u9edb\u7389", "speech_style": "\u514b\u5236", "typical_lines": [], "values": {}},
             )
             save_json(
-                root / "characters" / "novel_a" / "贾宝玉.json",
-                {"name": "贾宝玉", "speech_style": "直白", "typical_lines": [], "values": {}},
+                root / "characters" / "novel_a" / "\u8d3e\u5b9d\u7389.json",
+                {"name": "\u8d3e\u5b9d\u7389", "speech_style": "\u76f4\u767d", "typical_lines": [], "values": {}},
             )
             save_json(
-                root / "characters" / "novel_b" / "哈利.json",
-                {"name": "哈利", "speech_style": "直接", "typical_lines": [], "values": {}},
+                root / "characters" / "novel_b" / "\u54c8\u5229.json",
+                {"name": "\u54c8\u5229", "speech_style": "\u76f4\u63a5", "typical_lines": [], "values": {}},
             )
             save_json(
                 root / "relations" / "novel_a" / "novel_a_relations.json",
-                {"林黛玉_贾宝玉": {"trust": 8, "affection": 7, "power_gap": 0}},
+                {"\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389": {"trust": 8, "affection": 7, "power_gap": 0}},
             )
             save_json(
                 root / "relations" / "novel_b" / "novel_b_relations.json",
-                {"哈利_罗恩": {"trust": 2, "affection": 2, "power_gap": 0}},
+                {"\u54c8\u5229_\u7f57\u6069": {"trust": 2, "affection": 2, "power_gap": 0}},
             )
 
             engine = ChatEngine(config)
             session = engine.create_session("novel_a.txt", "observe")
 
             self.assertEqual(session["novel_id"], "novel_a")
-            self.assertEqual(session["characters"], ["林黛玉", "贾宝玉"])
-            self.assertEqual(session["state"]["relation_matrix"]["林黛玉_贾宝玉"]["trust"], 8)
-            self.assertNotIn("哈利", session["characters"])
+            self.assertEqual(session["characters"], ["\u6797\u9edb\u7389", "\u8d3e\u5b9d\u7389"])
+            self.assertEqual(session["state"]["relation_matrix"]["\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389"]["trust"], 8)
+            self.assertNotIn("\u54c8\u5229", session["characters"])
 
     def test_distill_with_explicit_characters_uses_two_char_aliases(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -129,33 +134,41 @@ class RelationBehaviorTests(unittest.TestCase):
             config = self.make_config(root)
 
             save_json(
-                root / "characters" / "hongloumeng" / "林黛玉.json",
-                {"name": "林黛玉", "speech_style": "克制", "typical_lines": [], "values": {}},
+                root / "characters" / "hongloumeng" / "\u6797\u9edb\u7389.json",
+                {"name": "\u6797\u9edb\u7389", "speech_style": "\u514b\u5236", "typical_lines": [], "values": {}},
             )
             save_json(
-                root / "characters" / "hongloumeng" / "贾宝玉.json",
-                {"name": "贾宝玉", "speech_style": "直白", "typical_lines": [], "values": {}},
+                root / "characters" / "hongloumeng" / "\u8d3e\u5b9d\u7389.json",
+                {"name": "\u8d3e\u5b9d\u7389", "speech_style": "\u76f4\u767d", "typical_lines": [], "values": {}},
             )
             save_json(
-                root / "characters" / "hongloumeng" / "冯紫英.json",
-                {"name": "冯紫英", "speech_style": "直白", "typical_lines": [], "values": {}},
+                root / "characters" / "hongloumeng" / "\u51af\u7d2b\u82f1.json",
+                {"name": "\u51af\u7d2b\u82f1", "speech_style": "\u76f4\u767d", "typical_lines": [], "values": {}},
             )
             save_json(
                 root / "relations" / "hongloumeng" / "hongloumeng_relations.json",
                 {
-                    "林黛玉_贾宝玉": {"trust": 9, "affection": 9, "power_gap": 0},
-                    "冯紫英_贾宝玉": {"trust": 4, "affection": 3, "power_gap": 0},
+                    "\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389": {"trust": 9, "affection": 9, "power_gap": 0},
+                    "\u51af\u7d2b\u82f1_\u8d3e\u5b9d\u7389": {"trust": 4, "affection": 3, "power_gap": 0},
                 },
             )
 
             engine = ChatEngine(config)
             session = engine.create_session("hongloumeng.txt", "act")
 
-            responders = engine._active_characters(session, speaker="贾宝玉", context="妹妹今日可大安了？")
-            self.assertEqual(responders, ["林黛玉"])
+            responders = engine._active_characters(
+                session,
+                speaker="\u8d3e\u5b9d\u7389",
+                context="\u59b9\u59b9\u4eca\u65e5\u53ef\u5927\u5b89\u4e86\uff1f",
+            )
+            self.assertEqual(responders, ["\u6797\u9edb\u7389"])
 
-            explicit = engine._active_characters(session, speaker="贾宝玉", context="林妹妹今日可大安了？")
-            self.assertEqual(explicit, ["林黛玉"])
+            explicit = engine._active_characters(
+                session,
+                speaker="\u8d3e\u5b9d\u7389",
+                context="\u6797\u59b9\u59b9\u4eca\u65e5\u53ef\u5927\u5b89\u4e86\uff1f",
+            )
+            self.assertEqual(explicit, ["\u6797\u9edb\u7389"])
 
     def test_save_json_replaces_surrogates(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -166,9 +179,9 @@ class RelationBehaviorTests(unittest.TestCase):
 
     def test_distiller_rejects_name_plus_dialogue_verb_noise(self):
         distiller = NovelDistiller(Config())
-        self.assertFalse(distiller._looks_like_name("凤姐笑"))
-        self.assertFalse(distiller._looks_like_name("凤姐听"))
-        self.assertTrue(distiller._looks_like_name("贾宝玉"))
+        self.assertFalse(distiller._looks_like_name("\u51e4\u59d0\u7b11"))
+        self.assertFalse(distiller._looks_like_name("\u51e4\u59d0\u542c"))
+        self.assertTrue(distiller._looks_like_name("\u8d3e\u5b9d\u7389"))
 
     def test_chat_engine_normalizes_legacy_noisy_profile_and_relation_names(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -176,24 +189,132 @@ class RelationBehaviorTests(unittest.TestCase):
             config = self.make_config(root)
 
             save_json(
-                root / "characters" / "hongloumeng" / "凤姐笑.json",
-                {"name": "凤姐笑", "speech_style": "凌厉", "typical_lines": [], "values": {}},
+                root / "characters" / "hongloumeng" / "\u51e4\u59d0\u7b11.json",
+                {"name": "\u51e4\u59d0\u7b11", "speech_style": "\u51cc\u5389", "typical_lines": [], "values": {}},
             )
             save_json(
-                root / "characters" / "hongloumeng" / "贾宝玉.json",
-                {"name": "贾宝玉", "speech_style": "直白", "typical_lines": [], "values": {}},
+                root / "characters" / "hongloumeng" / "\u8d3e\u5b9d\u7389.json",
+                {"name": "\u8d3e\u5b9d\u7389", "speech_style": "\u76f4\u767d", "typical_lines": [], "values": {}},
             )
             save_json(
                 root / "relations" / "hongloumeng" / "hongloumeng_relations.json",
-                {"凤姐听_贾宝玉": {"trust": 6, "affection": 4, "power_gap": 0}},
+                {"\u51e4\u59d0\u542c_\u8d3e\u5b9d\u7389": {"trust": 6, "affection": 4, "power_gap": 0}},
             )
 
             engine = ChatEngine(config)
             session = engine.create_session("hongloumeng.txt", "act")
 
-            self.assertIn("凤姐", session["characters"])
-            self.assertNotIn("凤姐笑", session["characters"])
-            self.assertEqual(session["state"]["relation_matrix"]["凤姐_贾宝玉"]["trust"], 6)
+            self.assertIn("\u51e4\u59d0", session["characters"])
+            self.assertNotIn("\u51e4\u59d0\u7b11", session["characters"])
+            self.assertEqual(session["state"]["relation_matrix"]["\u51e4\u59d0_\u8d3e\u5b9d\u7389"]["trust"], 6)
+
+    def test_observe_once_runs_single_turn_and_persists_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+            config.update({"chat_engine": {"max_speakers_per_turn": 1}})
+
+            save_json(
+                root / "characters" / "hongloumeng" / "\u6797\u9edb\u7389.json",
+                {"name": "\u6797\u9edb\u7389", "speech_style": "\u514b\u5236", "typical_lines": [], "values": {}},
+            )
+            save_json(
+                root / "characters" / "hongloumeng" / "\u8d3e\u5b9d\u7389.json",
+                {"name": "\u8d3e\u5b9d\u7389", "speech_style": "\u76f4\u767d", "typical_lines": [], "values": {}},
+            )
+
+            engine = ChatEngine(config)
+            engine.speaker.generate = Mock(return_value="\u4f60\u8bf4\u5f97\u662f\u3002")
+            session = engine.create_session("hongloumeng.txt", "observe")
+
+            replies = engine.observe_once(session, "\u8bf7\u8ba9\u5927\u5bb6\u56f4\u7ed5\u8fd9\u4ef6\u4e8b\u5404\u8bf4\u4e00\u53e5\u3002")
+
+            self.assertEqual(len(replies), 1)
+            self.assertEqual(replies[0][1], "\u4f60\u8bf4\u5f97\u662f\u3002")
+
+            restored = engine.restore_session(session["id"])
+            self.assertEqual(restored["history"][0]["speaker"], "Narrator")
+            self.assertEqual(
+                restored["history"][0]["message"],
+                "\u8bf7\u8ba9\u5927\u5bb6\u56f4\u7ed5\u8fd9\u4ef6\u4e8b\u5404\u8bf4\u4e00\u53e5\u3002",
+            )
+            self.assertEqual(len(restored["history"]), 2)
+
+    def test_act_once_requires_identifiable_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            save_json(
+                root / "characters" / "hongloumeng" / "\u6797\u9edb\u7389.json",
+                {"name": "\u6797\u9edb\u7389", "speech_style": "\u514b\u5236", "typical_lines": [], "values": {}},
+            )
+            save_json(
+                root / "characters" / "hongloumeng" / "\u8d3e\u5b9d\u7389.json",
+                {"name": "\u8d3e\u5b9d\u7389", "speech_style": "\u76f4\u767d", "typical_lines": [], "values": {}},
+            )
+
+            engine = ChatEngine(config)
+            session = engine.create_session("hongloumeng.txt", "act")
+
+            with self.assertRaisesRegex(ValueError, "\u672a\u8bc6\u522b\u5230\u660e\u786e\u5bf9\u8bdd\u5bf9\u8c61"):
+                engine.act_once(session, "\u8d3e\u5b9d\u7389", "\u4eca\u65e5\u5929\u6c14\u5012\u8fd8\u4e0d\u9519\u3002")
+
+    def test_act_once_supports_alias_target_in_single_turn_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            save_json(
+                root / "characters" / "hongloumeng" / "\u6797\u9edb\u7389.json",
+                {"name": "\u6797\u9edb\u7389", "speech_style": "\u514b\u5236", "typical_lines": [], "values": {}},
+            )
+            save_json(
+                root / "characters" / "hongloumeng" / "\u8d3e\u5b9d\u7389.json",
+                {"name": "\u8d3e\u5b9d\u7389", "speech_style": "\u76f4\u767d", "typical_lines": [], "values": {}},
+            )
+            save_json(
+                root / "relations" / "hongloumeng" / "hongloumeng_relations.json",
+                {"\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389": {"trust": 9, "affection": 9, "power_gap": 0}},
+            )
+
+            engine = ChatEngine(config)
+            engine.speaker.generate = Mock(return_value="\u4e0d\u52b3\u6302\u5ff5\uff0c\u6211\u4eca\u65e5\u8fd8\u597d\u3002")
+            session = engine.create_session("hongloumeng.txt", "act")
+
+            replies = engine.act_once(session, "\u8d3e\u5b9d\u7389", "\u59b9\u59b9\u4eca\u65e5\u53ef\u5927\u5b89\u4e86\uff1f")
+
+            self.assertEqual(replies, [("\u6797\u9edb\u7389", "\u4e0d\u52b3\u6302\u5ff5\uff0c\u6211\u4eca\u65e5\u8fd8\u597d\u3002")])
+
+    def test_cli_chat_message_uses_single_turn_path(self):
+        argv = [
+            "zaomeng",
+            "chat",
+            "--novel",
+            "hongloumeng.txt",
+            "--mode",
+            "act",
+            "--character",
+            "\u8d3e\u5b9d\u7389",
+            "--message",
+            "\u59b9\u59b9\u4eca\u65e5\u53ef\u5927\u5b89\u4e86\uff1f",
+        ]
+
+        with patch("src.core.main.ChatEngine") as engine_cls, patch("sys.argv", argv), patch("builtins.print"):
+            engine = engine_cls.return_value
+            session = {"id": "testsession", "title": "test", "characters": ["\u8d3e\u5b9d\u7389", "\u6797\u9edb\u7389"]}
+            engine.create_session.return_value = session
+            engine.act_once.return_value = [("\u6797\u9edb\u7389", "\u4e0d\u52b3\u6302\u5ff5\uff0c\u6211\u4eca\u65e5\u8fd8\u597d\u3002")]
+
+            ZaomengCLI().run()
+
+            engine.create_session.assert_called_once_with("hongloumeng.txt", "act")
+            engine.act_once.assert_called_once_with(
+                session,
+                "\u8d3e\u5b9d\u7389",
+                "\u59b9\u59b9\u4eca\u65e5\u53ef\u5927\u5b89\u4e86\uff1f",
+            )
+            engine.act_mode.assert_not_called()
 
 
 if __name__ == "__main__":
