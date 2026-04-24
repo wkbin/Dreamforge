@@ -29,7 +29,13 @@ https://github.com/wkbin/zaomeng.git
 
 ### 接入 OpenClaw
 
-自动安装：
+推荐安装：
+
+```bash
+openclaw skills install wkbin/zaomeng-skill
+```
+
+仓库内脚本安装（适用于本地开发或未接入 ClawHub 的环境）：
 
 ```bash
 python scripts/install_skill.py --openclaw-dir <openclaw-skills-root>
@@ -60,34 +66,17 @@ python -m src.core.main view --character <name> [--novel <path-or-name>]
 python -m src.core.main correct --session <id> --message <raw> --corrected <fixed>
 ```
 
-### 接入 Hermes Agent
-
-自动安装：
-
-```bash
-python scripts/install_skill.py --hermes-dir <hermes-skills-root>
-```
-
-手动安装，二选一：
-
-```bash
-# 方式 1：克隆仓库后复制
-git clone https://github.com/wkbin/zaomeng.git
-mkdir -p <hermes-skills-root>/zaomeng-skill
-cp zaomeng/hermes-skill/SKILL.md <hermes-skills-root>/zaomeng-skill/SKILL.md
-```
-
-```bash
-# 方式 2：直接下载单文件
-mkdir -p <hermes-skills-root>/zaomeng-skill
-curl -L https://raw.githubusercontent.com/wkbin/zaomeng/main/hermes-skill/SKILL.md -o <hermes-skills-root>/zaomeng-skill/SKILL.md
-```
-
-Hermes 侧命令映射与 OpenClaw 相同。
+同一套 `zaomeng-skill` 也可用于 Hermes Agent，命令映射保持一致，无需再单独维护一套接入说明。
 
 ### 接入你自己的项目
 
-如果你的项目已经有 `skills/` 目录：
+推荐使用 ClawHub CLI：
+
+```bash
+npx clawhub@latest install zaomeng-skill
+```
+
+如果你的项目已经有 `skills/` 目录，也可以使用仓库内安装脚本：
 
 ```bash
 python scripts/install_skill.py --skills-dir <your-skills-root>

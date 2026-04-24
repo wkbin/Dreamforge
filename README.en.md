@@ -29,7 +29,13 @@ https://github.com/wkbin/zaomeng.git
 
 ### OpenClaw
 
-Automatic install:
+Recommended install:
+
+```bash
+openclaw skills install wkbin/zaomeng-skill
+```
+
+Repository script install (for local development or environments without ClawHub):
 
 ```bash
 python scripts/install_skill.py --openclaw-dir <openclaw-skills-root>
@@ -60,34 +66,17 @@ python -m src.core.main view --character <name> [--novel <path-or-name>]
 python -m src.core.main correct --session <id> --message <raw> --corrected <fixed>
 ```
 
-### Hermes Agent
-
-Automatic install:
-
-```bash
-python scripts/install_skill.py --hermes-dir <hermes-skills-root>
-```
-
-Manual install, choose one:
-
-```bash
-# Option 1: clone the repo and copy the adapter
-git clone https://github.com/wkbin/zaomeng.git
-mkdir -p <hermes-skills-root>/zaomeng-skill
-cp zaomeng/hermes-skill/SKILL.md <hermes-skills-root>/zaomeng-skill/SKILL.md
-```
-
-```bash
-# Option 2: download only the adapter file
-mkdir -p <hermes-skills-root>/zaomeng-skill
-curl -L https://raw.githubusercontent.com/wkbin/zaomeng/main/hermes-skill/SKILL.md -o <hermes-skills-root>/zaomeng-skill/SKILL.md
-```
-
-Hermes uses the same command mapping as OpenClaw.
+The same `zaomeng-skill` also works in Hermes Agent with the same command mapping, so there is no separate integration path to maintain in the docs.
 
 ### Your Own Project
 
-If your project already has a `skills/` root:
+Recommended via ClawHub CLI:
+
+```bash
+npx clawhub@latest install zaomeng-skill
+```
+
+If your project already has a `skills/` root, you can also use the repository install script:
 
 ```bash
 python scripts/install_skill.py --skills-dir <your-skills-root>
