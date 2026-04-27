@@ -17,6 +17,12 @@
 
 你可以按自己的使用场景选择安装方式。
 
+请注意：
+
+- 安装 `skill` 不等于安装 `zaomeng` 引擎本体
+- `openclaw skills install ...`、`clawhub ... install ...` 安装的是技能包和说明文件
+- 如果你要真正执行 `python -m src.core.main ...` 这些 CLI 命令，本机必须已经有可运行的 `zaomeng` 仓库或本地部署环境
+
 ### 1. 直接克隆仓库
 
 如果你想本地运行完整项目、直接执行 CLI，或者自己改代码，推荐直接克隆仓库：
@@ -34,6 +40,9 @@ cd zaomeng
 openclaw skills install wkbin/zaomeng-skill
 ```
 
+这一步安装的是 skill，不包含 `zaomeng` 引擎源码。  
+如果你希望 skill 真的调用本地 CLI，本机仍然需要先有 `zaomeng` 仓库或已部署环境。
+
 ### 3. 用 ClawHub 安装
 
 如果你使用 ClawHub，可以选你习惯的命令：
@@ -50,6 +59,8 @@ pnpm dlx clawhub@latest install zaomeng-skill
 bunx clawhub@latest install zaomeng-skill
 ```
 
+同样，这一步安装的是 skill 包，不等于本地已经有可运行的 `zaomeng` 引擎。
+
 ### 4. 已有本地 skill 目录时安装
 
 如果你自己的项目里已经有 `skills/` 目录，也可以把仓库里的 skill 安装进去：
@@ -57,6 +68,16 @@ bunx clawhub@latest install zaomeng-skill
 ```bash
 python scripts/install_skill.py --skills-dir <your-skills-root>
 ```
+
+## 运行前提
+
+如果你只装了 skill，但本机没有 `zaomeng` 仓库或本地部署环境，那么：
+
+- 可以读取 skill 说明
+- 可以知道推荐的调用方式
+- 但不能执行真实的 `zaomeng` CLI 工作流
+
+要运行真实工作流，推荐先直接克隆仓库并在本地使用。
 
 ## 效果示例一：行动模式
 

@@ -17,6 +17,12 @@ It is better understood as a fiction character engine.
 
 You can choose the installation path that matches how you want to use it.
 
+Important:
+
+- installing the `skill` is not the same thing as installing the actual `zaomeng` engine
+- `openclaw skills install ...` and `clawhub ... install ...` install the skill package and its instructions
+- if you want to actually run commands like `python -m src.core.main ...`, your machine must already have a working local `zaomeng` repository or deployment
+
 ### 1. Clone the repository directly
 
 If you want to run the full project locally, use the CLI directly, or modify the code, cloning the repo is the best option:
@@ -34,6 +40,9 @@ If you mainly want to use it as a skill inside OpenClaw:
 openclaw skills install wkbin/zaomeng-skill
 ```
 
+This installs the skill, not the `zaomeng` engine source code itself.  
+If you want the skill to actually call the local CLI, your machine still needs a local `zaomeng` repo or deployed environment.
+
 ### 3. Install with ClawHub
 
 If you use ClawHub, pick the command that matches your toolchain:
@@ -50,6 +59,8 @@ pnpm dlx clawhub@latest install zaomeng-skill
 bunx clawhub@latest install zaomeng-skill
 ```
 
+Again, this installs the skill package, not a runnable local `zaomeng` engine.
+
 ### 4. Install into an existing local skills directory
 
 If your own project already has a `skills/` directory, you can also install the skill there:
@@ -57,6 +68,16 @@ If your own project already has a `skills/` directory, you can also install the 
 ```bash
 python scripts/install_skill.py --skills-dir <your-skills-root>
 ```
+
+## Runtime Requirement
+
+If you install only the skill, but your machine does not have a local `zaomeng` repository or deployment, then:
+
+- the skill instructions can still be read
+- the recommended workflow can still be understood
+- but the real `zaomeng` CLI workflow cannot actually run
+
+If you want the real workflow, cloning the repository locally is the recommended path.
 
 ## Example 1: Act Mode
 

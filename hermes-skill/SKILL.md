@@ -9,9 +9,12 @@ description: Hermes 适配器，用于 zaomeng 的本地规则型中文小说人
 
 - `zaomeng` 是本地规则驱动的人物引擎，不是通用聊天模型。
 - Hermes 必须直接调用 CLI，不要从源码重建流程，也不要手动模拟角色回复。
+- 这个 skill 适配层本身不包含 `zaomeng` 引擎源码。
+- 只有当本机已经有可运行的 `zaomeng` 仓库或本地部署环境时，下面的 CLI 才能真正执行。
 
 ## Chat 调用规则
 
+- 前提：以下命令只适用于“本机已部署 zaomeng 引擎”的环境。
 - 默认规则：Hermes 调用 `chat` 时，必须带 `--message`。
 - 首选用法：
   - `python -m src.core.main chat --novel <路径或名称> --mode auto --message "<用户原话>"`
@@ -33,6 +36,7 @@ description: Hermes 适配器，用于 zaomeng 的本地规则型中文小说人
 - 不要在尝试 `--message` 前就说环境不支持 PTY 或交互输入。
 - 不要用 stdin 脚本代替正常的 `chat --message`。
 - 不要手动读取内部模块替代 CLI。
+- 不要在本机没有 `zaomeng` 引擎时，假装这些 CLI 已经能执行。
 - 不要把模式切换请求改写成自由发挥的剧情演示。
 
 ## 其他命令

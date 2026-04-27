@@ -11,9 +11,13 @@ description: zaomeng 本地规则型中文小说人物工作流技能。
 - 它不是通用大模型聊天机器人。
 - 它做的是基于人物档案、关系数据、记忆文件的受约束角色互动。
 - Agent 必须直接调用 CLI，不要自己重建聊天流程，也不要手动模拟角色回复。
+- 这个 skill 本身不包含 `zaomeng` 引擎源码。
+- 只有当本机已经有可运行的 `zaomeng` 仓库或本地部署环境时，下面的 CLI 命令才可真正执行。
+- 如果本机没有 `zaomeng` 引擎，就不能把这个 skill 误当成“自带执行能力”的完整包。
 
 ## Chat 调用规则
 
+- 前提：以下命令只适用于“本机已部署 zaomeng 引擎”的环境。
 - 默认规则：任何 agent 或工具调用 `chat` 时，都应该带 `--message`。
 - 首选用法：
   - `python -m src.core.main chat --novel <路径或名称> --mode auto --message "<用户原话>"`
@@ -36,6 +40,7 @@ description: zaomeng 本地规则型中文小说人物工作流技能。
 - 不要在尝试 `--message` 之前就认定“环境不支持交互，所以 chat 不能用”。
 - 不要模拟 stdin，也不要自动播放整段对话，除非用户明确要求脚本化交互。
 - 不要读取 `chat_engine.py`、直接调用 `speaker.generate()`、或手动加载旧版 JSON 档案来替代 CLI。
+- 不要在本机没有 `zaomeng` 引擎时，假装这些 CLI 命令已经可运行。
 - 不要把“模式切换请求”改写成你自己的自由发挥剧情演示。
 
 ## 其他命令
