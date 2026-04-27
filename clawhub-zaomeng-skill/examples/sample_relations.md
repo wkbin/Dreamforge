@@ -7,6 +7,8 @@
 - power_gap: 1
 - conflict_point: 表达方式与误解
 - typical_interaction: 黛玉质问->宝玉安抚->短暂缓和
+- appellation_to_target: 宝玉
+- confidence: 8
 
 ## 林黛玉_薛宝钗
 
@@ -15,3 +17,5 @@
 - power_gap: 0
 - conflict_point: 价值观差异
 - typical_interaction: 宝钗劝和->黛玉观望->情绪降温
+- appellation_to_target: 宝姐姐
+- confidence: 7
