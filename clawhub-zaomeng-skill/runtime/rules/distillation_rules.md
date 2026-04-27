@@ -165,6 +165,25 @@ style_templates:
   emotional: "情绪浮在表面，回应时容易带出锋芒或波动。"
   balanced: "表达有分寸，既不极短，也不刻意铺陈。"
   quiet: "发言偏少，更多通过态度和分寸表明立场。"
+decision_rule_signals:
+  verify_first:
+    markers: [先看, 看清, 看明, 试探, 探明, 查清, 核实, 分清, 辨清, 虚实, 真假, 判断]
+    template: "遇到说法不清或局势未明时，会先辨清虚实，再决定站位。"
+  boundary_first:
+    markers: [不可, 不能, 不准, 休得, 住口, 禁言, 放下, 越线, 分寸, 底线, 规矩]
+    template: "一旦碰到底线或规矩，会立刻收紧语气，先把边界划清。"
+  protect_first:
+    markers: [保护, 护住, 护着, 别碰, 拦住, 挡住, 顶上, 扛住, 受伤, 出事, 守住]
+    template: "眼见身边人受压或将要出事时，往往会先出手护住，再谈轻重。"
+  order_first:
+    markers: [稳住, 收住, 压住, 安顿, 接应, 后手, 后路, 收拾, 托底, 先退]
+    template: "局面一乱，第一反应往往是先稳住场面、补上后手，不会任由事态散开。"
+  deflect_then_commit:
+    markers: [罢了, 不过, 随你, 何必, 算了, 且慢, 慢些, 等等, 先这样]
+    template: "嘴上未必立刻说死，常会先留一步转圜，再决定要不要真正压上去。"
+  self_defense_first:
+    markers: [不是, 没有, 误会, 凭什么, 我说了, 不关, 休想, 何须]
+    template: "先护住自己的立场与说法，不肯平白受人按头定性。"
 taboo_topics_by_value:
   忠诚: [背叛, 失信]
   责任: [弃民, 不顾众人, 撂下同伴]

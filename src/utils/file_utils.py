@@ -79,6 +79,33 @@ def safe_filename(name: str) -> str:
     return clean or "unnamed"
 
 
+def decode_escaped_text(value: Optional[str]) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if not any(token in text for token in ("\\u", "\\U", "\\x", "\\n", "\\t")):
+        return text
+    try:
+        return bytes(text, "utf-8").decode("unicode_escape").strip()
+    except UnicodeDecodeError:
+        return text
+
+
+def load_text_argument(value: Optional[str] = None, file_path: Optional[str] = None) -> str:
+    if file_path:
+        return Path(file_path).read_text(encoding="utf-8").strip()
+    return decode_escaped_text(value)
+
+
+def parse_character_argument(value: Optional[str] = None, file_path: Optional[str] = None) -> list[str]:
+    raw = load_text_argument(value, file_path)
+    if not raw:
+        return []
+    parts = re.split(r"[\n\r,，、]+", raw)
+    normalized = [normalize_character_name(part) for part in parts if part.strip()]
+    return [item for item in normalized if item]
+
+
 def normalize_character_name(name: str) -> str:
     clean = str(name or "").strip()
     if len(clean) >= 3 and clean[-1] in NOISE_NAME_SUFFIXES:

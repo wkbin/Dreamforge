@@ -157,14 +157,22 @@ class Speaker:
         warm = primary in {"善良", "责任"} or values.get("善良", 5) >= 7
 
         worldview = str(profile.get("worldview", "")).strip() or self._worldview_text(primary, secondary, values, traits)
+        belief_anchor = str(profile.get("belief_anchor", "")).strip() or worldview
         thinking_style = str(profile.get("thinking_style", "")).strip() or self._thinking_style_text(
             primary,
             traits,
             speech_style,
         )
         goal = str(profile.get("soul_goal", "")).strip() or self._goal_text(primary, secondary)
+        hidden_desire = str(profile.get("hidden_desire", "")).strip()
         role = str(profile.get("identity_anchor", "")).strip() or self._role_text(primary, secondary)
         experience = self._experience_text(profile, primary, secondary)
+        action_style = str(profile.get("action_style", "")).strip()
+        social_mode = str(profile.get("social_mode", "")).strip()
+        private_self = str(profile.get("private_self", "")).strip()
+        reward_logic = str(profile.get("reward_logic", "")).strip()
+        story_role = str(profile.get("story_role", "")).strip()
+        stance_stability = str(profile.get("stance_stability", "")).strip()
 
         direct, restrained, cadence, worldview, thinking_style, signature_phrases, taboo_topics, forbidden_behaviors = (
             self._apply_user_edits(
@@ -210,10 +218,18 @@ class Speaker:
             "expansive": expansive,
             "warm": warm,
             "worldview": worldview,
+            "belief_anchor": belief_anchor,
             "thinking_style": thinking_style,
             "goal": goal,
+            "hidden_desire": hidden_desire,
             "role": role,
             "experience": experience,
+            "action_style": action_style,
+            "social_mode": social_mode,
+            "private_self": private_self,
+            "reward_logic": reward_logic,
+            "story_role": story_role,
+            "stance_stability": stance_stability,
             "archetype": archetype,
         }
 
@@ -283,7 +299,7 @@ class Speaker:
             self._normalize_marker_candidate(str(item).strip(), self.opener_patterns, position="start")
             for item in voice["speech_habits"].get("signature_phrases", [])
             if self._is_usable_signature_fragment(str(item).strip())
-        ] or list(self.signature_fragments) or ["依我看"]
+        ]
         signature = self._stable_pick(name, "signature", signature_candidates)
         if surface_prefix:
             signature = ""
@@ -338,26 +354,44 @@ class Speaker:
             return f"{address}{prefix_text}{body}"
 
         if voice["direct"]:
+            short_direct = voice.get("speech_habits", {}).get("cadence") == "short"
             body = self._stable_pick(
                 name,
-                "opening-direct",
-                [
-                    "你既问起，我就直说。",
-                    "话既说到这儿，我便不绕弯子。",
-                    "既轮到我开口，我就把意思摆明。",
-                ],
+                "opening-direct-short" if short_direct else "opening-direct",
+                (
+                    [
+                        "我直说。",
+                        "那就明说。",
+                        "这一句我不绕。",
+                    ]
+                    if short_direct
+                    else [
+                        "你既问起，我就直说。",
+                        "话既说到这儿，我便不绕弯子。",
+                        "既轮到我开口，我就把意思摆明。",
+                    ]
+                ),
             )
             return f"{address}{prefix_text}{signature_text}{body}"
 
         if voice["restrained"]:
+            short_restrained = voice.get("speech_habits", {}).get("cadence") == "short"
             body = self._stable_pick(
                 name,
-                "opening-restrained",
-                [
-                    "你先别急，容我把轻重捋一捋再说。",
-                    "既然问到我，我先把头绪理清再回你。",
-                    "这话不宜仓促作答，总要先把层次分明。",
-                ],
+                "opening-restrained-short" if short_restrained else "opening-restrained",
+                (
+                    [
+                        "先别急。",
+                        "容我想清。",
+                        "这话慢些答。",
+                    ]
+                    if short_restrained
+                    else [
+                        "你先别急，容我把轻重捋一捋再说。",
+                        "既然问到我，我先把头绪理清再回你。",
+                        "这话不宜仓促作答，总要先把层次分明。",
+                    ]
+                ),
             )
             return f"{address}{prefix_text}{body}"
 
@@ -395,8 +429,10 @@ class Speaker:
     ) -> str:
         rules = voice.get("decision_rules", [])
         worldview = voice.get("worldview", "")
+        belief_anchor = voice.get("belief_anchor", "")
         thinking_style = voice.get("thinking_style", "")
         primary = voice.get("primary_priority", "责任")
+        action_style = voice.get("action_style", "")
 
         if rules:
             rule = self._stable_pick(voice["name"], f"rule-{topic}", rules)
@@ -410,8 +446,10 @@ class Speaker:
                 return rule
 
         if topic == "judgment":
-            return worldview or "先把轻重和后果分清，再谈定夺。"
+            return belief_anchor or worldview or "先把轻重和后果分清，再谈定夺。"
         if topic == "conflict":
+            if action_style:
+                return action_style
             if primary == "勇气":
                 return "局势再紧，也得先看该不该顶上，再看怎么顶。"
             if primary == "智慧":
@@ -422,8 +460,8 @@ class Speaker:
         if topic == "rest":
             return "难得气氛松一些，反倒更能把心里的分寸讲清。"
         if topic == "question":
-            return thinking_style or "先想清一层，再把态度摆出来。"
-        return worldview or "很多话都不能只顺着眼前这一层往下说。"
+            return thinking_style or belief_anchor or "先想清一层，再把态度摆出来。"
+        return belief_anchor or worldview or "很多话都不能只顺着眼前这一层往下说。"
 
     def _relation_line(self, target_name: str, voice: Dict[str, Any], relation_state: Dict[str, Any]) -> str:
         if not target_name:
@@ -461,10 +499,13 @@ class Speaker:
 
     def _drive_line(self, voice: Dict[str, Any], topic: str) -> str:
         goal = str(voice.get("goal", "")).strip()
+        hidden_desire = str(voice.get("hidden_desire", "")).strip()
         role = str(voice.get("role", "")).strip()
         experience = str(voice.get("experience", "")).strip()
         if topic == "rest" and experience:
             return experience
+        if topic in {"question", "judgment"} and hidden_desire:
+            return f"说到底，我最放不下的还是：{hidden_desire}。"
         if topic in {"question", "judgment"} and goal:
             return f"说到底，我真正想守的还是：{goal}。"
         if role:
@@ -777,7 +818,9 @@ class Speaker:
             return True
         if any(text.startswith(pattern) for pattern in self.opener_patterns):
             return True
-        return text[-1:] in self.preferred_trailing_chars and len(text) <= 6
+        if text[-1:] in self.preferred_trailing_chars and len(text) <= 6:
+            return True
+        return 2 <= len(text) <= 6
 
     def _fallback_fragment_score(self, fragment: str, *, is_opener: bool, is_closer: bool) -> int:
         score = max(1, 8 - abs(len(fragment) - 4))

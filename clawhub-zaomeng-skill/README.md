@@ -1,0 +1,208 @@
+# zaomeng-skill
+
+`zaomeng-skill` 是一个面向中文小说人物蒸馏、关系抽取、角色单聊与群聊的技能包。
+
+它不是普通陪聊模板，而是一套“先蒸馏，再按人物档案说话”的本地规则型工作流。
+
+## 这版有什么变化
+
+当前发布线已经切到 `3.1.0`，重点变化是：
+
+- 改为 Markdown-first，人设主存储不再以旧版 JSON 为准
+- `clawhub-zaomeng-skill` 已内嵌最小可运行子集，不再把运行时克隆外部仓库作为主路径
+- 支持自然语言优先的使用方式：先蒸馏，再进入 `act` 或 `observe`
+- 人格约束拆成三层：格式、去同质化、逻辑底线
+
+## 它能做什么
+
+### 1. 蒸馏人物
+
+从小说原文中提取人物档案，尽量覆盖更完整的人物维度，例如：
+
+- 核心身份
+- 核心动机
+- 性格基底
+- 行为逻辑
+- 人物弧光
+- 关键羁绊
+- 语言表达特质
+- 价值取舍体系
+- 深层执念与隐秘欲望
+- 私下真实面貌
+
+### 2. 抽取关系
+
+从同框互动中提取两两关系，输出关系图谱和角色侧关系层。
+
+### 3. 进入角色聊天
+
+支持两种主要玩法：
+
+- `act`
+  你扮演一个角色说话，其他角色按设定回应
+- `observe`
+  让多个角色围绕一个场景、话题或开场白进行互动
+
+### 4. 保存纠错
+
+如果某句明显 OOC，可以把纠错写回记忆，后续对话继续沿用。
+
+## 安装方式
+
+### OpenClaw
+
+```bash
+openclaw skills install wkbin/zaomeng-skill
+```
+
+### ClawHub
+
+```bash
+npx clawhub@latest install zaomeng-skill
+```
+
+```bash
+pnpm dlx clawhub@latest install zaomeng-skill
+```
+
+```bash
+bunx clawhub@latest install zaomeng-skill
+```
+
+### 本地 skill 目录安装
+
+```bash
+python scripts/install_skill.py --skills-dir <your-skills-root>
+```
+
+## 运行前提
+
+要跑真实工作流，宿主环境至少需要满足这些条件：
+
+- 能执行本地 Python 命令
+- 已安装 `PyYAML`
+- 如果读取 `.epub`，还需要 `ebooklib`
+- 如果需要更准确的 token 估算，可选装 `tiktoken`
+
+skill 包当前使用的打包运行时入口是：
+
+```text
+runtime/zaomeng_cli.py
+```
+
+## 推荐用法
+
+正确顺序不是一上来就群聊。  
+**先给小说，再蒸馏人物，蒸馏完成后再进入聊天。**
+
+最常见的使用路径是：
+
+1. 提供小说文件，或指定小说路径
+2. 用自然语言说要蒸馏谁
+3. 蒸馏完成后，再进入 `act` 或 `observe`
+
+## 自然语言示例
+
+### 蒸馏
+
+```text
+帮我蒸馏林黛玉和贾宝玉
+```
+
+```text
+请从这本小说里提取刘备、张飞、关羽的人设
+```
+
+### 进入 act
+
+```text
+让我扮演贾宝玉和林黛玉聊天
+```
+
+```text
+我来扮演宝玉，你让黛玉回我
+```
+
+### 进入 observe
+
+```text
+进入刘备、张飞、关羽群聊模式
+```
+
+```text
+请让大家围绕联合孙权这件事各说一句
+```
+
+## CLI 示例
+
+如果你直接运行打包运行时，可用这些命令：
+
+```bash
+py -3 runtime/zaomeng_cli.py distill --novel <路径> --characters A,B
+py -3 runtime/zaomeng_cli.py extract --novel <路径>
+py -3 runtime/zaomeng_cli.py chat --novel <路径或名称> --mode auto --message "让我扮演A和B聊天"
+py -3 runtime/zaomeng_cli.py view --character <角色名> --novel <路径或名称>
+py -3 runtime/zaomeng_cli.py correct --session <id> --message <原句> --corrected <修正句> --character <角色名>
+```
+
+## 人格包结构
+
+当前人物主存储为 Markdown 人格包，常见目录结构如下：
+
+```text
+runtime/data/characters/<novel_id>/<角色名>/
+```
+
+常见文件：
+
+- `NAVIGATION.generated.md`
+- `NAVIGATION.md`
+- `PROFILE.generated.md`
+- `PROFILE.md`
+- `RELATIONS.generated.md`
+- `RELATIONS.md`
+- `MEMORY.md`
+
+按人物证据情况，还可能生成可选拆分文件：
+
+- `SOUL.generated.md`
+- `GOALS.generated.md`
+- `STYLE.generated.md`
+- `TRAUMA.generated.md`
+- `IDENTITY.generated.md`
+- `BACKGROUND.generated.md`
+- `CAPABILITY.generated.md`
+- `BONDS.generated.md`
+- `CONFLICTS.generated.md`
+- `ROLE.generated.md`
+
+## 约束文件
+
+这版 skill 把约束拆成三层：
+
+- `references/output_schema.md`
+  负责输出格式与字段规范
+- `references/style_differ.md`
+  负责防同质化与风格差异化
+- `references/logic_constraint.md`
+  负责全局人设底线、防 OOC 与模式边界
+
+如果你在检查输出质量，这三份文件应该一起看，而不是只看 schema。
+
+## 和 SKILL.md 的区别
+
+- `README.md` 是给用户看的，重点是安装、使用方式和产物说明
+- `SKILL.md` 是给宿主和 agent 读的，重点是执行规则、调用约束和禁止行为
+
+## 发布提示
+
+如果你要把这个 skill 单独发布，建议至少一起带上这些文件：
+
+- `README.md`
+- `SKILL.md`
+- `INSTALL.md`
+- `MANIFEST.md`
+- `PUBLISH.md`
+- `prompts/`
+- `references/`
+- `runtime/`

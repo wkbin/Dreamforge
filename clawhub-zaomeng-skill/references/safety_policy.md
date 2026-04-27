@@ -1,20 +1,19 @@
-# Safety Policy
+# 安全策略
 
-## Execution Boundaries
+## 执行边界
 
-- Local-first by default.
-- No mandatory network fetch in runtime instructions.
-- No arbitrary shell execution requirement.
+- 默认采用本地优先。
+- 运行时说明中不应要求强制联网拉取资源。
+- 不要求任意 shell 命令执行。
 
-## Data Safety
+## 数据安全
 
-- Do not request or store credentials.
-- Avoid personal/sensitive data in examples and outputs.
-- Keep outputs constrained to provided text evidence.
+- 不得请求或存储凭证、密钥等敏感信息。
+- 示例与输出中尽量避免个人隐私或敏感数据。
+- 所有结果都应被限制在用户提供文本证据的范围内。
 
-## Integrity Checks
+## 完整性检查
 
-- If evidence is sparse, emit low-confidence result.
-- If schema check fails, return `needs_revision`.
-- If user requests unsafe action, refuse and suggest safe alternative.
-
+- 若证据稀薄，应输出低置信度结果。
+- 若不符合 schema 约束，应返回 `needs_revision`。
+- 若用户请求存在明显不安全行为，应拒绝并给出安全替代方案。

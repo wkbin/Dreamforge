@@ -18,7 +18,27 @@ from src.utils.token_counter import TokenCounter
 class NovelDistiller:
     """Generic novel character distillation driven by editable markdown rules."""
 
-    DEFAULT_NAV_LOAD_ORDER = ("SOUL", "GOALS", "STYLE", "TRAUMA", "IDENTITY", "AGENTS", "RELATIONS", "MEMORY")
+    CHAPTER_HEADING_PATTERNS = (
+        re.compile(r"^第[0-9零一二三四五六七八九十百千两]+章"),
+        re.compile(r"^第[0-9零一二三四五六七八九十百千两]+回"),
+        re.compile(r"^卷[0-9零一二三四五六七八九十百千两]"),
+        re.compile(r"^chapter\s+\d+", flags=re.IGNORECASE),
+    )
+    DEFAULT_NAV_LOAD_ORDER = (
+        "SOUL",
+        "GOALS",
+        "STYLE",
+        "TRAUMA",
+        "IDENTITY",
+        "BACKGROUND",
+        "CAPABILITY",
+        "BONDS",
+        "CONFLICTS",
+        "ROLE",
+        "AGENTS",
+        "RELATIONS",
+        "MEMORY",
+    )
     PERSONA_FILE_CATALOG = {
         "SOUL": {
             "optional": False,
@@ -48,6 +68,36 @@ class NovelDistiller:
             "optional": False,
             "role": "background, lived experience, habits, emotion profile",
             "behaviors": "self-reference, memory framing, habit-driven reactions",
+            "write_policy": "manual_edit",
+        },
+        "BACKGROUND": {
+            "optional": True,
+            "role": "world identity, faction position, environment imprint, survival context",
+            "behaviors": "camp alignment, social rank, environmental pressure, worldview fit",
+            "write_policy": "manual_edit",
+        },
+        "CAPABILITY": {
+            "optional": True,
+            "role": "strengths, weaknesses, blind spots, action tendency",
+            "behaviors": "what the character is good at, where they fail, how they overreach",
+            "write_policy": "manual_edit",
+        },
+        "BONDS": {
+            "optional": True,
+            "role": "relationship habits, trust boundary, reward-and-resentment logic",
+            "behaviors": "how the character treats allies, strangers, enemies, and debts",
+            "write_policy": "manual_edit",
+        },
+        "CONFLICTS": {
+            "optional": True,
+            "role": "hidden desire, inner contradiction, fear triggers, private self",
+            "behaviors": "internal pull, weakness exposure, private vs public self",
+            "write_policy": "manual_edit",
+        },
+        "ROLE": {
+            "optional": True,
+            "role": "story function, stance stability, world-rule compatibility",
+            "behaviors": "plot pressure, pivot role, alignment stability",
             "write_policy": "manual_edit",
         },
         "AGENTS": {
@@ -184,13 +234,14 @@ class NovelDistiller:
         self.preferred_leading_chars = tuple(speaker_rules.get("preferred_leading_chars", []))
         self.preferred_trailing_chars = tuple(speaker_rules.get("preferred_trailing_chars", []))
         self.style_templates = dict(self.rulebook.get("distillation", "style_templates", {}))
+        self.decision_rule_signals = dict(self.rulebook.get("distillation", "decision_rule_signals", {}))
         self.taboo_topics_by_value = dict(self.rulebook.get("distillation", "taboo_topics_by_value", {}))
         self.forbidden_behaviors_by_value = dict(
             self.rulebook.get("distillation", "forbidden_behaviors_by_value", {})
         )
 
     def estimate_cost(self, novel_path: str) -> float:
-        text = load_novel_text(novel_path)
+        text = self.prepare_novel_text(load_novel_text(novel_path))
         chunks = self._chunk_text(text)
         self._last_chunk_count = len(chunks)
         avg_chunk_tokens = self.token_counter.count(text) / max(1, len(chunks))
@@ -207,7 +258,7 @@ class NovelDistiller:
         characters: Optional[List[str]] = None,
         output_dir: Optional[str] = None,
     ) -> Dict[str, Dict[str, Any]]:
-        text = load_novel_text(novel_path)
+        text = self.prepare_novel_text(load_novel_text(novel_path))
         chunks = self._chunk_text(text)
         self._last_chunk_count = len(chunks)
         novel_id = novel_id_from_input(novel_path)
@@ -249,7 +300,7 @@ class NovelDistiller:
         return profiles
 
     def extract_top_characters(self, text: str) -> List[str]:
-        return self._extract_top_characters(text)
+        return self._extract_top_characters(self.prepare_novel_text(text))
 
     def build_alias_map(
         self,
@@ -257,7 +308,7 @@ class NovelDistiller:
         character_names: List[str],
         allow_sparse_alias: bool = False,
     ) -> Dict[str, List[str]]:
-        return self._build_alias_map(text, character_names, allow_sparse_alias=allow_sparse_alias)
+        return self._build_alias_map(self.prepare_novel_text(text), character_names, allow_sparse_alias=allow_sparse_alias)
 
     def text_mentions_any_alias(self, text: str, aliases: List[str]) -> bool:
         return self._text_mentions_any_alias(text, aliases)
@@ -280,6 +331,9 @@ class NovelDistiller:
             for suffix in self.address_suffixes:
                 aliases.append(f"{clean[0]}{suffix}")
         return self._unique_texts(item for item in aliases if item and item != clean)
+
+    def prepare_novel_text(self, text: str) -> str:
+        return self._prepare_novel_text(text)
 
     def _chunk_text(self, text: str) -> List[str]:
         size = int(self.config.get("text_processing.chunk_size_tokens", 8000))
@@ -373,6 +427,8 @@ class NovelDistiller:
             values_acc: List[Dict[str, int]] = []
 
             for idx, sentence in enumerate(sentences):
+                if self._looks_like_metadata_sentence(sentence):
+                    continue
                 prev_sent = sentences[idx - 1] if idx > 0 else ""
                 next_sent = sentences[idx + 1] if idx + 1 < len(sentences) else ""
                 contains_name = self._text_mentions_any_alias(sentence, aliases)
@@ -450,6 +506,24 @@ class NovelDistiller:
         emotion_profile = self._infer_emotion_profile(dialogues, thoughts, speech_style, core_traits)
         taboo_topics = self._infer_taboo_topics(values, core_traits, decision_rules)
         forbidden_behaviors = self._infer_forbidden_behaviors(values, core_traits, speech_style)
+        core_identity = self._infer_core_identity(identity_anchor, core_traits, descriptions, dialogues)
+        faction_position = self._infer_faction_position(name, descriptions, dialogues, thoughts, values)
+        background_imprint = self._infer_background_imprint(life_experience, values, descriptions)
+        world_rule_fit = self._infer_world_rule_fit(values, decision_rules, speech_style)
+        strengths = self._infer_strengths(core_traits, decision_rules, speech_style)
+        weaknesses = self._infer_weaknesses(core_traits, emotion_profile, speech_style)
+        cognitive_limits = self._infer_cognitive_limits(values, core_traits)
+        action_style = self._infer_action_style(values, decision_rules, speech_style)
+        social_mode = self._infer_social_mode(values, core_traits, speech_style)
+        key_bonds = self._infer_key_bonds(values, decision_rules, taboo_topics)
+        reward_logic = self._infer_reward_logic(values, core_traits)
+        hidden_desire = self._infer_hidden_desire(values, soul_goal)
+        inner_conflict = self._infer_inner_conflict(values, core_traits, decision_rules)
+        fear_triggers = self._infer_fear_triggers(values, taboo_topics, forbidden_behaviors)
+        private_self = self._infer_private_self(speech_style, emotion_profile, social_mode)
+        story_role = self._infer_story_role(descriptions, dialogues, thoughts, decision_rules)
+        belief_anchor = self._infer_belief_anchor(values, worldview)
+        stance_stability = self._infer_stance_stability(values, decision_rules)
 
         return {
             "name": name,
@@ -467,6 +541,24 @@ class NovelDistiller:
             "emotion_profile": emotion_profile,
             "taboo_topics": taboo_topics[:6],
             "forbidden_behaviors": forbidden_behaviors[:6],
+            "core_identity": core_identity,
+            "faction_position": faction_position,
+            "background_imprint": background_imprint,
+            "world_rule_fit": world_rule_fit,
+            "strengths": strengths[:5],
+            "weaknesses": weaknesses[:5],
+            "cognitive_limits": cognitive_limits[:4],
+            "action_style": action_style,
+            "social_mode": social_mode,
+            "key_bonds": key_bonds[:4],
+            "reward_logic": reward_logic,
+            "hidden_desire": hidden_desire,
+            "inner_conflict": inner_conflict,
+            "fear_triggers": fear_triggers[:5],
+            "private_self": private_self,
+            "story_role": story_role,
+            "belief_anchor": belief_anchor,
+            "stance_stability": stance_stability,
             "arc": arc,
             "archetype": archetype,
         }
@@ -494,13 +586,17 @@ class NovelDistiller:
         corpus = " ".join([name] + descriptions[:10] + dialogues[:10] + thoughts[:10])
         best_name = "default"
         best_score = 0
+        second_score = 0
         for archetype_name, config in self.archetypes.items():
             markers = [str(item).strip() for item in config.get("markers", []) if str(item).strip()]
             score = sum(corpus.count(marker) for marker in markers)
             if score > best_score:
+                second_score = best_score
                 best_name = archetype_name
                 best_score = score
-        return best_name if best_score > 0 else "default"
+            elif score > second_score:
+                second_score = score
+        return best_name if best_score >= 5 and best_score >= second_score + 2 else "default"
 
     def _apply_archetype_traits(self, traits: List[str], archetype: str) -> List[str]:
         configured = self.archetypes.get(archetype, {}).get("traits", [])
@@ -526,7 +622,7 @@ class NovelDistiller:
         for dim, bias in self.archetypes.get(archetype, {}).get("value_bias", {}).items():
             if dim not in merged:
                 merged[dim] = 5
-            merged[dim] = max(1, min(10, merged[dim] + int(bias)))
+            merged[dim] = max(1, min(10, merged[dim] + max(-1, min(1, int(bias)))))
         return merged
 
     def _merge_arc_values(self, arc_values: List[Tuple[int, Dict[str, int]]]) -> Dict[str, int]:
@@ -562,11 +658,9 @@ class NovelDistiller:
         }
 
     def _infer_speech_style(self, lines: List[str], archetype: str) -> str:
-        configured = str(self.archetypes.get(archetype, {}).get("speech_style", "")).strip()
-        if configured:
-            return configured
+        configured = str(self.archetypes.get(archetype, {}).get("speech_style", "")).strip() if archetype != "default" else ""
         if not lines:
-            return self.style_templates.get("quiet", "发言偏少，更多通过态度和分寸表明立场。")
+            return configured or self.style_templates.get("quiet", "发言偏少，更多通过态度和分寸表明立场。")
         avg_len = sum(len(item) for item in lines) / max(1, len(lines))
         exclaim_ratio = sum(1 for item in lines if any(token in item for token in ("！", "!", "？", "?")))
         if avg_len <= 12:
@@ -584,21 +678,44 @@ class NovelDistiller:
         dialogues: List[str],
         archetype: str,
     ) -> List[str]:
-        rules = [str(item).strip() for item in self.archetypes.get(archetype, {}).get("decision_rules", []) if str(item).strip()]
-        for line in thoughts[:12] + descriptions[:12]:
-            if "如果" in line and "就" in line:
-                rules.append("遇到关键转折时，会先稳住最核心的立场。")
-            elif any(token in line for token in ("保护", "守", "帮", "护")):
-                rules.append("自己人在眼前受压时，倾向主动介入。")
-            elif any(token in line for token in ("退", "避", "沉默", "按住")):
-                rules.append("局势失控时，会先收住表达再判断后势。")
+        corpus_lines = self._dedupe_texts(thoughts[:12] + dialogues[:12] + descriptions[:12], 30)
+        scored_rules: List[Tuple[int, str]] = []
+
+        for _, config in self.decision_rule_signals.items():
+            markers = [str(item).strip() for item in config.get("markers", []) if str(item).strip()]
+            template = str(config.get("template", "")).strip()
+            if not markers or not template:
+                continue
+
+            marker_hits = 0
+            sentence_hits = 0
+            for line in corpus_lines:
+                hit_count = sum(line.count(marker) for marker in markers)
+                if hit_count <= 0:
+                    continue
+                marker_hits += min(3, hit_count)
+                sentence_hits += 1
+
+            if marker_hits <= 0:
+                continue
+            scored_rules.append((marker_hits + min(3, sentence_hits), template))
+
+        scored_rules.sort(key=lambda item: item[0], reverse=True)
+        rules = [rule for _, rule in scored_rules[:3]]
+
+        archetype_rules = [
+            str(item).strip() for item in self.archetypes.get(archetype, {}).get("decision_rules", []) if str(item).strip()
+        ]
+        if len(rules) < 2:
+            rules.extend(archetype_rules[: 2 - len(rules)])
+
         joined = "".join(dialogues[:8])
         if any(token in joined for token in ("先", "且慢", "慢些", "等等")):
             rules.append("不会一上来把话说死，通常会先留一步判断。")
         if any(token in joined for token in ("不可", "不能", "休得", "岂可")):
             rules.append("遇到底线问题时，会明显收紧语气并立即表态。")
         if not rules:
-            rules.append("高压情境下，会先判断关系和后果，再决定动作。")
+            rules.append("高压情境下，会先分清轻重和后果，再决定动作。")
         return self._dedupe_texts(rules, 8)
 
     def _infer_identity_anchor(
@@ -792,6 +909,334 @@ class NovelDistiller:
             bans.append("不会在虚实未明时把话说死")
         return self._dedupe_texts(bans, 6)
 
+    @staticmethod
+    def _infer_core_identity(
+        identity_anchor: str,
+        core_traits: List[str],
+        descriptions: List[str],
+        dialogues: List[str],
+    ) -> str:
+        if identity_anchor:
+            return identity_anchor
+        first_scene = next((line for line in descriptions[:6] if line.strip()), "")
+        if first_scene:
+            return first_scene[:36]
+        if core_traits:
+            return f"在众人眼里，多半以{'、'.join(core_traits[:2])}的一面被记住。"
+        if dialogues:
+            return "多通过说话和临场态度来定义自己。"
+        return "身份轮廓仍需更多正文证据补全。"
+
+    @staticmethod
+    def _infer_faction_position(
+        name: str,
+        descriptions: List[str],
+        dialogues: List[str],
+        thoughts: List[str],
+        values: Dict[str, int],
+    ) -> str:
+        corpus = descriptions[:10] + dialogues[:6] + thoughts[:6]
+        identity_tokens = ("氏", "宗主", "家主", "公子", "少主", "门下", "弟子", "门生", "师门", "世家", "本家")
+        for line in corpus:
+            if name not in line:
+                continue
+            if NovelDistiller._looks_like_metadata_sentence(line):
+                continue
+            if not any(token in line for token in identity_tokens):
+                continue
+            clauses = [part.strip() for part in re.split(r"[，。！？；：、]", line) if part.strip()]
+            for clause in clauses:
+                if name in clause and any(token in clause for token in identity_tokens) and len(clause) <= 28:
+                    return clause
+        if values.get("忠诚", 5) >= 7:
+            return "立场通常会向自己认定的人与所属一侧收拢，不会轻易改换。"
+        if values.get("自由", 5) >= 7:
+            return "对阵营与规训保持距离，更倾向保留自主转圜。"
+        return "立场更多随关系轻重与局势演变而显形。"
+
+    @staticmethod
+    def _infer_background_imprint(
+        life_experience: List[str],
+        values: Dict[str, int],
+        descriptions: List[str],
+    ) -> str:
+        if life_experience:
+            return life_experience[0]
+        if any(token in "".join(descriptions[:8]) for token in ("旧事", "从前", "少年", "幼时", "家中", "门下")):
+            return "成长环境与旧事仍在影响如今的取舍和分寸。"
+        if values.get("责任", 5) >= 7:
+            return "长期处在要接事、扛事的位置，环境把人磨得更会托底。"
+        return "生存处境留下的烙印更多体现在谨慎与边界感上。"
+
+    @staticmethod
+    def _infer_world_rule_fit(values: Dict[str, int], decision_rules: List[str], speech_style: str) -> str:
+        if any("边界" in rule or "规矩" in rule for rule in decision_rules):
+            return "更倾向在现有规则内划清边界，必要时才顶着规则推进。"
+        if values.get("自由", 5) >= 7:
+            return "会和世界规则保持拉扯，能借势时借势，受制时就想挣开。"
+        if "克制" in speech_style:
+            return "整体与世界运转规则较为相容，除非底线被逼到眼前。"
+        return "对世界规则既不盲从，也不会无端硬撞，更多看局势取舍。"
+
+    @staticmethod
+    def _infer_strengths(core_traits: List[str], decision_rules: List[str], speech_style: str) -> List[str]:
+        mapping = {
+            "勇敢": "关键时刻敢于顶上承压",
+            "聪慧": "擅长拆解局势与看出破口",
+            "克制": "能在情绪上头时收束表达",
+            "沉稳": "能在混乱里稳住节奏和后手",
+            "忠诚": "对认定的人和承诺有持续性",
+            "善良": "照顾人心与无辜者时不容易失手",
+            "机变": "面对变化时转身快、补位快",
+            "诙谐": "会用语言缓冲气氛或卸力",
+            "执拗": "认准方向后执行力强",
+            "敏感": "对情绪、气氛和关系变化更早觉察",
+        }
+        strengths = [mapping[trait] for trait in core_traits if trait in mapping]
+        if any("护住" in rule or "自己人" in rule for rule in decision_rules):
+            strengths.append("在关系压力下仍愿意主动护人")
+        if "句式偏短" in speech_style:
+            strengths.append("表态快，不容易在关键处含混")
+        return NovelDistiller._dedupe_texts(strengths, 5)
+
+    @staticmethod
+    def _infer_weaknesses(
+        core_traits: List[str],
+        emotion_profile: Dict[str, Any],
+        speech_style: str,
+    ) -> List[str]:
+        mapping = {
+            "傲气": "不肯轻易低头，容易把关系逼紧",
+            "敏感": "旧事和情绪牵动时会放大心里落差",
+            "执拗": "认准之后回头慢，容易和现实硬碰",
+            "勇敢": "容易在高压里先把自己推到前面",
+            "诙谐": "有时会用玩笑遮掩真正的在意",
+            "克制": "太能压住情绪时，真实想法不易被旁人看懂",
+        }
+        weaknesses = [mapping[trait] for trait in core_traits if trait in mapping]
+        if "更冷更短" in str(emotion_profile.get("anger_style", "")):
+            weaknesses.append("怒时会迅速关上沟通窗口")
+        if "句式偏短" in speech_style:
+            weaknesses.append("说得太短时，容易让人只看到锋芒")
+        return NovelDistiller._dedupe_texts(weaknesses, 5)
+
+    @staticmethod
+    def _infer_cognitive_limits(values: Dict[str, int], core_traits: List[str]) -> List[str]:
+        limits: List[str] = []
+        if values.get("忠诚", 5) >= 7:
+            limits.append("容易把关系旧账和情分看得过重")
+        if values.get("自由", 5) >= 7:
+            limits.append("一旦感到被钳制，判断会更偏向先挣脱")
+        if values.get("勇气", 5) >= 7:
+            limits.append("容易高估自己顶住局面的能力")
+        if "敏感" in core_traits:
+            limits.append("对态度和语气变化容易产生额外联想")
+        if "傲气" in core_traits:
+            limits.append("面对挑衅时不容易完全抽离情绪")
+        return NovelDistiller._dedupe_texts(limits, 4)
+
+    @staticmethod
+    def _infer_action_style(values: Dict[str, int], decision_rules: List[str], speech_style: str) -> str:
+        if any("先辨清" in rule or "虚实" in rule for rule in decision_rules):
+            return "先探局、后落子，确认虚实后才会真正压上。"
+        if any("护住" in rule or "出手" in rule for rule in decision_rules):
+            return "遇到人和局面同时承压时，往往会边护边推进。"
+        if "句式偏短" in speech_style:
+            return "行事和发言一样偏直接，确认方向后动作不拖。"
+        return "行事风格更看当时轻重，会在直进与收手之间找平衡。"
+
+    @staticmethod
+    def _infer_social_mode(values: Dict[str, int], core_traits: List[str], speech_style: str) -> str:
+        if values.get("忠诚", 5) >= 7 or values.get("责任", 5) >= 7:
+            return "对自己人会明显偏护，对陌生人先看分寸和可靠度。"
+        if values.get("自由", 5) >= 7:
+            return "与人相处先保留边界，不喜欢被人一步步拿住。"
+        if "克制" in speech_style:
+            return "不轻易交底，亲疏远近要靠时间和事来慢慢试。"
+        return "表面进退都快，但真正认人与否仍有自己的门槛。"
+
+    @staticmethod
+    def _infer_key_bonds(values: Dict[str, int], decision_rules: List[str], taboo_topics: List[str]) -> List[str]:
+        bonds: List[str] = []
+        if any("护住" in rule or "自己人" in rule for rule in decision_rules):
+            bonds.append("一旦认定为自己人，牵绊会深到影响后续所有选择")
+        if values.get("忠诚", 5) >= 7:
+            bonds.append("对共同经历风险的人更容易形成长期同盟感")
+        if "背叛" in taboo_topics:
+            bonds.append("关系一旦触及失信，往往很难彻底回到从前")
+        if not bonds:
+            bonds.append("关系深浅通常要经过试探、兑现和并肩之后才会坐实")
+        return NovelDistiller._dedupe_texts(bonds, 4)
+
+    @staticmethod
+    def _infer_reward_logic(values: Dict[str, int], core_traits: List[str]) -> str:
+        if values.get("忠诚", 5) >= 7:
+            return "记恩也记失信，认定后会长期回护，翻脸时也很难装作无事。"
+        if values.get("正义", 5) >= 7:
+            return "更看是非和底线，赏罚首先取决于事情本身站不站得住。"
+        if values.get("自由", 5) >= 7:
+            return "对强压与操控格外记仇，对给空间的人会自然放软。"
+        if "敏感" in core_traits:
+            return "对态度冷热记得很深，报答和疏远都会来得直接。"
+        return "恩怨判断常看对方是否越线，以及关键时候有没有站住。"
+
+    @staticmethod
+    def _infer_hidden_desire(values: Dict[str, int], soul_goal: str) -> str:
+        if values.get("责任", 5) >= 7:
+            return "比起表面赢输，更深处想守住能让自己安心的人与位置。"
+        if values.get("自由", 5) >= 7:
+            return "最深处仍想保住不被摆布、不被定死的活法。"
+        if values.get("忠诚", 5) >= 7:
+            return "深层里渴望关系能被确认，也害怕自己认下的东西再次散掉。"
+        if values.get("正义", 5) >= 7:
+            return "真正放不下的是是非被颠倒、真相被压住。"
+        return soul_goal or "表面目标之外，仍有一层不愿被人轻易看穿的心里执念。"
+
+    @staticmethod
+    def _infer_inner_conflict(values: Dict[str, int], core_traits: List[str], decision_rules: List[str]) -> str:
+        if values.get("勇气", 5) >= 7 and values.get("智慧", 5) >= 6:
+            return "一边想立刻顶上，一边又不肯在虚实未明时贸然落子。"
+        if values.get("忠诚", 5) >= 7 and values.get("正义", 5) >= 7:
+            return "既想护住亲近之人，又不愿彻底把是非让给关系。"
+        if values.get("自由", 5) >= 7 and values.get("责任", 5) >= 7:
+            return "想保留自己的转圜空间，但关键时候又很难真正抽身。"
+        if "敏感" in core_traits and any("边界" in rule for rule in decision_rules):
+            return "心里在意远近冷热，表面却还要把边界和硬气撑住。"
+        return "内心常在分寸、关系和自我立场之间来回拉扯。"
+
+    @staticmethod
+    def _infer_fear_triggers(
+        values: Dict[str, int],
+        taboo_topics: List[str],
+        forbidden_behaviors: List[str],
+    ) -> List[str]:
+        fears = list(taboo_topics[:3])
+        if values.get("自由", 5) >= 7:
+            fears.append("被强行摆布或失去选择")
+        if values.get("责任", 5) >= 7 or values.get("忠诚", 5) >= 7:
+            fears.append("眼看自己人出事却来不及接住")
+        if values.get("正义", 5) >= 7:
+            fears.append("黑白被颠倒、该追的账没人去追")
+        for item in forbidden_behaviors[:2]:
+            if "不会" in item:
+                fears.append(item.replace("不会", "最怕自己被逼到").replace("无缘无故", ""))
+        return NovelDistiller._dedupe_texts(fears, 5)
+
+    @staticmethod
+    def _infer_private_self(speech_style: str, emotion_profile: Dict[str, Any], social_mode: str) -> str:
+        if "克制" in speech_style:
+            return "表面收得很紧，私下反而把轻重、牵挂和受过的伤记得更深。"
+        if "句式偏短" in speech_style:
+            return "表面锋利干脆，独处时其实更容易反复掂量关系与后果。"
+        if "委屈" in str(emotion_profile.get("grievance_style", "")):
+            return "外面未必肯示弱，真正难受时多半只在无人处慢慢消化。"
+        return f"表面与私下并不完全一致，真正松下来时更在意：{social_mode}"
+
+    @staticmethod
+    def _infer_story_role(
+        descriptions: List[str],
+        dialogues: List[str],
+        thoughts: List[str],
+        decision_rules: List[str],
+    ) -> str:
+        presence = len(descriptions) + len(dialogues) + len(thoughts)
+        if presence >= 40:
+            base = "剧情核心推动者"
+        elif presence >= 24:
+            base = "主要支点角色"
+        elif presence >= 12:
+            base = "重要牵动者"
+        else:
+            base = "辅助推动角色"
+        if any("护住" in rule or "后手" in rule for rule in decision_rules):
+            return f"{base}，同时常承担兜底或接应压力。"
+        if len(dialogues) >= max(4, len(descriptions) // 2):
+            return f"{base}，更常通过对话和态度推动场面。"
+        return f"{base}，对局势走向有持续影响。"
+
+    @staticmethod
+    def _infer_belief_anchor(values: Dict[str, int], worldview: str) -> str:
+        if values.get("忠诚", 5) >= 7:
+            return "信义和认下的人不能轻易后置。"
+        if values.get("正义", 5) >= 7:
+            return "是非必须站稳，否则其余一切都容易变形。"
+        if values.get("责任", 5) >= 7:
+            return "人在局中就该把该接的担子接住。"
+        if values.get("自由", 5) >= 7:
+            return "再大的局，也不能把自己活成别人手里的棋。"
+        return worldview or "真正撑住他的，是一套不会轻易改口的内在秩序。"
+
+    @staticmethod
+    def _infer_stance_stability(values: Dict[str, int], decision_rules: List[str]) -> str:
+        ordered = sorted((int(score), key) for key, score in values.items())
+        if ordered:
+            top_score, _ = ordered[-1]
+            second_score = ordered[-2][0] if len(ordered) > 1 else top_score
+            if top_score - second_score >= 2:
+                return "立场较稳，轻易不会因为外界一句话就倒向另一边。"
+        if any("留一步" in rule or "转圜" in rule for rule in decision_rules):
+            return "表面会留转圜，但真正底线并不飘，更多是策略性松紧。"
+        return "会受关系与局势牵动，但整体底线仍相对稳定。"
+
+    @classmethod
+    def _looks_like_metadata_sentence(cls, line: str) -> bool:
+        text = str(line or "").strip()
+        metadata_tokens = (
+            "内容标签",
+            "搜索关键字",
+            "主角",
+            "配角",
+            "作者",
+            "文案",
+            "简介",
+            "作品",
+            "版权",
+            "编辑评价",
+            "作者笔下",
+            "我的文",
+            "读者",
+            "微博",
+            "专栏",
+            "安利",
+            "公告",
+            "世界和平",
+            "请不要",
+            "收藏",
+            "推荐",
+            "点击",
+            "1V1",
+            "HE",
+        )
+        if any(token in text for token in metadata_tokens):
+            return True
+        if text.startswith(("PS", "P.S", "ps", "Ps")):
+            return True
+        return False
+
+    @classmethod
+    def _prepare_novel_text(cls, text: str) -> str:
+        raw_lines = [line.rstrip() for line in str(text or "").splitlines()]
+        lines = list(raw_lines)
+        for idx, line in enumerate(raw_lines[:400]):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if any(pattern.search(stripped) for pattern in cls.CHAPTER_HEADING_PATTERNS):
+                if idx >= 5:
+                    lines = raw_lines[idx:]
+                break
+
+        filtered: List[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                filtered.append("")
+                continue
+            if cls._looks_like_metadata_sentence(stripped):
+                continue
+            filtered.append(line)
+        return "\n".join(filtered).strip()
+
     def _export_persona_bundle(self, out_dir: Path, profile: Dict[str, Any]) -> None:
         char_dir = ensure_dir(out_dir / safe_filename(profile.get("name", "unnamed")))
         profile_content = self._render_profile_md(profile)
@@ -803,6 +1248,11 @@ class NovelDistiller:
         bundle = {
             "SOUL": self._render_soul_md(profile),
             "IDENTITY": self._render_identity_md(profile),
+            "BACKGROUND": self._render_background_md(profile),
+            "CAPABILITY": self._render_capability_md(profile),
+            "BONDS": self._render_bonds_md(profile),
+            "CONFLICTS": self._render_conflicts_md(profile),
+            "ROLE": self._render_role_md(profile),
             "AGENTS": self._render_agents_md(profile),
             "MEMORY": self._render_memory_md(profile),
         }
@@ -906,6 +1356,25 @@ class NovelDistiller:
             f"- soul_goal: {profile.get('soul_goal', '')}\n"
             f"- worldview: {profile.get('worldview', '')}\n"
             f"- thinking_style: {profile.get('thinking_style', '')}\n\n"
+            "## Deep Persona\n"
+            f"- core_identity: {profile.get('core_identity', '')}\n"
+            f"- faction_position: {profile.get('faction_position', '')}\n"
+            f"- background_imprint: {profile.get('background_imprint', '')}\n"
+            f"- world_rule_fit: {profile.get('world_rule_fit', '')}\n"
+            f"- social_mode: {profile.get('social_mode', '')}\n"
+            f"- hidden_desire: {profile.get('hidden_desire', '')}\n"
+            f"- inner_conflict: {profile.get('inner_conflict', '')}\n"
+            f"- story_role: {profile.get('story_role', '')}\n"
+            f"- belief_anchor: {profile.get('belief_anchor', '')}\n"
+            f"- private_self: {profile.get('private_self', '')}\n"
+            f"- stance_stability: {profile.get('stance_stability', '')}\n"
+            f"- reward_logic: {profile.get('reward_logic', '')}\n"
+            f"- strengths: {self._join_items(profile.get('strengths', []))}\n"
+            f"- weaknesses: {self._join_items(profile.get('weaknesses', []))}\n"
+            f"- cognitive_limits: {self._join_items(profile.get('cognitive_limits', []))}\n"
+            f"- fear_triggers: {self._join_items(profile.get('fear_triggers', []))}\n"
+            f"- key_bonds: {self._join_items(profile.get('key_bonds', []))}\n"
+            f"- action_style: {profile.get('action_style', '')}\n\n"
             "## Voice\n"
             f"- typical_lines: {self._join_items(profile.get('typical_lines', []))}\n"
             f"- decision_rules: {self._join_items(profile.get('decision_rules', []))}\n"
@@ -989,6 +1458,56 @@ class NovelDistiller:
             f"- anger_style: {emotion.get('anger_style', '')}\n"
             f"- joy_style: {emotion.get('joy_style', '')}\n"
             f"- grievance_style: {emotion.get('grievance_style', '')}\n"
+        )
+
+    def _render_background_md(self, profile: Dict[str, Any]) -> str:
+        return (
+            "# BACKGROUND\n\n"
+            "## World Position\n"
+            f"- core_identity: {profile.get('core_identity', '')}\n"
+            f"- faction_position: {profile.get('faction_position', '')}\n"
+            f"- background_imprint: {profile.get('background_imprint', '')}\n"
+            f"- world_rule_fit: {profile.get('world_rule_fit', '')}\n"
+        )
+
+    def _render_capability_md(self, profile: Dict[str, Any]) -> str:
+        return (
+            "# CAPABILITY\n\n"
+            "## Strength And Cost\n"
+            f"- strengths: {self._join_items(profile.get('strengths', []))}\n"
+            f"- weaknesses: {self._join_items(profile.get('weaknesses', []))}\n"
+            f"- cognitive_limits: {self._join_items(profile.get('cognitive_limits', []))}\n"
+            f"- action_style: {profile.get('action_style', '')}\n"
+        )
+
+    def _render_bonds_md(self, profile: Dict[str, Any]) -> str:
+        return (
+            "# BONDS\n\n"
+            "## Relationship Habit\n"
+            f"- social_mode: {profile.get('social_mode', '')}\n"
+            f"- key_bonds: {self._join_items(profile.get('key_bonds', []))}\n"
+            f"- reward_logic: {profile.get('reward_logic', '')}\n"
+            f"- belief_anchor: {profile.get('belief_anchor', '')}\n"
+        )
+
+    def _render_conflicts_md(self, profile: Dict[str, Any]) -> str:
+        return (
+            "# CONFLICTS\n\n"
+            "## Inner Pull\n"
+            f"- hidden_desire: {profile.get('hidden_desire', '')}\n"
+            f"- inner_conflict: {profile.get('inner_conflict', '')}\n"
+            f"- fear_triggers: {self._join_items(profile.get('fear_triggers', []))}\n"
+            f"- private_self: {profile.get('private_self', '')}\n"
+        )
+
+    def _render_role_md(self, profile: Dict[str, Any]) -> str:
+        return (
+            "# ROLE\n\n"
+            "## Plot Function\n"
+            f"- story_role: {profile.get('story_role', '')}\n"
+            f"- stance_stability: {profile.get('stance_stability', '')}\n"
+            f"- world_rule_fit: {profile.get('world_rule_fit', '')}\n"
+            f"- arc_end: {self._join_metric_map(profile.get('arc', {}).get('end', {}))}\n"
         )
 
     def _render_agents_md(self, profile: Dict[str, Any]) -> str:

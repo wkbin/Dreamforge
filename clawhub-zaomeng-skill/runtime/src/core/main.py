@@ -25,7 +25,13 @@ from src.modules.speaker import Speaker
 from src.modules.chat_engine import ChatEngine
 from src.modules.distillation import NovelDistiller
 from src.modules.relationships import RelationshipExtractor
-from src.utils.file_utils import normalize_character_name, novel_id_from_input, save_markdown_data
+from src.utils.file_utils import (
+    load_text_argument,
+    normalize_character_name,
+    novel_id_from_input,
+    parse_character_argument,
+    save_markdown_data,
+)
 from src.utils.token_counter import TokenCounter
 
 
@@ -45,12 +51,16 @@ class ZaomengCLI:
         r"我来扮演",
         r"我要扮演",
         r"我扮演",
+        r"你扮演",
+        r"你来扮演",
         r"进入.+act",
         r"进入.+行动模式",
         r"开启.+act",
         r"切换到.+act",
         r"我说一句",
         r"回一句",
+        r"一问一答",
+        r"对聊",
         r"你来回我",
         r"你让.+回我",
         r"你驱动",
@@ -61,9 +71,22 @@ class ZaomengCLI:
         r"进入.+observe",
         r"切换到.+observe",
         r"开始群聊",
+        r"让.+群聊",
+        r"多人聊天",
     )
-    ACT_MODE_HINTS = ("act", "行动模式", "扮演", "我说一句", "回一句", "回我", "回复我", "接我的话")
-    OBSERVE_MODE_HINTS = ("群聊模式", "observe", "围绕", "各说一句", "大家聊", "让大家", "多人聊")
+    ACT_MODE_HINTS = (
+        "act",
+        "行动模式",
+        "扮演",
+        "我说一句",
+        "回一句",
+        "回我",
+        "回复我",
+        "接我的话",
+        "一问一答",
+        "对聊",
+    )
+    OBSERVE_MODE_HINTS = ("群聊模式", "observe", "围绕", "各说一句", "大家聊", "让大家", "多人聊", "群聊")
 
     def __init__(self) -> None:
         self.config = Config()
@@ -154,6 +177,10 @@ class ZaomengCLI:
         )
         distill_parser.add_argument("--novel", "-n", required=True, help="Novel file path (.txt or .epub)")
         distill_parser.add_argument("--characters", "-c", help="Comma-separated target character names")
+        distill_parser.add_argument(
+            "--characters-file",
+            help="UTF-8 text file containing target character names (newline/comma separated)",
+        )
         distill_parser.add_argument("--output", "-o", help="Optional output directory override")
         distill_parser.add_argument(
             "--force",
@@ -201,6 +228,7 @@ class ZaomengCLI:
         chat_parser.add_argument("--character", "-c", help="Controlled character in act mode")
         chat_parser.add_argument("--session", "-s", help="Restore an existing session ID")
         chat_parser.add_argument("--message", help="Run a single non-interactive turn and exit")
+        chat_parser.add_argument("--message-file", help="UTF-8 text file containing one chat request/message")
 
         view_parser = subparsers.add_parser("view", help="View a distilled character profile")
         view_parser.add_argument("--character", "-c", required=True, help="Character name")
@@ -228,6 +256,10 @@ class ZaomengCLI:
         )
         extract_parser.add_argument("--novel", "-n", required=True, help="Novel file path")
         extract_parser.add_argument("--characters", "-c", help="Comma-separated target character names")
+        extract_parser.add_argument(
+            "--characters-file",
+            help="UTF-8 text file containing target character names (newline/comma separated)",
+        )
         extract_parser.add_argument("--output", "-o", help="Optional output path override")
         extract_parser.add_argument(
             "--force",
@@ -280,7 +312,7 @@ class ZaomengCLI:
                 print("Operation cancelled.")
                 return
 
-        characters = [item.strip() for item in args.characters.split(",")] if args.characters else None
+        characters = parse_character_argument(args.characters, args.characters_file) or None
         output_dir = args.output or str(Path(self.config.get_path("characters")) / novel_id_from_input(args.novel))
 
         print(f"Processing novel: {args.novel}")
@@ -301,6 +333,8 @@ class ZaomengCLI:
         elif args.novel:
             print(f"Loading scoped profiles for: {args.novel}")
 
+        args.message = load_text_argument(args.message, getattr(args, "message_file", None))
+        args.character = load_text_argument(args.character)
         intent = self._resolve_chat_intent(engine, args, session)
 
         if session is None:
@@ -362,7 +396,7 @@ class ZaomengCLI:
         args: argparse.Namespace,
         session: Optional[dict],
     ) -> ChatIntent:
-        text = (args.message or "").strip()
+        text = load_text_argument(args.message)
         candidates = session.get("characters", []) if session else self._load_candidate_names(engine, args.novel)
         explicit_mode = "" if args.mode == "auto" else args.mode
         inferred_mode = self._infer_chat_mode(text)
@@ -450,7 +484,9 @@ class ZaomengCLI:
     ) -> str:
         if mode != "act":
             return ""
-        if len(ordered_mentions) >= 2 and any(token in text for token in ("扮演", "聊天", "对话", "act")):
+        if len(ordered_mentions) >= 2 and any(
+            token in text for token in ("让我扮演", "我来扮演", "我要扮演", "我扮演", "聊天", "对话", "对聊", "act")
+        ):
             return ordered_mentions[0]
         if len(ordered_mentions) == 1 and any(token in text for token in ("扮演", "饰演", "由我", "我来")):
             return ordered_mentions[0]
@@ -611,7 +647,7 @@ class ZaomengCLI:
                 return
 
         output_path = args.output
-        characters = [item.strip() for item in args.characters.split(",")] if getattr(args, "characters", None) else None
+        characters = parse_character_argument(args.characters, args.characters_file) or None
         result = extractor.extract(args.novel, output_path, characters=characters)
 
         print(f"\nDone. Extracted {len(result)} relationships:")

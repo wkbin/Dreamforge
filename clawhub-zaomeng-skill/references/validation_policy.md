@@ -1,29 +1,29 @@
-# Validation Policy (Triple Validation)
+# 校验策略（三重校验）
 
-## Purpose
+## 用途
 
-Increase extraction reliability and reduce OOC behavior by validating each major output claim.
+通过对关键结论逐层校验，提高抽取可靠性，并减少 OOC 行为。
 
-## Validation Layers
+## 校验层级
 
-### 1) Evidence Validation
+### 1）证据校验
 
-- Every major claim must map to at least one concrete sentence-level source snippet.
-- If no evidence exists, the claim should not be finalized.
+- 每个关键结论都必须能对应到至少一条具体的句级文本证据。
+- 如果没有证据，该结论不应直接定稿。
 
-### 2) Consistency Validation
+### 2）一致性校验
 
-- Traits and decision rules must not contradict `values`.
-- Proposed dialogue style must align with `speech_style`.
-- Relation score changes must match interaction evidence polarity.
+- 性格特征与决策规则不能与 `values` 明显冲突。
+- 拟定的说话风格必须与 `speech_style` 保持一致。
+- 关系分值变化必须与互动证据的正负倾向相匹配。
 
-### 3) Transfer Validation
+### 3）迁移校验
 
-- A claim is valid only if it can be reused in a new dialogue turn while keeping persona stable.
-- If applying a claim causes OOC behavior in simulation, reject or revise the claim.
+- 一个结论只有在能被迁移到新的对话轮次、并仍然保持人格稳定时，才算成立。
+- 如果某条结论一用于模拟对话就导致 OOC，应拒绝或修正该结论。
 
-## Pass/Fail Rules
+## 通过/失败规则
 
-- Pass: all 3 layers pass.
-- Soft fail: 1 layer fails -> revise before final output.
-- Hard fail: 2 or more layers fail -> return `needs_revision`.
+- 通过：三层全部通过。
+- 软失败：有 1 层失败，需先修正再输出。
+- 硬失败：有 2 层及以上失败，返回 `needs_revision`。

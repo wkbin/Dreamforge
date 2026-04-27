@@ -13,16 +13,23 @@
 它不是普通陪聊机器人。  
 它更像一个“小说角色引擎”。
 
+当前推荐版本思路是：
+
+- Markdown-first：人物与关系主存储已经不再以旧版 JSON 为准
+- 自然语言优先：先蒸馏，再通过自然语言进入 `act` / `observe`
+- skill 内嵌最小运行子集：`clawhub-zaomeng-skill` 已内置可运行的最小运行时
+- 约束分层：`output_schema.md` 管格式，`style_differ.md` 管去同质化，`logic_constraint.md` 管防 OOC
+
 ## 安装方式
 
 你可以按自己的使用场景选择安装方式。
 
 请注意：
 
-- 安装 `skill` 不等于把 `zaomeng` 源码直接打包进 skill
-- `openclaw skills install ...`、`clawhub ... install ...` 安装的是技能包和说明文件
-- 在支持自动准备环境的宿主里，skill 可以先拉取 `zaomeng` 仓库，再调用真实 CLI
-- 如果当前宿主不允许联网、克隆仓库或执行本地命令，那么仍然无法运行真实工作流
+- 现在的 `clawhub-zaomeng-skill` 已经内嵌最小可运行子集，不再把“运行时自动克隆外部仓库”作为主路径
+- `openclaw skills install ...`、`clawhub ... install ...` 安装的是 skill 包；其中 `clawhub-zaomeng-skill` 已包含打包后的运行时与说明文件
+- 如果当前宿主不允许执行本地 Python 命令，或缺少必要依赖，那么仍然无法运行真实工作流
+- 如果你要直接改源码、跑测试、或使用仓库主 CLI，仍然推荐直接克隆本仓库
 
 ### 1. 直接克隆仓库
 
@@ -41,8 +48,8 @@ cd zaomeng
 openclaw skills install wkbin/zaomeng-skill
 ```
 
-这一步安装的是 skill，不包含 `zaomeng` 引擎源码。  
-在支持自动准备环境的宿主里，skill 可以继续拉取本地仓库后再调用 CLI。
+这一步安装的是 skill 包，不等于完整的 `zaomeng` 仓库源码。  
+当前 `clawhub-zaomeng-skill` 已内嵌最小运行时；在支持本地命令执行的宿主中，可直接走打包运行时。
 
 ### 3. 用 ClawHub 安装
 
@@ -60,8 +67,8 @@ pnpm dlx clawhub@latest install zaomeng-skill
 bunx clawhub@latest install zaomeng-skill
 ```
 
-同样，这一步安装的是 skill 包，不等于本地已经有可运行的 `zaomeng` 引擎。
-在支持自动准备环境的宿主里，skill 可以继续拉取本地仓库后再调用 CLI。
+同样，这一步安装的是 skill 包，不等于你本地已经有完整的 `zaomeng` 开发仓库。
+当前 `clawhub-zaomeng-skill` 已内嵌最小运行时；在支持本地命令执行的宿主中，可直接走打包运行时。
 
 ### 4. 已有本地 skill 目录时安装
 
@@ -75,10 +82,10 @@ python scripts/install_skill.py --skills-dir <your-skills-root>
 
 要运行真实工作流，宿主环境至少要允许其中一种能力：
 
-- 直接使用你本机已有的 `zaomeng` 仓库
-- 或由 skill 自动拉取 `zaomeng` 仓库并执行 CLI
+- 直接运行本仓库主 CLI
+- 或运行 `clawhub-zaomeng-skill` 包内的最小运行时
 
-如果当前宿主环境不允许联网、克隆仓库或执行本地命令，那么就不能运行真实的 `zaomeng` CLI 工作流。
+如果当前宿主环境不允许执行本地命令，或缺少必要的 Python 依赖，那么就不能运行真实的 `zaomeng` CLI 工作流。
 
 ## 效果示例一：行动模式
 
@@ -90,8 +97,6 @@ zaomeng   ❯ （春日午后，阳光透过柳丝洒在沁芳溪上，水光粼
             黛玉独自立在沁芳桥畔，一手扶着桥栏，俯身看着溪中锦鲤游弋。
             风吹起她的裙角和鬓边几缕碎发，她似看得入神，
             手中捏着一朵不知何时摘的落花，指节微微发白。）
-            如果超过3倍，中间一定有可以砍掉的步骤。
-            不是优化漏斗，是质疑漏斗本身该不该存在。
 
 用户      ❯  林妹妹，这般暖的日头，怎一个人躲在这里发呆？   
             风吹得人倦，仔细站久了头晕。     
@@ -246,7 +251,38 @@ zaomeng > 🌸 群聊暂停
 
 ### 1. 人物蒸馏
 
-从 `.txt` 或 `.epub` 小说中提取主要角色，输出人物档案，包括：
+从 `.txt` 或 `.epub` 小说中提取主要角色，输出 Markdown 人物档案。
+
+当前档案会尽量覆盖更完整的人物维度，包括：
+
+- 核心身份
+- 核心动机
+- 性格基底
+- 行为逻辑
+- 人物弧光
+- 关键羁绊
+- 符号化特征
+- 世界观适配性
+- 价值取舍体系
+- 情绪反应模式
+- 思维认知偏好
+- 语言表达特质
+- 专属能力与致命短板
+- 出身背景与生存处境
+- 深层执念与隐秘欲望
+- 行事风格倾向
+- 过往创伤与人生烙印
+- 社交相处模式
+- 内在自我矛盾
+- 剧情职能定位
+- 恐惧与避讳事物
+- 信仰与精神支柱
+- 认知局限与成长短板
+- 立场摇摆特性
+- 恩怨奖惩逻辑
+- 私下真实面貌
+
+核心字段示例包括：
 
 - `core_traits`
 - `values`
@@ -255,6 +291,24 @@ zaomeng > 🌸 群聊暂停
 - `decision_rules`
 - `identity_anchor`
 - `soul_goal`
+- `core_identity`
+- `faction_position`
+- `background_imprint`
+- `world_rule_fit`
+- `social_mode`
+- `hidden_desire`
+- `inner_conflict`
+- `story_role`
+- `belief_anchor`
+- `private_self`
+- `stance_stability`
+- `reward_logic`
+- `strengths`
+- `weaknesses`
+- `cognitive_limits`
+- `fear_triggers`
+- `key_bonds`
+- `action_style`
 - `life_experience`
 - `taboo_topics`
 - `forbidden_behaviors`
@@ -287,15 +341,46 @@ zaomeng > 🌸 群聊暂停
 
 当前人物主存储已经是 Markdown，不再以旧版 JSON 为准。
 
-每个角色的文件位于：
+每个角色目录现在以导航 + 生成层 + 可覆写层为主，常见文件包括：
 
-- `data/characters/<novel_id>/<角色名>/PROFILE.md`
+- `data/characters/<novel_id>/<角色名>/NAVIGATION.generated.md`
 - `data/characters/<novel_id>/<角色名>/NAVIGATION.md`
-- `data/characters/<novel_id>/<角色名>/SOUL.md`
-- `data/characters/<novel_id>/<角色名>/IDENTITY.md`
-- `data/characters/<novel_id>/<角色名>/AGENTS.md`
-- `data/characters/<novel_id>/<角色名>/MEMORY.md`
+- `data/characters/<novel_id>/<角色名>/PROFILE.generated.md`
+- `data/characters/<novel_id>/<角色名>/PROFILE.md`
+- `data/characters/<novel_id>/<角色名>/RELATIONS.generated.md`
 - `data/characters/<novel_id>/<角色名>/RELATIONS.md`
+- `data/characters/<novel_id>/<角色名>/MEMORY.md`
+
+按人物证据情况，还可能生成可选的人格拆分文件：
+
+- `SOUL.generated.md`
+- `GOALS.generated.md`
+- `STYLE.generated.md`
+- `TRAUMA.generated.md`
+- `IDENTITY.generated.md`
+- `BACKGROUND.generated.md`
+- `CAPABILITY.generated.md`
+- `BONDS.generated.md`
+- `CONFLICTS.generated.md`
+- `ROLE.generated.md`
+
+运行时会优先读取：
+
+- `NAVIGATION.generated.md`
+- `NAVIGATION.md`
+
+并按 `load_order` 决定后续人格文件的加载顺序。
+
+### 6. 约束参考文档
+
+当前 skill 和运行时会把约束拆成三层：
+
+- `references/output_schema.md`
+  负责输出格式与字段规范
+- `references/style_differ.md`
+  负责防同质化与风格差异化
+- `references/logic_constraint.md`
+  负责全局人设底线、防 OOC 与模式边界
 
 ## 快速开始
 
@@ -339,6 +424,14 @@ python -m src.core.main chat --novel data/hongloumeng.txt --session <session_id>
 ```bash
 python -m src.core.main chat --novel data/sanguo.txt --mode auto --message "进入刘备、张飞、关羽群聊模式"
 python -m src.core.main chat --novel data/sanguo.txt --session <session_id> --message "刘备：二位贤弟，近日战事稍歇。"
+```
+
+如果你使用的是 `clawhub-zaomeng-skill` 打包运行时，对应入口是：
+
+```bash
+py -3 runtime/zaomeng_cli.py distill --novel <路径> --characters A,B
+py -3 runtime/zaomeng_cli.py extract --novel <路径>
+py -3 runtime/zaomeng_cli.py chat --novel <路径或名称> --mode auto --message "让我扮演A和B聊天"
 ```
 
 ## 其他命令

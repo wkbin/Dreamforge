@@ -61,9 +61,11 @@ class RelationshipExtractor:
         self.negative_markers = tuple(rules.get("negative_markers", []))
         self.power_markers = tuple(rules.get("power_markers", []))
         self.conflict_markers = tuple(rules.get("conflict_markers", []))
+        self.ambiguous_appellations = set(rules.get("ambiguous_appellations", []))
+        self.appellation_target_window = int(rules.get("appellation_target_window", 8))
 
     def estimate_cost(self, novel_path: str) -> float:
-        text = load_novel_text(novel_path)
+        text = self.distiller.prepare_novel_text(load_novel_text(novel_path))
         chunks = self._chunk_text(text)
         self._last_chunk_count = len(chunks)
         avg_chunk_tokens = self.token_counter.count(text) / max(1, len(chunks))
@@ -77,7 +79,7 @@ class RelationshipExtractor:
         output_path: Optional[str] = None,
         characters: Optional[List[str]] = None,
     ) -> Dict[str, Dict[str, Any]]:
-        text = load_novel_text(novel_path)
+        text = self.distiller.prepare_novel_text(load_novel_text(novel_path))
         chunks = self._chunk_text(text)
         self._last_chunk_count = len(chunks)
         novel_id = novel_id_from_input(novel_path)
@@ -128,11 +130,20 @@ class RelationshipExtractor:
         final_relations: Dict[str, Dict[str, Any]] = {}
         for key in sorted(buckets.keys()):
             bucket = buckets[key]
-            interaction_bonus = min(3, len(bucket["interactions"]) // 6)
+            interaction_bonus = min(2, len(bucket["interactions"]) // 8)
             appellation_count = sum(len(terms) for terms in bucket["appellations"].values())
-            appellation_bonus = min(2, appellation_count)
-            conflict_penalty = min(2, len(bucket["conflict_points"]) // 3)
-            trust = max(0, min(10, self._avg_int(bucket["trust_samples"], default=5) + min(1, interaction_bonus) + appellation_bonus))
+            appellation_bonus = 1 if appellation_count else 0
+            conflict_penalty = min(3, (len(bucket["conflict_points"]) // 2) + (1 if bucket["conflict_points"] else 0))
+            trust = max(
+                0,
+                min(
+                    10,
+                    self._avg_int(bucket["trust_samples"], default=5)
+                    + min(1, interaction_bonus)
+                    + appellation_bonus
+                    - min(1, conflict_penalty),
+                ),
+            )
             affection = max(
                 0,
                 min(
@@ -201,24 +212,15 @@ class RelationshipExtractor:
         return pairs
 
     def _score_relation(self, chunk: str, a: str, b: str) -> Dict[str, Any]:
-        trust = 5
-        affection = 5
-        power_gap = 0
-        conflict_point = ""
         text = str(chunk or "")
-
-        if any(token in text for token in self.positive_markers):
-            trust += 2
-            affection += 2
-        if any(token in text for token in self.negative_markers):
-            trust -= 2
-            affection -= 1
-        if any(token in text for token in self.power_markers):
-            power_gap += 2
-        for token in self.conflict_markers:
-            if token in text:
-                conflict_point = token
-                break
+        positive_hits = sum(text.count(token) for token in self.positive_markers)
+        negative_hits = sum(text.count(token) for token in self.negative_markers)
+        power_hits = sum(text.count(token) for token in self.power_markers)
+        conflict_hits = [token for token in self.conflict_markers if token in text]
+        trust = 5 + min(2, positive_hits) - min(3, negative_hits) - min(1, len(conflict_hits))
+        affection = 5 + min(2, positive_hits) - min(2, negative_hits) - min(2, len(conflict_hits))
+        power_gap = min(5, power_hits)
+        conflict_point = conflict_hits[0] if conflict_hits else ""
 
         return {
             "trust": max(0, min(10, trust)),
@@ -232,18 +234,48 @@ class RelationshipExtractor:
         results: Dict[str, str] = {}
         speech_pattern = "|".join(re.escape(item) for item in self.speech_verbs)
         for speaker, target in ((a, b), (b, a)):
+            target_aliases = self._candidate_target_aliases(target)
             pattern = re.compile(
                 rf"{re.escape(speaker)}[^“”\"']{{0,12}}(?:{speech_pattern})[^“”\"']{{0,4}}[“\"](?P<quote>[^”\"]+)"
             )
             for match in pattern.finditer(chunk):
                 quote = match.group("quote").strip()
+                alias_hit = next((alias for alias in target_aliases if quote.startswith(alias)), "")
+                if alias_hit:
+                    results[f"{speaker}->{target}"] = alias_hit
+                    break
+
                 title_match = re.match(rf"^(?P<title>{self.appellation_pattern})(?:[，,:：])?", quote)
-                if title_match:
-                    results[f"{speaker}->{target}"] = title_match.group("title")
-                    break
-                if quote.startswith(target):
-                    results[f"{speaker}->{target}"] = target
-                    break
+                if not title_match:
+                    continue
+
+                title = title_match.group("title")
+                if title in self.ambiguous_appellations:
+                    window = quote[: self.appellation_target_window]
+                    if any(alias in window for alias in target_aliases):
+                        results[f"{speaker}->{target}"] = title
+                        break
+                    continue
+
+                results[f"{speaker}->{target}"] = title
+                break
+        return results
+
+    def _candidate_target_aliases(self, target: str) -> List[str]:
+        aliases = [target]
+        aliases.extend(self.distiller.candidate_aliases(target))
+        return [item for item in self._unique_texts(aliases) if item]
+
+    @staticmethod
+    def _unique_texts(items: List[str]) -> List[str]:
+        seen = set()
+        results: List[str] = []
+        for item in items:
+            text = str(item or "").strip()
+            if not text or text in seen:
+                continue
+            results.append(text)
+            seen.add(text)
         return results
 
     def _save_relations(

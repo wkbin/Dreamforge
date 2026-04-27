@@ -13,16 +13,23 @@ It does three things:
 It is not a generic chatbot.  
 It is better understood as a fiction character engine.
 
+The current recommended direction is:
+
+- markdown-first storage: character and relation data no longer treat legacy JSON as the source of truth
+- natural-language first: distill first, then enter `act` / `observe` through natural-language intent
+- embedded minimal runtime in the skill package: `clawhub-zaomeng-skill` now ships with a packaged minimal runtime
+- layered constraints: `output_schema.md` handles format, `style_differ.md` handles anti-homogenization, and `logic_constraint.md` handles persona-stability and anti-OOC rules
+
 ## Installation
 
 You can choose the installation path that matches how you want to use it.
 
 Important:
 
-- installing the `skill` is not the same thing as embedding the full `zaomeng` source code inside the skill
-- `openclaw skills install ...` and `clawhub ... install ...` install the skill package and its instructions
-- in hosts that support environment bootstrapping, the skill can fetch the `zaomeng` repository first and then call the real CLI
-- if the host does not allow networking, cloning, or local command execution, the real workflow still cannot run
+- the current `clawhub-zaomeng-skill` package includes an embedded minimal runtime, so runtime cloning is no longer the primary path
+- `openclaw skills install ...` and `clawhub ... install ...` install the skill package; `clawhub-zaomeng-skill` includes the packaged runtime plus documentation
+- if the host cannot execute local Python commands, or lacks required dependencies, the real workflow still cannot run
+- if you want to modify code, run tests, or use the main repository CLI directly, cloning the repository is still the best option
 
 ### 1. Clone the repository directly
 
@@ -41,8 +48,8 @@ If you mainly want to use it as a skill inside OpenClaw:
 openclaw skills install wkbin/zaomeng-skill
 ```
 
-This installs the skill, not the `zaomeng` engine source code itself.  
-In hosts that support environment bootstrapping, the skill can continue by fetching the local repository and then calling the CLI.
+This installs the skill package, not the full `zaomeng` development repository.  
+The current `clawhub-zaomeng-skill` package includes an embedded minimal runtime, so hosts that allow local command execution can use the packaged runtime directly.
 
 ### 3. Install with ClawHub
 
@@ -60,8 +67,8 @@ pnpm dlx clawhub@latest install zaomeng-skill
 bunx clawhub@latest install zaomeng-skill
 ```
 
-Again, this installs the skill package, not a runnable local `zaomeng` engine.
-In hosts that support environment bootstrapping, the skill can continue by fetching the local repository and then calling the CLI.
+Again, this installs the skill package, not the full local `zaomeng` development repository.
+The current `clawhub-zaomeng-skill` package includes an embedded minimal runtime, so hosts that allow local command execution can use the packaged runtime directly.
 
 ### 4. Install into an existing local skills directory
 
@@ -75,10 +82,10 @@ python scripts/install_skill.py --skills-dir <your-skills-root>
 
 To run the real workflow, the host environment needs at least one of these:
 
-- access to an existing local `zaomeng` repository
-- or permission for the skill to fetch the `zaomeng` repository and run the CLI
+- the ability to run the main repository CLI directly
+- or the ability to run the packaged minimal runtime inside `clawhub-zaomeng-skill`
 
-If the host does not allow networking, cloning, or local command execution, the real `zaomeng` CLI workflow cannot run.
+If the host does not allow local command execution, or lacks required Python dependencies, the real `zaomeng` CLI workflow cannot run.
 
 ## Example 1: Act Mode
 
@@ -289,7 +296,38 @@ Let everyone say one line about the alliance with Sun Quan
 
 ### 1. Character Distillation
 
-Extract major characters from `.txt` or `.epub` novels and build profiles including:
+Extract major characters from `.txt` or `.epub` novels and build markdown character profiles.
+
+The current profile aims to cover a much richer character space, including:
+
+- core identity
+- core motivation
+- personality base
+- decision logic
+- arc
+- key bonds
+- symbolic traits
+- world-rule fit
+- value tradeoffs
+- emotional reaction pattern
+- cognitive preference
+- language expression style
+- strengths and fatal weaknesses
+- background and survival condition
+- hidden desire
+- action tendency
+- trauma imprint
+- social mode
+- inner conflict
+- story role
+- fears and taboo triggers
+- belief anchor
+- cognitive limits
+- stance stability
+- reward / grievance logic
+- private self
+
+Representative fields now include:
 
 - `core_traits`
 - `values`
@@ -298,6 +336,24 @@ Extract major characters from `.txt` or `.epub` novels and build profiles includ
 - `decision_rules`
 - `identity_anchor`
 - `soul_goal`
+- `core_identity`
+- `faction_position`
+- `background_imprint`
+- `world_rule_fit`
+- `social_mode`
+- `hidden_desire`
+- `inner_conflict`
+- `story_role`
+- `belief_anchor`
+- `private_self`
+- `stance_stability`
+- `reward_logic`
+- `strengths`
+- `weaknesses`
+- `cognitive_limits`
+- `fear_triggers`
+- `key_bonds`
+- `action_style`
 - `life_experience`
 - `taboo_topics`
 - `forbidden_behaviors`
@@ -330,15 +386,46 @@ Later conversations will try to avoid the same kind of mistake.
 
 Character storage is now markdown-first rather than legacy JSON-first.
 
-Each character lives under:
+Each character directory now follows a navigation + generated layer + override layer pattern. Common files include:
 
-- `data/characters/<novel_id>/<character>/PROFILE.md`
+- `data/characters/<novel_id>/<character>/NAVIGATION.generated.md`
 - `data/characters/<novel_id>/<character>/NAVIGATION.md`
-- `data/characters/<novel_id>/<character>/SOUL.md`
-- `data/characters/<novel_id>/<character>/IDENTITY.md`
-- `data/characters/<novel_id>/<character>/AGENTS.md`
-- `data/characters/<novel_id>/<character>/MEMORY.md`
+- `data/characters/<novel_id>/<character>/PROFILE.generated.md`
+- `data/characters/<novel_id>/<character>/PROFILE.md`
+- `data/characters/<novel_id>/<character>/RELATIONS.generated.md`
 - `data/characters/<novel_id>/<character>/RELATIONS.md`
+- `data/characters/<novel_id>/<character>/MEMORY.md`
+
+Depending on evidence quality, the distillation step may also generate optional focused persona files:
+
+- `SOUL.generated.md`
+- `GOALS.generated.md`
+- `STYLE.generated.md`
+- `TRAUMA.generated.md`
+- `IDENTITY.generated.md`
+- `BACKGROUND.generated.md`
+- `CAPABILITY.generated.md`
+- `BONDS.generated.md`
+- `CONFLICTS.generated.md`
+- `ROLE.generated.md`
+
+At runtime, loading starts from:
+
+- `NAVIGATION.generated.md`
+- `NAVIGATION.md`
+
+and then follows `load_order` to assemble the final persona.
+
+### 6. Constraint Reference Files
+
+The current skill/runtime constraint stack is split into three layers:
+
+- `references/output_schema.md`
+  format and field contract
+- `references/style_differ.md`
+  anti-homogenization and style separation
+- `references/logic_constraint.md`
+  global persona floor, anti-OOC rules, and mode boundaries
 
 ## Quick Start
 
@@ -375,6 +462,14 @@ If you want a multi-character group chat:
 ```bash
 python -m src.core.main chat --novel data/sanguo.txt --mode auto --message "进入刘备、张飞、关羽群聊模式"
 python -m src.core.main chat --novel data/sanguo.txt --session <session_id> --message "刘备：二位贤弟，近日战事稍歇。"
+```
+
+If you are using the packaged runtime inside `clawhub-zaomeng-skill`, the corresponding entrypoint is:
+
+```bash
+py -3 runtime/zaomeng_cli.py distill --novel <path> --characters A,B
+py -3 runtime/zaomeng_cli.py extract --novel <path>
+py -3 runtime/zaomeng_cli.py chat --novel <path-or-name> --mode auto --message "让我扮演A和B聊天"
 ```
 
 ## Other Commands
