@@ -19,9 +19,10 @@ You can choose the installation path that matches how you want to use it.
 
 Important:
 
-- installing the `skill` is not the same thing as installing the actual `zaomeng` engine
+- installing the `skill` is not the same thing as embedding the full `zaomeng` source code inside the skill
 - `openclaw skills install ...` and `clawhub ... install ...` install the skill package and its instructions
-- if you want to actually run commands like `python -m src.core.main ...`, your machine must already have a working local `zaomeng` repository or deployment
+- in hosts that support environment bootstrapping, the skill can fetch the `zaomeng` repository first and then call the real CLI
+- if the host does not allow networking, cloning, or local command execution, the real workflow still cannot run
 
 ### 1. Clone the repository directly
 
@@ -41,7 +42,7 @@ openclaw skills install wkbin/zaomeng-skill
 ```
 
 This installs the skill, not the `zaomeng` engine source code itself.  
-If you want the skill to actually call the local CLI, your machine still needs a local `zaomeng` repo or deployed environment.
+In hosts that support environment bootstrapping, the skill can continue by fetching the local repository and then calling the CLI.
 
 ### 3. Install with ClawHub
 
@@ -60,6 +61,7 @@ bunx clawhub@latest install zaomeng-skill
 ```
 
 Again, this installs the skill package, not a runnable local `zaomeng` engine.
+In hosts that support environment bootstrapping, the skill can continue by fetching the local repository and then calling the CLI.
 
 ### 4. Install into an existing local skills directory
 
@@ -71,13 +73,12 @@ python scripts/install_skill.py --skills-dir <your-skills-root>
 
 ## Runtime Requirement
 
-If you install only the skill, but your machine does not have a local `zaomeng` repository or deployment, then:
+To run the real workflow, the host environment needs at least one of these:
 
-- the skill instructions can still be read
-- the recommended workflow can still be understood
-- but the real `zaomeng` CLI workflow cannot actually run
+- access to an existing local `zaomeng` repository
+- or permission for the skill to fetch the `zaomeng` repository and run the CLI
 
-If you want the real workflow, cloning the repository locally is the recommended path.
+If the host does not allow networking, cloning, or local command execution, the real `zaomeng` CLI workflow cannot run.
 
 ## Example 1: Act Mode
 

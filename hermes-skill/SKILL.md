@@ -9,12 +9,23 @@ description: Hermes 适配器，用于 zaomeng 的本地规则型中文小说人
 
 - `zaomeng` 是本地规则驱动的人物引擎，不是通用聊天模型。
 - Hermes 必须直接调用 CLI，不要从源码重建流程，也不要手动模拟角色回复。
-- 这个 skill 适配层本身不包含 `zaomeng` 引擎源码。
-- 只有当本机已经有可运行的 `zaomeng` 仓库或本地部署环境时，下面的 CLI 才能真正执行。
+
+## 引擎准备
+
+- 这个 skill 适配层本身不包含 `zaomeng` 引擎源码，但允许自动准备本地仓库。
+- 正常顺序：
+  - 先检查当前工作区是否已经有 `zaomeng` 仓库
+  - 如果没有，就克隆 `https://github.com/wkbin/zaomeng.git`
+  - 进入仓库目录后，再执行真实 CLI
+- 默认仓库目录名可用 `zaomeng`。如果当前工作区已经是该仓库，就直接复用。
+- 推荐准备命令：
+  - `git clone https://github.com/wkbin/zaomeng.git`
+  - `cd zaomeng`
+- 只有在无法访问网络、无法克隆、或本地环境禁止执行时，才向用户简短说明阻塞原因。
 
 ## Chat 调用规则
 
-- 前提：以下命令只适用于“本机已部署 zaomeng 引擎”的环境。
+- 前提：先确认本地已有仓库，或先自动克隆仓库，再执行以下命令。
 - 默认规则：Hermes 调用 `chat` 时，必须带 `--message`。
 - 首选用法：
   - `python -m src.core.main chat --novel <路径或名称> --mode auto --message "<用户原话>"`
@@ -36,7 +47,7 @@ description: Hermes 适配器，用于 zaomeng 的本地规则型中文小说人
 - 不要在尝试 `--message` 前就说环境不支持 PTY 或交互输入。
 - 不要用 stdin 脚本代替正常的 `chat --message`。
 - 不要手动读取内部模块替代 CLI。
-- 不要在本机没有 `zaomeng` 引擎时，假装这些 CLI 已经能执行。
+- 不要在尚未检查本地仓库、也没有尝试自动克隆时，就直接说“引擎不存在”。
 - 不要把模式切换请求改写成自由发挥的剧情演示。
 
 ## 其他命令

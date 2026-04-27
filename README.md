@@ -19,9 +19,10 @@
 
 请注意：
 
-- 安装 `skill` 不等于安装 `zaomeng` 引擎本体
+- 安装 `skill` 不等于把 `zaomeng` 源码直接打包进 skill
 - `openclaw skills install ...`、`clawhub ... install ...` 安装的是技能包和说明文件
-- 如果你要真正执行 `python -m src.core.main ...` 这些 CLI 命令，本机必须已经有可运行的 `zaomeng` 仓库或本地部署环境
+- 在支持自动准备环境的宿主里，skill 可以先拉取 `zaomeng` 仓库，再调用真实 CLI
+- 如果当前宿主不允许联网、克隆仓库或执行本地命令，那么仍然无法运行真实工作流
 
 ### 1. 直接克隆仓库
 
@@ -41,7 +42,7 @@ openclaw skills install wkbin/zaomeng-skill
 ```
 
 这一步安装的是 skill，不包含 `zaomeng` 引擎源码。  
-如果你希望 skill 真的调用本地 CLI，本机仍然需要先有 `zaomeng` 仓库或已部署环境。
+在支持自动准备环境的宿主里，skill 可以继续拉取本地仓库后再调用 CLI。
 
 ### 3. 用 ClawHub 安装
 
@@ -60,6 +61,7 @@ bunx clawhub@latest install zaomeng-skill
 ```
 
 同样，这一步安装的是 skill 包，不等于本地已经有可运行的 `zaomeng` 引擎。
+在支持自动准备环境的宿主里，skill 可以继续拉取本地仓库后再调用 CLI。
 
 ### 4. 已有本地 skill 目录时安装
 
@@ -71,13 +73,12 @@ python scripts/install_skill.py --skills-dir <your-skills-root>
 
 ## 运行前提
 
-如果你只装了 skill，但本机没有 `zaomeng` 仓库或本地部署环境，那么：
+要运行真实工作流，宿主环境至少要允许其中一种能力：
 
-- 可以读取 skill 说明
-- 可以知道推荐的调用方式
-- 但不能执行真实的 `zaomeng` CLI 工作流
+- 直接使用你本机已有的 `zaomeng` 仓库
+- 或由 skill 自动拉取 `zaomeng` 仓库并执行 CLI
 
-要运行真实工作流，推荐先直接克隆仓库并在本地使用。
+如果当前宿主环境不允许联网、克隆仓库或执行本地命令，那么就不能运行真实的 `zaomeng` CLI 工作流。
 
 ## 效果示例一：行动模式
 
