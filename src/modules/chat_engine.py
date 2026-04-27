@@ -17,12 +17,12 @@ from src.modules.speaker import Speaker
 from src.utils.file_utils import (
     canonical_aliases,
     ensure_dir,
-    load_json,
+    load_markdown_data,
     normalize_character_name,
     normalize_relation_key,
     novel_id_from_input,
     safe_filename,
-    save_json,
+    save_markdown_data,
 )
 
 
@@ -60,6 +60,8 @@ class ChatEngine:
             "state": {
                 "emotion": {},
                 "focus_targets": {},
+                "controlled_character": "",
+                "selected_characters": list(characters),
                 "relation_delta": {},
                 "relation_matrix": self._build_relation_matrix(characters, novel_id),
             },
@@ -68,13 +70,15 @@ class ChatEngine:
         return session
 
     def restore_session(self, session_id: str) -> Dict[str, Any]:
-        path = self.sessions_dir / f"{session_id}.json"
-        data = load_json(path, default=None)
+        path = self.sessions_dir / f"{session_id}.md"
+        data = load_markdown_data(path, default=None)
         if not data:
             raise FileNotFoundError(f"Session not found: {session_id}")
         data.setdefault("novel_id", novel_id_from_input(data.get("novel", session_id)))
         data.setdefault("state", {})
         data["state"].setdefault("focus_targets", {})
+        data["state"].setdefault("controlled_character", "")
+        data["state"].setdefault("selected_characters", list(data.get("characters", [])))
         return data
 
     def observe_mode(self, session: Dict[str, Any]) -> None:
@@ -267,13 +271,13 @@ class ChatEngine:
 
     def _relation_file_for_novel(self, novel_id: Optional[str]) -> Optional[Path]:
         if novel_id:
-            scoped = self.relations_dir / novel_id / f"{novel_id}_relations.json"
+            scoped = self.relations_dir / novel_id / f"{novel_id}_relations.md"
             if scoped.exists():
                 return scoped
-            legacy = self.relations_dir / f"{novel_id}_relations.json"
+            legacy = self.relations_dir / f"{novel_id}_relations.md"
             if legacy.exists():
                 return legacy
-        files = sorted(self.relations_dir.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+        files = sorted(self.relations_dir.glob("*.md"), key=lambda path: path.stat().st_mtime, reverse=True)
         return files[0] if files else None
 
     def _update_state(self, session: Dict[str, Any]) -> None:
@@ -320,7 +324,16 @@ class ChatEngine:
             }
 
     def _save_session(self, session: Dict[str, Any]) -> None:
-        save_json(self.sessions_dir / f"{session['id']}.json", session)
+        save_markdown_data(
+            self.sessions_dir / f"{session['id']}.md",
+            session,
+            title="SESSION",
+            summary=[
+                f"- id: {session.get('id', '')}",
+                f"- novel_id: {session.get('novel_id', '')}",
+                f"- mode: {session.get('mode', '')}",
+            ],
+        )
         self._save_relation_snapshot(session)
 
     def _persist_runtime_guidance(self, session: Dict[str, Any], speaker: str, message: str) -> None:
@@ -381,32 +394,124 @@ class ChatEngine:
 
         if novel_id:
             scoped_dir = self.characters_dir / novel_id
-            files = sorted(scoped_dir.glob("*.json"))
-            if not files:
-                legacy_files = sorted(self.characters_dir.glob("*.json"))
-                for file in legacy_files:
-                    item = load_json(file, default=None)
-                    if not item or not isinstance(item, dict) or not item.get("name"):
-                        continue
-                    item_novel_id = item.get("novel_id")
-                    if item_novel_id == novel_id or item_novel_id is None:
-                        canonical_name = normalize_character_name(item["name"])
-                        item["name"] = canonical_name
-                        item = self._merge_persona_bundle(item, scoped_dir if novel_id else self.characters_dir)
-                        profiles[canonical_name] = self._merge_profile_item(profiles.get(canonical_name), item)
+            sources = self._collect_profile_sources(scoped_dir)
+            if not sources:
                 return profiles
         else:
-            files = sorted(self.characters_dir.glob("*.json"))
-            files.extend(sorted(self.characters_dir.glob("*/*.json")))
+            sources = self._collect_profile_sources(self.characters_dir)
+            for novel_dir in sorted(path for path in self.characters_dir.iterdir() if path.is_dir()):
+                sources.extend(self._collect_profile_sources(novel_dir))
 
-        for file in files:
-            item = load_json(file, default=None)
+        for file in sources:
+            item = self._load_profile_source(file)
             if item and isinstance(item, dict) and item.get("name"):
                 canonical_name = normalize_character_name(item["name"])
                 item["name"] = canonical_name
-                item = self._merge_persona_bundle(item, file.parent)
+                if file.is_dir():
+                    base_dir = file.parent
+                elif file.name.startswith("PROFILE"):
+                    base_dir = file.parent.parent
+                else:
+                    base_dir = file.parent
+                item = self._merge_persona_bundle(item, base_dir)
                 profiles[canonical_name] = self._merge_profile_item(profiles.get(canonical_name), item)
         return profiles
+
+    def _collect_profile_sources(self, root: Path) -> List[Path]:
+        if not root.exists():
+            return []
+        sources: List[Path] = []
+        seen = set()
+        for persona_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+            if any((persona_dir / filename).exists() for filename in ("PROFILE.md", "PROFILE.generated.md")):
+                resolved = persona_dir.resolve()
+                if resolved not in seen:
+                    sources.append(persona_dir)
+                    seen.add(resolved)
+        return sources
+
+    def _load_profile_source(self, path: Path) -> Optional[Dict[str, Any]]:
+        if path.is_dir():
+            return self._load_profile_bundle(path)
+        if path.name.startswith("PROFILE"):
+            return self._load_profile_markdown(path)
+        return None
+
+    def _load_profile_bundle(self, persona_dir: Path) -> Optional[Dict[str, Any]]:
+        merged: Dict[str, Any] = {}
+        loaded = False
+        for filename in ("PROFILE.generated.md", "PROFILE.md"):
+            path = persona_dir / filename
+            if not path.exists():
+                continue
+            current = self._load_profile_markdown(path)
+            if not current:
+                continue
+            merged = self._merge_profile_markdown_data(merged, current) if loaded else current
+            loaded = True
+        return merged if loaded else None
+
+    def _load_profile_markdown(self, path: Path) -> Dict[str, Any]:
+        parsed = self._parse_persona_markdown(path)
+        profile: Dict[str, Any] = {
+            "name": parsed.get("name", path.parent.name),
+            "novel_id": parsed.get("novel_id", path.parent.parent.name),
+            "source_path": parsed.get("source_path", ""),
+            "core_traits": self._split_persona_value(parsed.get("core_traits", "")),
+            "values": self._split_metric_map(parsed.get("values", "")),
+            "speech_style": parsed.get("speech_style", ""),
+            "typical_lines": self._split_persona_value(parsed.get("typical_lines", "")),
+            "decision_rules": self._split_persona_value(parsed.get("decision_rules", "")),
+            "identity_anchor": parsed.get("identity_anchor", ""),
+            "soul_goal": parsed.get("soul_goal", ""),
+            "life_experience": self._split_persona_value(parsed.get("life_experience", "")),
+            "worldview": parsed.get("worldview", ""),
+            "thinking_style": parsed.get("thinking_style", ""),
+            "speech_habits": {
+                "cadence": parsed.get("cadence", ""),
+                "signature_phrases": self._split_persona_value(parsed.get("signature_phrases", "")),
+                "forbidden_fillers": self._split_persona_value(parsed.get("forbidden_fillers", "")),
+            },
+            "emotion_profile": {
+                "anger_style": parsed.get("anger_style", ""),
+                "joy_style": parsed.get("joy_style", ""),
+                "grievance_style": parsed.get("grievance_style", ""),
+            },
+            "taboo_topics": self._split_persona_value(parsed.get("taboo_topics", "")),
+            "forbidden_behaviors": self._split_persona_value(parsed.get("forbidden_behaviors", "")),
+            "arc": {
+                "start": self._split_metric_map(parsed.get("arc_start", "")),
+                "mid": self._split_metric_map(parsed.get("arc_mid", "")),
+                "end": self._split_metric_map(parsed.get("arc_end", "")),
+            },
+            "evidence": {
+                "description_count": self._safe_int(parsed.get("description_count", 0)),
+                "dialogue_count": self._safe_int(parsed.get("dialogue_count", 0)),
+                "thought_count": self._safe_int(parsed.get("thought_count", 0)),
+                "chunk_count": self._safe_int(parsed.get("chunk_count", 0)),
+            },
+        }
+        return profile
+
+    def _merge_profile_markdown_data(
+        self,
+        base: Dict[str, Any],
+        overlay: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        merged = dict(base)
+        for key, value in overlay.items():
+            if value in ("", [], {}, None):
+                continue
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                bucket = dict(merged.get(key, {}))
+                for child_key, child_value in value.items():
+                    if child_value in ("", [], {}, None):
+                        continue
+                    bucket[child_key] = child_value
+                merged[key] = bucket
+                continue
+            merged[key] = value
+        return merged
 
     def _merge_persona_bundle(self, profile: Dict[str, Any], base_dir: Path) -> Dict[str, Any]:
         merged = dict(profile)
@@ -626,6 +731,30 @@ class ChatEngine:
         return [item.strip() for item in re.split(r"[；;]\s*", value) if item.strip()]
 
     @staticmethod
+    def _split_metric_map(value: str) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        for item in re.split(r"[；;]\s*", str(value or "").strip()):
+            if not item or "=" not in item:
+                continue
+            key, raw = item.split("=", 1)
+            key = key.strip()
+            raw = raw.strip()
+            if not key:
+                continue
+            if re.fullmatch(r"-?\d+", raw):
+                result[key] = int(raw)
+            else:
+                result[key] = raw
+        return result
+
+    @staticmethod
+    def _safe_int(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
     def _merge_profile_item(existing: Optional[Dict[str, Any]], incoming: Dict[str, Any]) -> Dict[str, Any]:
         if not existing:
             return incoming
@@ -684,7 +813,15 @@ class ChatEngine:
             "relation_matrix": session.get("state", {}).get("relation_matrix", {}),
             "relation_delta": session.get("state", {}).get("relation_delta", {}),
         }
-        save_json(self.sessions_dir / f"{session['id']}_relations.json", payload)
+        save_markdown_data(
+            self.sessions_dir / f"{session['id']}_relations.md",
+            payload,
+            title="SESSION_RELATIONS",
+            summary=[
+                f"- session_id: {session.get('id', '')}",
+                f"- novel_id: {session.get('novel_id', '')}",
+            ],
+        )
 
     def _get_relation_state_from_disk(
         self,
@@ -696,7 +833,8 @@ class ChatEngine:
         if not rel_file:
             base = {}
         else:
-            rel = load_json(rel_file, default={})
+            payload = load_markdown_data(rel_file, default={}) or {}
+            rel = payload.get("relations", {}) if isinstance(payload, dict) else {}
             normalized = {normalize_relation_key(key): value for key, value in rel.items()}
             base = normalized.get(self._pair_key(normalize_character_name(speaker), normalize_character_name(target)), {})
         return self._merge_relation_overlay(base, speaker, target, novel_id)

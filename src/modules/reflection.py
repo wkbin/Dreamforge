@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional
 
 from src.core.config import Config
-from src.utils.file_utils import ensure_dir, load_json, save_json
+from src.utils.file_utils import ensure_dir, load_markdown_data, save_markdown_data
 
 
 @dataclass
@@ -70,8 +70,17 @@ class ReflectionEngine:
             "reason": reason,
             "timestamp": int(time.time()),
         }
-        file = self.corrections_dir / f"correction_{session_id}_{payload['timestamp']}.json"
-        save_json(file, payload)
+        file = self.corrections_dir / f"correction_{session_id}_{payload['timestamp']}.md"
+        save_markdown_data(
+            file,
+            payload,
+            title="CORRECTION",
+            summary=[
+                f"- character: {character}",
+                f"- target: {target or ''}",
+                f"- reason: {reason}",
+            ],
+        )
         payload["file_path"] = str(file)
         return payload
 
@@ -83,8 +92,8 @@ class ReflectionEngine:
         top_k: int = 3,
     ) -> List[Dict[str, Any]]:
         results: List[Dict[str, Any]] = []
-        for file in self.corrections_dir.glob("correction_*.json"):
-            item = load_json(file, default=None)
+        for file in self.corrections_dir.glob("correction_*.md"):
+            item = load_markdown_data(file, default=None)
             if not item:
                 continue
             if character and item.get("character") != character:

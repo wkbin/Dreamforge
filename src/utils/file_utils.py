@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+import yaml
 
 NOISE_NAME_SUFFIXES = {"说", "道", "笑", "听", "问", "看", "想", "叫", "喊", "答", "哭"}
 CANONICAL_NAME_ALIASES = {
@@ -29,14 +30,6 @@ def ensure_dir(path: str | Path) -> Path:
     return p
 
 
-def load_json(path: str | Path, default: Any = None) -> Any:
-    p = Path(path)
-    if not p.exists():
-        return default
-    with p.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
 def _sanitize_json_value(value: Any) -> Any:
     if isinstance(value, str):
         return value.encode("utf-8", errors="replace").decode("utf-8")
@@ -48,12 +41,37 @@ def _sanitize_json_value(value: Any) -> Any:
         return {_sanitize_json_value(key): _sanitize_json_value(item) for key, item in value.items()}
     return value
 
+def load_markdown_data(path: str | Path, default: Any = None) -> Any:
+    p = Path(path)
+    if not p.exists():
+        return default
+    text = p.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return default
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return default
+    payload = yaml.safe_load(parts[1]) or {}
+    return payload
 
-def save_json(path: str | Path, data: Dict[str, Any]) -> None:
+
+def save_markdown_data(
+    path: str | Path,
+    data: Dict[str, Any],
+    *,
+    title: str = "DATA",
+    summary: Optional[list[str]] = None,
+) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("w", encoding="utf-8") as f:
-        json.dump(_sanitize_json_value(data), f, ensure_ascii=False, indent=2)
+    sanitized = _sanitize_json_value(data)
+    frontmatter = yaml.safe_dump(sanitized, allow_unicode=True, sort_keys=False).strip()
+    body_lines = [f"# {title}", ""]
+    if summary:
+        body_lines.extend(summary)
+        body_lines.append("")
+    content = f"---\n{frontmatter}\n---\n\n" + "\n".join(body_lines).rstrip() + "\n"
+    p.write_text(content, encoding="utf-8")
 
 
 def safe_filename(name: str) -> str:
@@ -98,14 +116,14 @@ def find_character_file(
     candidate_names = [character_name]
     if normalized != character_name:
         candidate_names.append(normalized)
-    filenames = [f"{safe_filename(name)}.json" for name in candidate_names]
+    dirnames = [safe_filename(name) for name in candidate_names]
 
     if novel_id:
-        matches = [root / novel_id / filename for filename in filenames]
+        matches = [root / novel_id / dirname / "PROFILE.md" for dirname in dirnames]
         return [path for path in matches if path.exists()]
 
     matches = []
-    for filename in filenames:
-        matches.extend(root.glob(filename))
-        matches.extend(root.glob(f"*/{filename}"))
+    for dirname in dirnames:
+        matches.extend(root.glob(f"{dirname}/PROFILE.md"))
+        matches.extend(root.glob(f"*/{dirname}/PROFILE.md"))
     return sorted({path.resolve() for path in matches})

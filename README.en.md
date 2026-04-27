@@ -102,8 +102,8 @@ python -m src.core.main extract --novel data/hongloumeng.txt --force
 
 This generates novel-scoped outputs:
 
-- `data/characters/hongloumeng/*.json`
-- `data/relations/hongloumeng/hongloumeng_relations.json`
+- `data/characters/hongloumeng/<character>/PROFILE.md`
+- `data/relations/hongloumeng/hongloumeng_relations.md`
 
 The system now supports reliable two-character aliases when explicit targets are provided, for example:
 
@@ -175,7 +175,7 @@ Useful for:
 
 If the automatic relationship extraction is not detailed enough, you can edit the relation file manually and then run chat again:
 
-- inspect `data/relations/hongloumeng/hongloumeng_relations.json`
+- inspect `data/relations/hongloumeng/hongloumeng_relations.md`
 - adjust or add a specific pair
 - run `chat` again
 
@@ -294,7 +294,7 @@ Useful for:
 ```bash
 python -m src.core.main distill --novel <path> [--characters A,B] [--output <dir>] [--force]
 python -m src.core.main extract --novel <path> [--output <path>] [--force]
-python -m src.core.main chat --novel <path-or-name> --mode observe|act [--character <name>] [--session <id>] [--message <text>]
+python -m src.core.main chat --novel <path-or-name> --mode auto|observe|act [--character <name>] [--session <id>] [--message <text>]
 python -m src.core.main view --character <name> [--novel <path-or-name>]
 python -m src.core.main correct --session <id> --message <raw> --corrected <fixed> [--character <name>] [--target <name>] [--reason <text>]
 ```
@@ -364,10 +364,11 @@ tests/test_relation_behavior.py
 
 ## Persona Files
 
-`distill` now exports more than `*.json`.
+`distill` now exports markdown-first persona bundles.
 
 For each character, the system also creates an editable persona bundle under:
 
+- `data/characters/<novel_id>/<character>/PROFILE.md`
 - `data/characters/<novel_id>/<character>/SOUL.md`
 - `data/characters/<novel_id>/<character>/NAVIGATION.md`
 - `data/characters/<novel_id>/<character>/IDENTITY.md`
@@ -379,8 +380,39 @@ Matching `*.generated.md` files are kept beside them so you can compare generate
 
 Runtime now reads `NAVIGATION.generated.md` first, then applies `NAVIGATION.md` overrides, then loads only the files declared in `load_order`. Optional layers such as `GOALS.md`, `STYLE.md`, `TRAUMA.md`, and `RELATIONS.md` are created only when distillation or later editing actually needs them.
 
+Character profile storage is markdown-only. Distillation writes the canonical archive into `PROFILE.md` / `PROFILE.generated.md`.
+All `data/...` output paths are resolved from the repo root or the active `config.yaml` directory, not from the caller's current working directory.
+
+## Natural Language Intent Routing
+
+`chat` now supports `--mode auto` and can infer whether the user is asking to:
+
+- enter `act` mode
+- enter `observe` mode
+- continue an existing in-character turn
+
+Recommended agent pattern:
+
+```bash
+python -m src.core.main chat --novel <path-or-name> --mode auto --message "<raw user request>"
+```
+
+Examples:
+
+```bash
+python -m src.core.main chat --novel data/hongloumeng.txt --mode auto --message "Let me play Jia Baoyu and chat with Lin Daiyu"
+python -m src.core.main chat --novel data/hongloumeng.txt --session <session_id> --message "Sister, are you feeling well today?"
+```
+
+Important behavior:
+
+- Requests such as `让我扮演贾宝玉和林黛玉聊天` or `我说一句，黛玉回一句` are treated as setup-only intent, not as spoken dialogue.
+- In setup-only `act` requests, zaomeng stores the controlled role in the session. Follow-up turns can continue with `--session <id> --message "<your line>"` without repeating `--character`, unless you want to switch roles.
+- Requests like `请让大家围绕这件事各说一句` are still treated as a real `observe` turn and will immediately produce replies.
+
 These files act as runtime inputs:
 
+- `PROFILE.md`: the canonical markdown character archive containing name, novel scope, values, evidence, arc, and base voice data
 - `NAVIGATION.md`: the persona entrypoint and routing map; it declares load order, which files are active, and which behavior should be sourced from which file
 - `SOUL.md`: identity anchor, soul goal, worldview, speech constraints, taboo topics, forbidden behaviors
 - `GOALS.md`: optional long-term drive, decision pressure, and strategic preference layer

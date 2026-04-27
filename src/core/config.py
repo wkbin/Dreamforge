@@ -78,8 +78,15 @@ class Config:
             config_path: 配置文件路径，如为None则自动查找
         """
         self.config_path = self._find_config(config_path)
+        self.project_root = self._resolve_project_root()
         self.config = self._load_config()
         self._ensure_paths()
+
+    def _resolve_project_root(self) -> Path:
+        """解析项目根目录，避免输出路径依赖当前工作目录。"""
+        if self.config_path:
+            return self.config_path.parent.resolve()
+        return Path(__file__).resolve().parents[2]
         
     def _find_config(self, config_path: Optional[str]) -> Optional[Path]:
         """查找配置文件"""
@@ -167,9 +174,8 @@ class Config:
         if os.path.isabs(relative_path):
             return relative_path
         
-        # 否则相对于项目根目录
-        project_root = Path.cwd()
-        return str(project_root / relative_path)
+        # 否则相对于配置文件所在目录或项目根目录
+        return str((self.project_root / relative_path).resolve())
     
     def get_llm_config(self) -> Dict[str, Any]:
         """获取 LLM 配置"""

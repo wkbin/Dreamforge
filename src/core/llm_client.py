@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +18,7 @@ except Exception:
     tiktoken = None
 
 from .config import Config
+from src.utils.file_utils import load_markdown_data, save_markdown_data
 
 
 class LLMClient:
@@ -43,10 +43,10 @@ class LLMClient:
             self.encoder = None
 
     def _load_cost_stats(self):
-        stats_file = Path("data/cost_stats.json")
+        stats_file = Path(self.config.project_root) / "data" / "cost_stats.md"
         if stats_file.exists():
             try:
-                data = json.loads(stats_file.read_text(encoding="utf-8"))
+                data = load_markdown_data(stats_file, default={}) or {}
                 self.daily_cost = float(data.get("daily_cost", 0.0))
                 last = data.get("last_reset_date")
                 if last:
@@ -56,15 +56,23 @@ class LLMClient:
         self._check_reset_daily()
 
     def _save_cost_stats(self):
-        stats_file = Path("data/cost_stats.json")
-        stats_file.parent.mkdir(parents=True, exist_ok=True)
+        stats_file = Path(self.config.project_root) / "data" / "cost_stats.md"
         payload = {
             "daily_cost": self.daily_cost,
             "last_reset_date": self.last_reset_date.isoformat(),
             "total_requests": self.request_count,
             "total_tokens": self.total_tokens,
         }
-        stats_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        save_markdown_data(
+            stats_file,
+            payload,
+            title="COST_STATS",
+            summary=[
+                f"- daily_cost: {self.daily_cost}",
+                f"- total_requests: {self.request_count}",
+                f"- total_tokens: {self.total_tokens}",
+            ],
+        )
 
     def _check_reset_daily(self):
         today = datetime.now().date()
@@ -159,4 +167,3 @@ class LLMClient:
     def reset_session_cost(self):
         self.session_cost = 0.0
         print("会话成本统计已重置")
-

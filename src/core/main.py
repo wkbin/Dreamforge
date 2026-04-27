@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import argparse
-import json
+import re
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 src_path = Path(__file__).parent.parent
 sys.path.insert(0, str(src_path))
@@ -18,10 +20,45 @@ from src.core.config import Config
 from src.modules.chat_engine import ChatEngine
 from src.modules.distillation import NovelDistiller
 from src.modules.relationships import RelationshipExtractor
-from src.utils.file_utils import find_character_file, novel_id_from_input
+from src.utils.file_utils import normalize_character_name, novel_id_from_input, save_markdown_data
+
+
+@dataclass
+class ChatIntent:
+    mode: str
+    controlled_character: str = ""
+    target_characters: list[str] = field(default_factory=list)
+    participants: list[str] = field(default_factory=list)
+    message: str = ""
+    setup_only: bool = False
 
 
 class ZaomengCLI:
+    ACT_SETUP_PATTERNS = (
+        r"让我扮演",
+        r"我来扮演",
+        r"我要扮演",
+        r"我扮演",
+        r"进入.+act",
+        r"进入.+行动模式",
+        r"开启.+act",
+        r"切换到.+act",
+        r"我说一句",
+        r"回一句",
+        r"你来回我",
+        r"你让.+回我",
+        r"你驱动",
+    )
+    OBSERVE_SETUP_PATTERNS = (
+        r"进入.+群聊模式",
+        r"开启.+群聊模式",
+        r"进入.+observe",
+        r"切换到.+observe",
+        r"开始群聊",
+    )
+    ACT_MODE_HINTS = ("act", "行动模式", "扮演", "我说一句", "回一句", "回我", "回复我", "接我的话")
+    OBSERVE_MODE_HINTS = ("群聊模式", "observe", "围绕", "各说一句", "大家聊", "让大家", "多人聊")
+
     def __init__(self) -> None:
         self.config = Config()
         self.parser = self._create_parser()
@@ -71,13 +108,11 @@ class ZaomengCLI:
                 "Prerequisites:\n"
                 "  1. Run `distill` first so character profiles exist.\n"
                 "  2. Run `extract` first if you want relation-aware replies.\n"
-                "  3. In `act` mode, pass `--character` for the role you control.\n\n"
+                "  3. `--mode auto` can infer act/observe from natural language setup requests.\n\n"
                 "Usage modes:\n"
                 "  - Interactive: omit `--message` and chat in the terminal.\n"
-                "  - Single-turn: pass `--message` to run one turn and exit.\n\n"
-                "Starter inputs:\n"
-                "  observe: 请让大家围绕这件事各说一句。\n"
-                "  act: 我先表态，你们再接。"
+                "  - Single-turn: pass `--message` to run one turn and exit.\n"
+                "  - Setup-only: pass a natural language mode request and zaomeng will create a session."
             ),
             epilog=(
                 "Inline commands in interactive mode:\n"
@@ -89,13 +124,16 @@ class ZaomengCLI:
             formatter_class=argparse.RawTextHelpFormatter,
         )
         chat_parser.add_argument("--novel", "-n", required=True, help="Novel path or novel name")
-        chat_parser.add_argument("--mode", "-m", choices=["observe", "act"], default="observe")
+        chat_parser.add_argument(
+            "--mode",
+            "-m",
+            choices=["auto", "observe", "act"],
+            default="auto",
+            help="`auto` infers act/observe from natural language setup requests",
+        )
         chat_parser.add_argument("--character", "-c", help="Controlled character in act mode")
         chat_parser.add_argument("--session", "-s", help="Restore an existing session ID")
-        chat_parser.add_argument(
-            "--message",
-            help="Run a single non-interactive turn and exit",
-        )
+        chat_parser.add_argument("--message", help="Run a single non-interactive turn and exit")
 
         view_parser = subparsers.add_parser("view", help="View a distilled character profile")
         view_parser.add_argument("--character", "-c", required=True, help="Character name")
@@ -187,17 +225,34 @@ class ZaomengCLI:
     def _handle_chat(self, args: argparse.Namespace) -> None:
         print("=== Chat Engine ===")
         engine = ChatEngine(self.config)
+        session: Optional[dict] = None
 
         if args.session:
             session = engine.restore_session(args.session)
             print(f"Restored session: {session['title']}")
-        else:
+        elif args.novel:
             print(f"Loading scoped profiles for: {args.novel}")
-            session = engine.create_session(args.novel, args.mode)
-        session["mode"] = args.mode
+
+        intent = self._resolve_chat_intent(engine, args, session)
+
+        if session is None:
+            session = engine.create_session(args.novel, intent.mode)
+        session["mode"] = intent.mode
+        self._apply_chat_session_state(engine, session, intent)
 
         if args.message:
-            responses = self._run_single_chat_turn(engine, session, args)
+            if intent.setup_only:
+                engine._save_session(session)
+                self._print_setup_confirmation(session, intent)
+                return
+
+            responses = self._run_single_chat_turn(
+                engine,
+                session,
+                intent.mode,
+                intent.controlled_character,
+                intent.message,
+            )
             for speaker, message in responses:
                 print(f"{speaker}: {message}")
             engine.print_turn_cost()
@@ -205,13 +260,13 @@ class ZaomengCLI:
             return
 
         print("This is an interactive command. Prepare your first user turn before entering the session.")
-        if args.mode == "act":
-            role = args.character or "<character>"
+        if intent.mode == "act":
+            role = intent.controlled_character or "<character>"
             print(f"Mode: act | Controlled role: {role}")
             print("Starter input example: 我先表态，你们再接。")
-            if not args.character:
-                raise ValueError("--character is required in act mode")
-            engine.act_mode(session, args.character)
+            if not intent.controlled_character:
+                raise ValueError("--character is required in act mode unless the request names the role.")
+            engine.act_mode(session, intent.controlled_character)
             return
 
         print("Mode: observe")
@@ -223,31 +278,203 @@ class ZaomengCLI:
     def _run_single_chat_turn(
         engine: ChatEngine,
         session: dict,
-        args: argparse.Namespace,
+        mode: str,
+        controlled_character: str,
+        message: str,
     ) -> list[tuple[str, str]]:
-        if args.mode == "act":
-            if not args.character:
+        if mode == "act":
+            if not controlled_character:
                 raise ValueError("--character is required in act mode")
-            return engine.act_once(session, args.character, args.message)
-        return engine.observe_once(session, args.message)
+            return engine.act_once(session, controlled_character, message)
+        return engine.observe_once(session, message)
+
+    def _resolve_chat_intent(
+        self,
+        engine: ChatEngine,
+        args: argparse.Namespace,
+        session: Optional[dict],
+    ) -> ChatIntent:
+        text = (args.message or "").strip()
+        candidates = session.get("characters", []) if session else self._load_candidate_names(engine, args.novel)
+        explicit_mode = "" if args.mode == "auto" else args.mode
+        inferred_mode = self._infer_chat_mode(text)
+
+        mode = explicit_mode or ""
+        if not mode and args.character:
+            mode = "act"
+        if not mode:
+            mode = inferred_mode or (session.get("mode") if session else "observe")
+
+        ordered_mentions = engine._mentioned_characters(text, candidates) if text and candidates else []
+        controlled = self._resolve_character_reference(engine, args.character, candidates)
+        controlled = controlled or self._infer_controlled_character(mode, text, ordered_mentions, candidates, session)
+
+        if mode == "observe" and not explicit_mode and inferred_mode == "act":
+            mode = "act"
+            controlled = controlled or self._infer_controlled_character(mode, text, ordered_mentions, candidates, session)
+
+        targets = self._infer_target_characters(mode, controlled, ordered_mentions, candidates, session)
+        participants = self._infer_participants(mode, controlled, targets, ordered_mentions)
+        setup_only = self._is_setup_only_request(text, mode, controlled, targets)
+
+        return ChatIntent(
+            mode=mode,
+            controlled_character=controlled,
+            target_characters=targets,
+            participants=participants,
+            message="" if setup_only else text,
+            setup_only=setup_only,
+        )
+
+    def _apply_chat_session_state(self, engine: ChatEngine, session: dict, intent: ChatIntent) -> None:
+        state = session.setdefault("state", {})
+        state.setdefault("focus_targets", {})
+
+        if intent.setup_only and intent.participants:
+            session["characters"] = list(intent.participants)
+            state["selected_characters"] = list(intent.participants)
+            state["relation_matrix"] = engine._build_relation_matrix(intent.participants, session.get("novel_id"))
+
+        if intent.controlled_character:
+            state["controlled_character"] = intent.controlled_character
+
+        if intent.controlled_character and len(intent.target_characters) == 1:
+            state["focus_targets"][intent.controlled_character] = intent.target_characters[0]
+
+    @staticmethod
+    def _print_setup_confirmation(session: dict, intent: ChatIntent) -> None:
+        print(f"Session ready: {session['id']}")
+        print(f"Mode: {intent.mode}")
+        if intent.controlled_character:
+            print(f"Controlled role: {intent.controlled_character}")
+        if intent.target_characters:
+            print(f"Primary target: {', '.join(intent.target_characters)}")
+        if intent.participants:
+            print(f"Participants: {', '.join(intent.participants)}")
+
+    @staticmethod
+    def _load_candidate_names(engine: ChatEngine, novel: str) -> list[str]:
+        profiles = engine._load_character_profiles(novel_id=novel_id_from_input(novel))
+        return list(profiles.keys())
+
+    def _infer_chat_mode(self, text: str) -> str:
+        if not text:
+            return ""
+        lowered = text.lower()
+        if any(token in lowered for token in ("act模式", "进入act", "切换到act", " act ")):
+            return "act"
+        if any(token in text for token in self.ACT_MODE_HINTS):
+            return "act"
+        if any(token in text for token in self.OBSERVE_MODE_HINTS):
+            return "observe"
+        return ""
+
+    def _infer_controlled_character(
+        self,
+        mode: str,
+        text: str,
+        ordered_mentions: list[str],
+        candidates: list[str],
+        session: Optional[dict],
+    ) -> str:
+        if mode != "act":
+            return ""
+        if len(ordered_mentions) >= 2 and any(token in text for token in ("扮演", "聊天", "对话", "act")):
+            return ordered_mentions[0]
+        if len(ordered_mentions) == 1 and any(token in text for token in ("扮演", "饰演", "由我", "我来")):
+            return ordered_mentions[0]
+        if len(ordered_mentions) == 1 and any(token in text for token in ("我说一句", "回一句", "回我")) and len(candidates) == 2:
+            target = ordered_mentions[0]
+            return next((name for name in candidates if name != target), "")
+        if session:
+            stored = session.get("state", {}).get("controlled_character", "")
+            if stored in candidates:
+                return stored
+        return ""
+
+    @staticmethod
+    def _infer_target_characters(
+        mode: str,
+        controlled: str,
+        ordered_mentions: list[str],
+        candidates: list[str],
+        session: Optional[dict],
+    ) -> list[str]:
+        if mode != "act":
+            return ordered_mentions
+
+        targets = [name for name in ordered_mentions if name != controlled]
+        if targets:
+            return targets
+
+        if controlled and session:
+            remembered = session.get("state", {}).get("focus_targets", {}).get(controlled, "")
+            if remembered in candidates:
+                return [remembered]
+        return []
+
+    @staticmethod
+    def _infer_participants(
+        mode: str,
+        controlled: str,
+        targets: list[str],
+        ordered_mentions: list[str],
+    ) -> list[str]:
+        if mode == "act":
+            participants: list[str] = []
+            if controlled:
+                participants.append(controlled)
+            for name in targets:
+                if name not in participants:
+                    participants.append(name)
+            return participants
+        return ordered_mentions
+
+    def _is_setup_only_request(
+        self,
+        text: str,
+        mode: str,
+        controlled: str,
+        targets: list[str],
+    ) -> bool:
+        if not text:
+            return False
+        if mode == "act":
+            if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in self.ACT_SETUP_PATTERNS):
+                return True
+            if "模式" in text and controlled:
+                return True
+            if controlled and targets and any(token in text for token in ("聊天", "对话", "互动")):
+                return True
+        if mode == "observe":
+            if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in self.OBSERVE_SETUP_PATTERNS):
+                return True
+        return False
+
+    @staticmethod
+    def _resolve_character_reference(engine: ChatEngine, raw_name: Optional[str], candidates: list[str]) -> str:
+        if not raw_name:
+            return ""
+        if not candidates:
+            return normalize_character_name(raw_name)
+        try:
+            return engine._resolve_character_name(raw_name, candidates)
+        except ValueError:
+            return ""
 
     def _handle_view(self, args: argparse.Namespace) -> None:
-        characters_root = self.config.get_path("characters")
         novel_id = novel_id_from_input(args.novel) if args.novel else None
-        matches = find_character_file(characters_root, args.character, novel_id=novel_id)
+        engine = ChatEngine(self.config)
+        profiles = engine._load_character_profiles(novel_id=novel_id)
+        normalized = normalize_character_name(args.character)
+        if normalized not in profiles:
+            normalized = None
 
-        if not matches:
+        if not normalized:
             scope = f" under novel '{novel_id}'" if novel_id else ""
             print(f"Profile not found for {args.character}{scope}.")
             return
-        if len(matches) > 1:
-            print("Multiple profiles matched. Please pass --novel to disambiguate:")
-            for item in matches:
-                print(f"  - {item}")
-            return
-
-        with matches[0].open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
+        data = profiles[normalized]
 
         print(f"=== {args.character} ===")
         if data.get("novel_id"):
@@ -281,10 +508,18 @@ class ZaomengCLI:
             "timestamp": int(time.time()),
         }
 
-        filename = f"correction_{args.session}_{correction['timestamp']}.json"
+        filename = f"correction_{args.session}_{correction['timestamp']}.md"
         filepath = corrections_dir / filename
-        with filepath.open("w", encoding="utf-8") as handle:
-            json.dump(correction, handle, ensure_ascii=False, indent=2)
+        save_markdown_data(
+            filepath,
+            correction,
+            title="CORRECTION",
+            summary=[
+                f"- character: {correction['character']}",
+                f"- target: {correction['target']}",
+                f"- reason: {correction['reason']}",
+            ],
+        )
 
         print(f"Saved correction: {filepath}")
 

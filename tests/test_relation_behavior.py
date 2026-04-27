@@ -13,7 +13,54 @@ from src.modules.distillation import NovelDistiller
 from src.modules.reflection import ReflectionEngine
 from src.modules.relationships import RelationshipExtractor
 from src.modules.speaker import Speaker
-from src.utils.file_utils import load_json, normalize_character_name, normalize_relation_key, save_json
+from src.utils.file_utils import load_markdown_data, normalize_character_name, normalize_relation_key, save_markdown_data
+
+
+def save_json(path: Path, data: dict) -> None:
+    p = Path(path)
+    if "characters" in p.parts and p.suffix == ".json":
+        persona_dir = p.parent / p.stem
+        persona_dir.mkdir(parents=True, exist_ok=True)
+        profile = {
+            "name": data.get("name", p.stem),
+            "novel_id": p.parent.name,
+            "source_path": "",
+            "core_traits": data.get("core_traits", []),
+            "values": data.get("values", {}),
+            "speech_style": data.get("speech_style", ""),
+            "identity_anchor": data.get("identity_anchor", ""),
+            "soul_goal": data.get("soul_goal", ""),
+            "worldview": data.get("worldview", ""),
+            "thinking_style": data.get("thinking_style", ""),
+            "typical_lines": data.get("typical_lines", []),
+            "decision_rules": data.get("decision_rules", []),
+            "life_experience": data.get("life_experience", []),
+            "taboo_topics": data.get("taboo_topics", []),
+            "forbidden_behaviors": data.get("forbidden_behaviors", []),
+            "speech_habits": data.get("speech_habits", {"cadence": "", "signature_phrases": [], "forbidden_fillers": []}),
+            "emotion_profile": data.get("emotion_profile", {"anger_style": "", "joy_style": "", "grievance_style": ""}),
+            "arc": data.get("arc", {"start": {}, "mid": {}, "end": {}}),
+            "evidence": data.get("evidence", {"description_count": 0, "dialogue_count": 0, "thought_count": 0, "chunk_count": 0}),
+        }
+        content = NovelDistiller()._render_profile_md(profile)
+        (persona_dir / "PROFILE.md").write_text(content, encoding="utf-8")
+        if not (persona_dir / "MEMORY.md").exists():
+            (persona_dir / "MEMORY.md").write_text("# MEMORY\n", encoding="utf-8")
+        return
+    if "relations" in p.parts and p.suffix == ".json":
+        save_markdown_data(
+            p.with_suffix(".md"),
+            {"novel_id": p.parent.name, "relations": data},
+            title="RELATION_GRAPH",
+        )
+        return
+    save_markdown_data(p.with_suffix(".md"), data, title="DATA")
+
+
+def load_json(path: Path, default=None):
+    p = Path(path)
+    target = p.with_suffix(".md") if p.suffix == ".json" else p
+    return load_markdown_data(target, default=default)
 
 
 class RelationBehaviorTests(unittest.TestCase):
@@ -34,6 +81,48 @@ class RelationBehaviorTests(unittest.TestCase):
             (root / folder).mkdir(parents=True, exist_ok=True)
         return config
 
+    def write_profile(self, root: Path, novel_id: str, name: str, **overrides) -> Path:
+        persona_dir = root / "characters" / novel_id / name
+        persona_dir.mkdir(parents=True, exist_ok=True)
+        profile = {
+            "name": name,
+            "novel_id": novel_id,
+            "source_path": "",
+            "core_traits": [],
+            "values": {},
+            "speech_style": "",
+            "identity_anchor": "",
+            "soul_goal": "",
+            "worldview": "",
+            "thinking_style": "",
+            "typical_lines": [],
+            "decision_rules": [],
+            "life_experience": [],
+            "taboo_topics": [],
+            "forbidden_behaviors": [],
+            "speech_habits": {"cadence": "", "signature_phrases": [], "forbidden_fillers": []},
+            "emotion_profile": {"anger_style": "", "joy_style": "", "grievance_style": ""},
+            "arc": {"start": {}, "mid": {}, "end": {}},
+            "evidence": {"description_count": 0, "dialogue_count": 0, "thought_count": 0, "chunk_count": 0},
+        }
+        profile.update(overrides)
+        content = NovelDistiller()._render_profile_md(profile)
+        (persona_dir / "PROFILE.md").write_text(content, encoding="utf-8")
+        if not (persona_dir / "MEMORY.md").exists():
+            (persona_dir / "MEMORY.md").write_text("# MEMORY\n", encoding="utf-8")
+        return persona_dir
+
+    def write_relations(self, root: Path, novel_id: str, relations: dict) -> Path:
+        relation_dir = root / "relations" / novel_id
+        relation_dir.mkdir(parents=True, exist_ok=True)
+        path = relation_dir / f"{novel_id}_relations.md"
+        save_markdown_data(
+            path,
+            {"novel_id": novel_id, "relations": relations},
+            title="RELATION_GRAPH",
+        )
+        return path
+
     def test_extract_pair_interactions_requires_same_sentence(self):
         extractor = RelationshipExtractor(Config())
         chunk = (
@@ -50,6 +139,16 @@ class RelationBehaviorTests(unittest.TestCase):
         self.assertEqual(len(pairs["\u6797\u9edb\u7389_\u8d3e\u5b9d\u7389"]), 2)
         self.assertNotIn("\u6797\u9edb\u7389_\u859b\u5b9d\u9497", pairs)
         self.assertNotIn("\u859b\u5b9d\u9497_\u8d3e\u5b9d\u7389", pairs)
+
+    def test_config_resolves_relative_paths_from_config_dir_not_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "config.yaml"
+            config_path.write_text("paths:\n  characters: data/characters\n", encoding="utf-8")
+
+            config = Config(str(config_path))
+
+            self.assertEqual(Path(config.get_path("characters")), root / "data" / "characters")
 
     def test_chat_engine_scopes_profiles_and_relations_by_novel(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -611,6 +710,8 @@ class RelationBehaviorTests(unittest.TestCase):
             distiller.distill(str(novel_path), characters=["\u5218\u5907"])
 
             persona_dir = root / "characters" / "mini" / "\u5218\u5907"
+            self.assertTrue((persona_dir / "PROFILE.generated.md").exists())
+            self.assertTrue((persona_dir / "PROFILE.md").exists())
             self.assertTrue((persona_dir / "SOUL.generated.md").exists())
             self.assertTrue((persona_dir / "IDENTITY.generated.md").exists())
             self.assertTrue((persona_dir / "AGENTS.generated.md").exists())
@@ -618,6 +719,41 @@ class RelationBehaviorTests(unittest.TestCase):
             self.assertTrue((persona_dir / "NAVIGATION.generated.md").exists())
             self.assertTrue((persona_dir / "NAVIGATION.md").exists())
             self.assertTrue((persona_dir / "SOUL.md").exists())
+            self.assertFalse((root / "characters" / "mini" / "\u5218\u5907.json").exists())
+
+    def test_chat_engine_can_load_markdown_profile_without_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self.make_config(root)
+
+            persona_dir = root / "characters" / "sanguo" / "\u5218\u5907"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "PROFILE.md").write_text(
+                "# PROFILE\n\n"
+                "## Meta\n"
+                "- name: \u5218\u5907\n"
+                "- novel_id: sanguo\n\n"
+                "## Core\n"
+                "- core_traits: \u4ec1\u539a\uff1b\u514b\u5236\n"
+                "- values: \u8d23\u4efb=9\uff1b\u5584\u826f=8\n"
+                "- speech_style: \u514b\u5236\n"
+                "- soul_goal: \u5b88\u4f4f\u4f17\u4eba\u9000\u8def\n"
+                "- worldview: \u5148\u987e\u4f17\u4eba\n"
+                "- thinking_style: \u5148\u770b\u540e\u679c\n\n"
+                "## Voice\n"
+                "- decision_rules: \u540c\u4f34\u53d7\u538b\u2192\u4e3b\u52a8\u4ecb\u5165\n"
+                "- cadence: medium\n",
+                encoding="utf-8",
+            )
+            (persona_dir / "MEMORY.md").write_text("# MEMORY\n", encoding="utf-8")
+
+            engine = ChatEngine(config)
+            profile = engine._load_character_profiles("sanguo")["\u5218\u5907"]
+
+            self.assertEqual(profile["name"], "\u5218\u5907")
+            self.assertEqual(profile["speech_style"], "\u514b\u5236")
+            self.assertEqual(profile["values"]["\u8d23\u4efb"], 9)
+            self.assertIn("\u4ec1\u539a", profile["core_traits"])
 
     def test_relationship_extractor_exports_relation_markdown_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -897,7 +1033,17 @@ class RelationBehaviorTests(unittest.TestCase):
 
         with patch("src.core.main.ChatEngine") as engine_cls, patch("sys.argv", argv), patch("builtins.print"):
             engine = engine_cls.return_value
-            session = {"id": "testsession", "title": "test", "characters": ["\u8d3e\u5b9d\u7389", "\u6797\u9edb\u7389"]}
+            engine._load_character_profiles.return_value = {
+                "\u8d3e\u5b9d\u7389": {"name": "\u8d3e\u5b9d\u7389"},
+                "\u6797\u9edb\u7389": {"name": "\u6797\u9edb\u7389"},
+            }
+            engine._resolve_character_name.return_value = "\u8d3e\u5b9d\u7389"
+            session = {
+                "id": "testsession",
+                "title": "test",
+                "characters": ["\u8d3e\u5b9d\u7389", "\u6797\u9edb\u7389"],
+                "state": {"focus_targets": {}},
+            }
             engine.create_session.return_value = session
             engine.act_once.return_value = [("\u6797\u9edb\u7389", "\u4e0d\u52b3\u6302\u5ff5\uff0c\u6211\u4eca\u65e5\u8fd8\u597d\u3002")]
 
@@ -910,6 +1056,80 @@ class RelationBehaviorTests(unittest.TestCase):
                 "\u59b9\u59b9\u4eca\u65e5\u53ef\u5927\u5b89\u4e86\uff1f",
             )
             engine.act_mode.assert_not_called()
+
+    def test_cli_chat_auto_mode_detects_setup_only_act_request(self):
+        argv = [
+            "zaomeng",
+            "chat",
+            "--novel",
+            "hongloumeng.txt",
+            "--message",
+            "\u8ba9\u6211\u626e\u6f14\u8d3e\u5b9d\u7389\u548c\u6797\u9edb\u7389\u804a\u5929",
+        ]
+
+        with patch("src.core.main.ChatEngine") as engine_cls, patch("sys.argv", argv), patch("builtins.print"):
+            engine = engine_cls.return_value
+            engine._load_character_profiles.return_value = {
+                "\u8d3e\u5b9d\u7389": {"name": "\u8d3e\u5b9d\u7389"},
+                "\u6797\u9edb\u7389": {"name": "\u6797\u9edb\u7389"},
+            }
+            engine._mentioned_characters.return_value = ["\u8d3e\u5b9d\u7389", "\u6797\u9edb\u7389"]
+            session = {
+                "id": "setupsession",
+                "title": "setup",
+                "characters": ["\u8d3e\u5b9d\u7389", "\u6797\u9edb\u7389", "\u859b\u5b9d\u9497"],
+                "state": {"focus_targets": {}},
+            }
+            engine.create_session.return_value = session
+
+            ZaomengCLI().run()
+
+            engine.create_session.assert_called_once_with("hongloumeng.txt", "act")
+            engine.act_once.assert_not_called()
+            engine.observe_once.assert_not_called()
+            engine._save_session.assert_called_once()
+            self.assertEqual(session["mode"], "act")
+            self.assertEqual(session["state"]["controlled_character"], "\u8d3e\u5b9d\u7389")
+            self.assertEqual(session["state"]["focus_targets"]["\u8d3e\u5b9d\u7389"], "\u6797\u9edb\u7389")
+            self.assertEqual(session["characters"], ["\u8d3e\u5b9d\u7389", "\u6797\u9edb\u7389"])
+
+    def test_cli_chat_auto_mode_reuses_controlled_character_from_session(self):
+        argv = [
+            "zaomeng",
+            "chat",
+            "--novel",
+            "hongloumeng.txt",
+            "--session",
+            "setupsession",
+            "--message",
+            "\u59b9\u59b9\u4eca\u65e5\u8fd8\u597d\u4e48\uff1f",
+        ]
+
+        with patch("src.core.main.ChatEngine") as engine_cls, patch("sys.argv", argv), patch("builtins.print"):
+            engine = engine_cls.return_value
+            engine._mentioned_characters.return_value = []
+            session = {
+                "id": "setupsession",
+                "title": "setup",
+                "novel_id": "hongloumeng",
+                "mode": "act",
+                "characters": ["\u8d3e\u5b9d\u7389", "\u6797\u9edb\u7389"],
+                "state": {
+                    "controlled_character": "\u8d3e\u5b9d\u7389",
+                    "focus_targets": {"\u8d3e\u5b9d\u7389": "\u6797\u9edb\u7389"},
+                },
+            }
+            engine.restore_session.return_value = session
+            engine.act_once.return_value = [("\u6797\u9edb\u7389", "\u4e0d\u52b3\u60e6\u5ff5\uff0c\u6211\u8fd8\u597d\u3002")]
+
+            ZaomengCLI().run()
+
+            engine.restore_session.assert_called_once_with("setupsession")
+            engine.act_once.assert_called_once_with(
+                session,
+                "\u8d3e\u5b9d\u7389",
+                "\u59b9\u59b9\u4eca\u65e5\u8fd8\u597d\u4e48\uff1f",
+            )
 
 
 if __name__ == "__main__":

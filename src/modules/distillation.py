@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.config import Config
 from src.core.llm_client import LLMClient
-from src.utils.file_utils import canonical_aliases, ensure_dir, novel_id_from_input, safe_filename, save_json
+from src.utils.file_utils import canonical_aliases, ensure_dir, novel_id_from_input, safe_filename
 from src.utils.text_parser import load_novel_text, split_sentences
 from src.utils.token_counter import TokenCounter
 
@@ -177,7 +177,6 @@ class NovelDistiller:
                 "chunk_count": len(arc_points.get(name, [])),
             }
             profiles[name] = profile
-            save_json(out_dir / f"{safe_filename(name)}.json", profile)
             self._export_persona_bundle(out_dir, profile)
 
         return profiles
@@ -687,6 +686,12 @@ class NovelDistiller:
 
     def _export_persona_bundle(self, out_dir: Path, profile: Dict[str, Any]) -> None:
         char_dir = ensure_dir(out_dir / safe_filename(profile.get("name", "unnamed")))
+        profile_content = self._render_profile_md(profile)
+        profile_generated = char_dir / "PROFILE.generated.md"
+        profile_generated.write_text(profile_content, encoding="utf-8")
+        profile_editable = char_dir / "PROFILE.md"
+        if not profile_editable.exists():
+            profile_editable.write_text(profile_content, encoding="utf-8")
         bundle = {
             "SOUL": self._render_soul_md(profile),
             "IDENTITY": self._render_identity_md(profile),
@@ -780,6 +785,61 @@ class NovelDistiller:
     def _join_items(items: List[str]) -> str:
         cleaned = [str(item).strip() for item in items if str(item).strip()]
         return "；".join(cleaned) if cleaned else ""
+
+    @staticmethod
+    def _join_metric_map(items: Dict[str, Any]) -> str:
+        if not isinstance(items, dict):
+            return ""
+        parts = []
+        for key, value in items.items():
+            key_text = str(key).strip()
+            if not key_text:
+                continue
+            parts.append(f"{key_text}={value}")
+        return "；".join(parts)
+
+    def _render_profile_md(self, profile: Dict[str, Any]) -> str:
+        speech_habits = profile.get("speech_habits", {}) if isinstance(profile.get("speech_habits", {}), dict) else {}
+        emotion = profile.get("emotion_profile", {}) if isinstance(profile.get("emotion_profile", {}), dict) else {}
+        arc = profile.get("arc", {}) if isinstance(profile.get("arc", {}), dict) else {}
+        evidence = profile.get("evidence", {}) if isinstance(profile.get("evidence", {}), dict) else {}
+        return (
+            "# PROFILE\n"
+            "<!-- Canonical markdown profile storage. Runtime loads this file before persona overlays. -->\n\n"
+            "## Meta\n"
+            f"- name: {profile.get('name', '')}\n"
+            f"- novel_id: {profile.get('novel_id', '')}\n"
+            f"- source_path: {profile.get('source_path', '')}\n\n"
+            "## Core\n"
+            f"- core_traits: {self._join_items(profile.get('core_traits', []))}\n"
+            f"- values: {self._join_metric_map(profile.get('values', {}))}\n"
+            f"- speech_style: {profile.get('speech_style', '')}\n"
+            f"- identity_anchor: {profile.get('identity_anchor', '')}\n"
+            f"- soul_goal: {profile.get('soul_goal', '')}\n"
+            f"- worldview: {profile.get('worldview', '')}\n"
+            f"- thinking_style: {profile.get('thinking_style', '')}\n\n"
+            "## Voice\n"
+            f"- typical_lines: {self._join_items(profile.get('typical_lines', []))}\n"
+            f"- decision_rules: {self._join_items(profile.get('decision_rules', []))}\n"
+            f"- life_experience: {self._join_items(profile.get('life_experience', []))}\n"
+            f"- taboo_topics: {self._join_items(profile.get('taboo_topics', []))}\n"
+            f"- forbidden_behaviors: {self._join_items(profile.get('forbidden_behaviors', []))}\n"
+            f"- cadence: {speech_habits.get('cadence', '')}\n"
+            f"- signature_phrases: {self._join_items(speech_habits.get('signature_phrases', []))}\n"
+            f"- forbidden_fillers: {self._join_items(speech_habits.get('forbidden_fillers', []))}\n"
+            f"- anger_style: {emotion.get('anger_style', '')}\n"
+            f"- joy_style: {emotion.get('joy_style', '')}\n"
+            f"- grievance_style: {emotion.get('grievance_style', '')}\n\n"
+            "## Arc\n"
+            f"- arc_start: {self._join_metric_map(arc.get('start', {}))}\n"
+            f"- arc_mid: {self._join_metric_map(arc.get('mid', {}))}\n"
+            f"- arc_end: {self._join_metric_map(arc.get('end', {}))}\n\n"
+            "## Evidence\n"
+            f"- description_count: {evidence.get('description_count', 0)}\n"
+            f"- dialogue_count: {evidence.get('dialogue_count', 0)}\n"
+            f"- thought_count: {evidence.get('thought_count', 0)}\n"
+            f"- chunk_count: {evidence.get('chunk_count', 0)}\n"
+        )
 
     def _render_soul_md(self, profile: Dict[str, Any]) -> str:
         values = profile.get("values", {})

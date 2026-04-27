@@ -102,8 +102,8 @@ python -m src.core.main extract --novel data/hongloumeng.txt --force
 
 这一步会在小说级目录下生成角色档案和关系文件：
 
-- `data/characters/hongloumeng/*.json`
-- `data/relations/hongloumeng/hongloumeng_relations.json`
+- `data/characters/hongloumeng/<角色名>/PROFILE.md`
+- `data/relations/hongloumeng/hongloumeng_relations.md`
 
 现在系统已经支持指定角色时的两字别名匹配，例如：
 
@@ -175,7 +175,7 @@ python -m src.core.main view --character 贾宝玉 --novel data/hongloumeng.txt
 
 如果你觉得自动抽取的关系不够细，完全可以手动编辑关系文件，再重新进入群聊：
 
-- 查看现有关系：`data/relations/hongloumeng/hongloumeng_relations.json`
+- 查看现有关系：`data/relations/hongloumeng/hongloumeng_relations.md`
 - 手动补充或调整某组角色关系
 - 再运行 `chat`
 
@@ -294,7 +294,7 @@ chat_engine:
 ```bash
 python -m src.core.main distill --novel <path> [--characters A,B] [--output <dir>] [--force]
 python -m src.core.main extract --novel <path> [--output <path>] [--force]
-python -m src.core.main chat --novel <path-or-name> --mode observe|act [--character <name>] [--session <id>] [--message <text>]
+python -m src.core.main chat --novel <path-or-name> --mode auto|observe|act [--character <name>] [--session <id>] [--message <text>]
 python -m src.core.main view --character <name> [--novel <path-or-name>]
 python -m src.core.main correct --session <id> --message <raw> --corrected <fixed> [--character <name>] [--target <name>] [--reason <text>]
 ```
@@ -364,10 +364,11 @@ tests/test_relation_behavior.py
 
 ## Persona Files
 
-Current `distill` output is no longer limited to `*.json`.
+Current `distill` output is markdown-based.
 
 For each character, the system now also exports an editable persona bundle under:
 
+- `data/characters/<novel_id>/<角色名>/PROFILE.md`
 - `data/characters/<novel_id>/<角色名>/SOUL.md`
 - `data/characters/<novel_id>/<角色名>/NAVIGATION.md`
 - `data/characters/<novel_id>/<角色名>/IDENTITY.md`
@@ -379,8 +380,44 @@ It also keeps matching `*.generated.md` files so you can compare auto-distilled 
 
 Runtime now reads `NAVIGATION.generated.md` first, then applies `NAVIGATION.md` overrides, then loads only the files declared in `load_order`. Optional layers such as `GOALS.md`, `STYLE.md`, `TRAUMA.md`, and `RELATIONS.md` are created only when distillation or later editing actually needs them.
 
+Character profile storage is markdown-only. Distillation writes the canonical archive into `PROFILE.md` / `PROFILE.generated.md`.
+All `data/...` output paths are resolved from the repo root or the active `config.yaml` directory, not from the caller's current working directory.
+
+## Natural Language Intent Routing
+
+`chat` now supports `--mode auto` and can infer whether the user is asking to:
+
+- enter `act` mode
+- enter `observe` mode
+- continue an existing in-character turn
+
+Recommended pattern for agents:
+
+```bash
+python -m src.core.main chat --novel <path-or-name> --mode auto --message "<raw user request>"
+```
+
+Examples:
+
+```bash
+python -m src.core.main chat --novel data/hongloumeng.txt --mode auto --message "让我扮演贾宝玉和林黛玉聊天"
+python -m src.core.main chat --novel data/hongloumeng.txt --session <session_id> --message "妹妹今日可大安了？"
+```
+
+```bash
+python -m src.core.main chat --novel data/sanguo.txt --mode auto --message "进入刘备、张飞、关羽群聊模式"
+python -m src.core.main chat --novel data/sanguo.txt --session <session_id> --message "刘备：二位贤弟，今日总算得片刻清闲。"
+```
+
+Important behavior:
+
+- Requests like `让我扮演贾宝玉和林黛玉聊天` or `我说一句，黛玉回一句` are treated as setup-only intent, not as the character's spoken line.
+- In setup-only `act` requests, zaomeng stores the controlled role in the session. Follow-up turns can continue with `--session <id> --message "<你的台词>"` without repeating `--character`, unless you want to switch roles.
+- Requests like `请让大家围绕这件事各说一句` are still treated as a real `observe` turn and will immediately produce replies.
+
 These files are used as runtime inputs:
 
+- `PROFILE.md`: the canonical markdown character archive containing name, novel scope, values, evidence, arc, and base voice data
 - `NAVIGATION.md`: the persona entrypoint and routing map; it declares load order, which files are active, and which behavior should be sourced from which file
 - `SOUL.md`: identity anchor, soul goal, worldview, speech constraints, taboo topics, forbidden behaviors
 - `GOALS.md`: optional long-term drive, decision pressure, and strategic preference layer

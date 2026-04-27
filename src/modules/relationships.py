@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from src.core.config import Config
 from src.core.llm_client import LLMClient
 from src.modules.distillation import NovelDistiller
-from src.utils.file_utils import ensure_dir, novel_id_from_input, safe_filename, save_json
+from src.utils.file_utils import ensure_dir, novel_id_from_input, safe_filename, save_markdown_data
 from src.utils.text_parser import load_novel_text, split_sentences
 from src.utils.token_counter import TokenCounter
 
@@ -208,18 +208,30 @@ class RelationshipExtractor:
     ) -> None:
         if not output_path:
             out_dir = ensure_dir(Path(self.config.get_path("relations")) / novel_id)
-            file = out_dir / f"{novel_id}_relations.json"
-            save_json(file, relations)
+            file = out_dir / f"{novel_id}_relations.md"
+            self._save_relation_graph_md(file, novel_id, relations)
             self._export_relation_bundle(relations, novel_id)
             return
 
         out = Path(output_path)
-        if out.suffix.lower() == ".json":
-            save_json(out, relations)
+        if out.suffix.lower() == ".md":
+            self._save_relation_graph_md(out, novel_id, relations)
         else:
             out_dir = ensure_dir(out)
-            save_json(out_dir / (Path(novel_path).stem + "_relations.json"), relations)
+            self._save_relation_graph_md(out_dir / (Path(novel_path).stem + "_relations.md"), novel_id, relations)
         self._export_relation_bundle(relations, novel_id)
+
+    @staticmethod
+    def _save_relation_graph_md(path: Path, novel_id: str, relations: Dict[str, Dict[str, Any]]) -> None:
+        save_markdown_data(
+            path,
+            {"novel_id": novel_id, "relations": relations},
+            title="RELATION_GRAPH",
+            summary=[
+                f"- novel_id: {novel_id}",
+                f"- relation_count: {len(relations)}",
+            ],
+        )
 
     def _export_relation_bundle(self, relations: Dict[str, Dict[str, Any]], novel_id: str) -> None:
         by_character: Dict[str, List[tuple[str, Dict[str, Any]]]] = defaultdict(list)
