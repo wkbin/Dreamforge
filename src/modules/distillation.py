@@ -642,15 +642,34 @@ class NovelDistiller:
     ) -> Dict[str, Any]:
         if not arc_values:
             return {
-                "start": fallback_values,
-                "mid": {**fallback_values, "trigger_event": "信息不足"},
-                "end": {**fallback_values, "final_state": "信息不足"},
+                "start": {},
+                "mid": {"trigger_event": "未识别到稳定弧光证据"},
+                "end": {"final_state": "未判定（证据不足）"},
             }
 
         ordered = sorted(arc_values, key=lambda item: item[0])
-        start = ordered[0][1] or fallback_values
-        mid = ordered[len(ordered) // 2][1] or fallback_values
-        end = ordered[-1][1] or fallback_values
+        start = dict(ordered[0][1] or {})
+        mid = dict(ordered[len(ordered) // 2][1] or {})
+        end = dict(ordered[-1][1] or {})
+
+        if len(ordered) < 2:
+            return {
+                "start": start,
+                "mid": {"trigger_event": "样本跨度不足，未识别到稳定变化事件"},
+                "end": {"final_state": "未判定（片段跨度不足）"},
+            }
+
+        spread = 0
+        for dim in self._value_dimensions():
+            series = [int(values.get(dim, fallback_values.get(dim, 5))) for _, values in ordered]
+            spread = max(spread, max(series) - min(series))
+        if spread < 1:
+            return {
+                "start": start,
+                "mid": {"trigger_event": "未识别到明确变化事件"},
+                "end": {"final_state": "静态人物或当前片段未呈现稳定弧光"},
+            }
+
         return {
             "start": start,
             "mid": {**mid, "trigger_event": "关键关系或冲突推动"},

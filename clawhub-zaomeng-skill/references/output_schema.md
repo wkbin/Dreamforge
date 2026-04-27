@@ -77,6 +77,7 @@
 - `values` all integers in `[0,10]`
 - evidence fields store counts, not raw text arrays
 - any deep persona field without solid evidence may stay empty
+- `arc_start` / `arc_mid` / `arc_end` 只有在识别到稳定阶段变化时才应量化；若证据不足，应留空或仅保留 `trigger_event` / `final_state` 的未判定说明
 
 ### 26 维度覆盖映射
 
