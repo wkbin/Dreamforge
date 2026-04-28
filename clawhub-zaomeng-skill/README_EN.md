@@ -127,6 +127,11 @@ The packaged runtime entrypoint inside the skill is:
 runtime/zaomeng_cli.py
 ```
 
+The runtime source tree is split into two layers:
+
+- thin runtime-owned wrappers: `runtime/src/core/main.py`, `runtime/src/core/runtime_factory.py`, `runtime/src/core/logging_utils.py`
+- mirrored shared implementation: `runtime/src/core/cli_app.py`, `runtime/src/core/runtime_parts.py`, `runtime/src/core/logging_setup.py`, plus shared `modules/` and `utils/`
+
 ## Recommended Usage Flow
 
 The correct order is not to jump into chat immediately.  

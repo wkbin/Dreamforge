@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -23,11 +24,23 @@ CANONICAL_TO_ALIASES: dict[str, list[str]] = {}
 for alias_name, canonical_name in CANONICAL_NAME_ALIASES.items():
     CANONICAL_TO_ALIASES.setdefault(canonical_name, []).append(alias_name)
 
+_CACHE_MISS = object()
+_MARKDOWN_DATA_CACHE: dict[Path, tuple[tuple[int, int], Any]] = {}
+
 
 def ensure_dir(path: str | Path) -> Path:
     p = Path(path)
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _file_signature(path: Path) -> tuple[int, int]:
+    stat = path.stat()
+    return stat.st_mtime_ns, stat.st_size
+
+
+def clear_markdown_data_cache() -> None:
+    _MARKDOWN_DATA_CACHE.clear()
 
 
 def _sanitize_json_value(value: Any) -> Any:
@@ -44,15 +57,28 @@ def _sanitize_json_value(value: Any) -> Any:
 def load_markdown_data(path: str | Path, default: Any = None) -> Any:
     p = Path(path)
     if not p.exists():
-        return default
-    text = p.read_text(encoding="utf-8")
-    if not text.startswith("---"):
-        return default
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return default
-    payload = yaml.safe_load(parts[1]) or {}
-    return payload
+        return copy.deepcopy(default)
+
+    resolved = p.resolve()
+    signature = _file_signature(resolved)
+    cached = _MARKDOWN_DATA_CACHE.get(resolved)
+    if cached and cached[0] == signature:
+        payload = cached[1]
+        if payload is _CACHE_MISS:
+            return copy.deepcopy(default)
+        return copy.deepcopy(payload)
+
+    text = resolved.read_text(encoding="utf-8")
+    payload: Any = _CACHE_MISS
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) >= 3:
+            payload = yaml.safe_load(parts[1]) or {}
+
+    _MARKDOWN_DATA_CACHE[resolved] = (signature, payload)
+    if payload is _CACHE_MISS:
+        return copy.deepcopy(default)
+    return copy.deepcopy(payload)
 
 
 def save_markdown_data(
@@ -72,6 +98,8 @@ def save_markdown_data(
         body_lines.append("")
     content = f"---\n{frontmatter}\n---\n\n" + "\n".join(body_lines).rstrip() + "\n"
     p.write_text(content, encoding="utf-8")
+    resolved = p.resolve()
+    _MARKDOWN_DATA_CACHE[resolved] = (_file_signature(resolved), copy.deepcopy(sanitized))
 
 
 def safe_filename(name: str) -> str:

@@ -7,61 +7,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.core.config import Config
-from src.core.llm_client import LLMClient
 from src.core.main import ZaomengCLI
-from src.core.path_provider import PathProvider
-from src.core.rulebook import RuleBook
-from src.modules.chat_engine import ChatEngine
+from src.core.runtime_factory import build_runtime_parts
 from src.modules.distillation import NovelDistiller
-from src.modules.reflection import ReflectionEngine
-from src.modules.relationships import RelationshipExtractor
-from src.modules.speaker import Speaker
-from src.utils.token_counter import TokenCounter
 from src.utils.file_utils import load_markdown_data, normalize_character_name, normalize_relation_key, save_markdown_data
-
-
-def build_runtime_parts(config: Config) -> dict:
-    path_provider = PathProvider(config)
-    rulebook = RuleBook(config, path_provider=path_provider)
-    llm = LLMClient(config)
-    token_counter = TokenCounter()
-    reflection = ReflectionEngine(config, path_provider=path_provider)
-    distiller = NovelDistiller(
-        config,
-        llm_client=llm,
-        token_counter=token_counter,
-        rulebook=rulebook,
-        path_provider=path_provider,
-    )
-    speaker = Speaker(config, correction_service=reflection, rulebook=rulebook)
-    chat_engine = ChatEngine(
-        config,
-        llm=llm,
-        reflection=reflection,
-        speaker=speaker,
-        distiller=distiller,
-        rulebook=rulebook,
-        path_provider=path_provider,
-    )
-    extractor = RelationshipExtractor(
-        config,
-        llm_client=llm,
-        token_counter=token_counter,
-        distiller=distiller,
-        rulebook=rulebook,
-        path_provider=path_provider,
-    )
-    return {
-        "path_provider": path_provider,
-        "rulebook": rulebook,
-        "llm": llm,
-        "token_counter": token_counter,
-        "reflection": reflection,
-        "distiller": distiller,
-        "speaker": speaker,
-        "chat_engine": chat_engine,
-        "extractor": extractor,
-    }
 
 
 _PROFILE_RENDERER: NovelDistiller | None = None
@@ -70,7 +19,7 @@ _PROFILE_RENDERER: NovelDistiller | None = None
 def render_profile_markdown(profile: dict) -> str:
     global _PROFILE_RENDERER
     if _PROFILE_RENDERER is None:
-        _PROFILE_RENDERER = build_runtime_parts(Config())["distiller"]
+        _PROFILE_RENDERER = build_runtime_parts(Config()).distiller
     return _PROFILE_RENDERER._render_profile_md(profile)
 
 
@@ -141,7 +90,18 @@ class RelationBehaviorTests(unittest.TestCase):
         return config
 
     def make_runtime_parts(self, config: Config) -> dict:
-        return build_runtime_parts(config)
+        parts = build_runtime_parts(config)
+        return {
+            "path_provider": parts.path_provider,
+            "rulebook": parts.rulebook,
+            "llm": parts.llm,
+            "token_counter": parts.token_counter,
+            "reflection": parts.reflection,
+            "distiller": parts.distiller,
+            "speaker": parts.speaker,
+            "chat_engine": parts.chat_engine,
+            "extractor": parts.extractor,
+        }
 
     def write_profile(self, root: Path, novel_id: str, name: str, **overrides) -> Path:
         persona_dir = root / "characters" / novel_id / name
@@ -211,6 +171,20 @@ class RelationBehaviorTests(unittest.TestCase):
             config = Config(str(config_path))
 
             self.assertEqual(Path(config.get_path("characters")), root / "data" / "characters")
+
+    def test_cli_accepts_injected_runtime_parts_builder(self):
+        parts = build_runtime_parts(Config())
+        seen = {"count": 0}
+
+        def builder(config: Config | None):
+            seen["count"] += 1
+            self.assertIsNotNone(config)
+            return parts
+
+        cli = ZaomengCLI(runtime_parts_builder=builder)
+
+        self.assertIs(cli.config, parts.config)
+        self.assertEqual(seen["count"], 1)
 
     def test_chat_engine_scopes_profiles_and_relations_by_novel(self):
         with tempfile.TemporaryDirectory() as tmp:

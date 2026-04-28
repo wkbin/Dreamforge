@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 import uuid
@@ -10,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.core.config import Config
+from src.core.exceptions import ZaomengError
 from src.core.path_provider import PathProvider
 from src.core.rulebook import RuleBook
 from src.core.llm_client import LLMClient
@@ -30,6 +32,8 @@ from src.utils.file_utils import (
 
 class ChatEngine:
     """Multi-character chat with novel-scoped assets."""
+
+    logger = logging.getLogger(__name__)
 
     SYSTEM_SPEAKERS = {"Narrator", "User", "旁白", "用户"}
     ADDRESS_SUFFIXES = ("哥哥", "姐姐", "妹妹", "弟弟", "姑娘", "公子", "爷")
@@ -275,7 +279,8 @@ class ChatEngine:
                 str(llm_output.get("content", "")),
                 fallback_reply=fallback_reply,
             )
-        except Exception:
+        except ZaomengError as exc:
+            self.logger.warning("LLM generation failed for %s: %s", responder, exc)
             candidate = fallback_reply
 
         final_reply = self._finalize_reply(profile, candidate, relation_state, target_name)

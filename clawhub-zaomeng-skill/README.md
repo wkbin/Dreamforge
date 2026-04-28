@@ -127,6 +127,11 @@ skill 包当前使用的打包运行时入口是：
 runtime/zaomeng_cli.py
 ```
 
+当前 runtime 源码按两层组织：
+
+- runtime 自持薄 wrapper：`runtime/src/core/main.py`、`runtime/src/core/runtime_factory.py`、`runtime/src/core/logging_utils.py`
+- 共享实现镜像：`runtime/src/core/cli_app.py`、`runtime/src/core/runtime_parts.py`、`runtime/src/core/logging_setup.py`，以及 `modules/`、`utils/` 下的共享业务模块
+
 ## 推荐用法
 
 正确顺序不是一上来就群聊。  

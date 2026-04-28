@@ -36,3 +36,9 @@
 - `1.0.7`：加入单轮 `chat --message` 直接执行说明，并对齐 ClawHub 聊天规则。
 - `1.0.6`：补充交互式聊天与需要确认的执行约束说明。
 - `1.0.5`：让 ClawHub 打包 schema 和示例与当前按小说分组的本地工作流保持一致。
+
+## Runtime Structure Notes
+
+- Shared implementation modules now live in mirrored files such as `runtime/src/core/cli_app.py`, `runtime/src/core/runtime_parts.py`, and `runtime/src/core/logging_setup.py`.
+- Runtime-owned thin wrappers remain at `runtime/src/core/main.py`, `runtime/src/core/runtime_factory.py`, and `runtime/src/core/logging_utils.py`.
+- Release validation should keep `MANIFEST.md`, `.runtime-mirror.json`, and these wrapper boundaries aligned.

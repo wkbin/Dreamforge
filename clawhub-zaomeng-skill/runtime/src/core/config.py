@@ -5,10 +5,26 @@
 负责加载、验证和管理项目配置
 """
 
+import copy
+import logging
 import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+from .exceptions import ConfigLoadError
+
+
+logger = logging.getLogger(__name__)
+_CONFIG_FILE_CACHE: dict[Path, tuple[tuple[int, int], Dict[str, Any]]] = {}
+
+
+def clear_config_cache() -> None:
+    _CONFIG_FILE_CACHE.clear()
+
+
+def invalidate_config_cache(config_path: str | Path) -> None:
+    _CONFIG_FILE_CACHE.pop(Path(config_path).resolve(), None)
 
 
 class Config:
@@ -32,6 +48,10 @@ class Config:
             "api_key": "",
             "api_key_env": "",
             "timeout_seconds": 120,
+            "retry_attempts": 3,
+            "retry_backoff_seconds": 1.0,
+            "retry_backoff_multiplier": 2.0,
+            "retry_status_codes": [408, 429, 500, 502, 503, 504],
         },
         "engine": {
             "name": "local-rule-engine",
@@ -132,22 +152,39 @@ class Config:
         """加载配置"""
         if self.config_path:
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f)
-            except Exception as e:
-                print(f"警告: 无法加载配置文件 {self.config_path}: {e}")
+                config = self._load_config_file(self.config_path)
+            except (OSError, yaml.YAMLError) as exc:
+                logger.warning("%s", ConfigLoadError(f"警告: 无法加载配置文件 {self.config_path}: {exc}"))
                 config = {}
         else:
             config = {}
         
         # 合并默认配置
-        merged_config = self._merge_dicts(self.DEFAULT_CONFIG, config)
+        merged_config = self._merge_dicts(copy.deepcopy(self.DEFAULT_CONFIG), config)
         
         # 验证必需配置
         self._validate_config(merged_config)
         
         return merged_config
-    
+
+    def _load_config_file(self, config_path: Path) -> Dict[str, Any]:
+        resolved = config_path.resolve()
+        stat = resolved.stat()
+        signature = (stat.st_mtime_ns, stat.st_size)
+        cached = _CONFIG_FILE_CACHE.get(resolved)
+        if cached and cached[0] == signature:
+            return copy.deepcopy(cached[1])
+
+        with open(resolved, 'r', encoding='utf-8') as f:
+            loaded = yaml.safe_load(f) or {}
+
+        if not isinstance(loaded, dict):
+            logger.warning("配置文件格式不是字典结构: %s", resolved)
+            loaded = {}
+
+        _CONFIG_FILE_CACHE[resolved] = (signature, copy.deepcopy(loaded))
+        return copy.deepcopy(loaded)
+
     def _merge_dicts(self, base: Dict, overlay: Dict) -> Dict:
         """深度合并两个字典"""
         result = base.copy()
@@ -164,7 +201,7 @@ class Config:
         """验证配置"""
         provider = str(config.get("llm", {}).get("provider", "local-rule-engine")).strip().lower()
         if provider not in self.SUPPORTED_PROVIDERS:
-            print(
+            logger.warning(
                 "警告: 未识别的 llm.provider="
                 f"{provider}，当前支持: {', '.join(self.SUPPORTED_PROVIDERS)}"
             )
@@ -226,11 +263,18 @@ class Config:
         with open(save_path, 'w', encoding='utf-8') as f:
             yaml.dump(self.config, f, allow_unicode=True, default_flow_style=False)
         
-        print(f"配置已保存到: {save_path}")
+        logger.info("配置已保存到: %s", save_path)
     
     def update(self, updates: Dict[str, Any]):
         """更新配置"""
         self.config = self._merge_dicts(self.config, updates)
+
+    def reload(self, *, force: bool = False):
+        """重新加载配置，可选强制清理单文件缓存。"""
+        if force and self.config_path:
+            invalidate_config_cache(self.config_path)
+        self.config = self._load_config()
+        self._ensure_paths()
     
     def get_supported_models(self) -> list:
         """保留兼容接口，返回支持的 provider 列表"""

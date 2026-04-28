@@ -9,12 +9,15 @@
 - `PUBLISH.md`
 - `runtime/zaomeng_cli.py`
 - `runtime/src/core/__init__.py`
+- `runtime/src/core/cli_app.py`
 - `runtime/requirements.txt`
 - `runtime/src/core/main.py`
 - `runtime/src/core/config.py`
 - `runtime/src/core/contracts.py`
 - `runtime/src/core/llm_client.py`
+- `runtime/src/core/logging_setup.py`
 - `runtime/src/core/path_provider.py`
+- `runtime/src/core/runtime_parts.py`
 - `runtime/src/core/rulebook.py`
 - `runtime/src/modules/__init__.py`
 - `runtime/src/modules/distillation.py`

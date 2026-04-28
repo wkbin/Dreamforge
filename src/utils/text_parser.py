@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import List
 
+from src.core.exceptions import OptionalDependencyError, TextDecodingError
+
 
 TEXT_ENCODINGS = (
     "utf-8-sig",
@@ -27,15 +29,15 @@ def _strip_html_tags(text: str) -> str:
 
 
 def _decode_text_bytes(raw: bytes) -> str:
-    last_error: Exception | None = None
+    last_error: UnicodeError | None = None
     for encoding in TEXT_ENCODINGS:
         try:
             return raw.decode(encoding)
         except UnicodeDecodeError as exc:
             last_error = exc
     if last_error:
-        raise RuntimeError("无法识别小说文本编码，请转换为 UTF-8 或 GB18030 后重试") from last_error
-    raise RuntimeError("无法读取小说文本")
+        raise TextDecodingError("无法识别小说文本编码，请转换为 UTF-8 或 GB18030 后重试") from last_error
+    raise TextDecodingError("无法读取小说文本")
 
 
 def load_novel_text(path: str) -> str:
@@ -54,8 +56,8 @@ def load_novel_text(path: str) -> str:
 def _load_epub(path: Path) -> str:
     try:
         from ebooklib import epub
-    except Exception as exc:
-        raise RuntimeError("读取 .epub 需要安装 ebooklib") from exc
+    except ImportError as exc:
+        raise OptionalDependencyError("读取 .epub 需要安装 ebooklib") from exc
 
     book = epub.read_epub(str(path))
     chunks: List[str] = []

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from src.core.config import Config
 from src.core.contracts import CostEstimator, PathProviderLike, RuleProvider
+from src.core.exceptions import ZaomengError
 from src.utils.file_utils import canonical_aliases, ensure_dir, novel_id_from_input, safe_filename
 from src.utils.text_parser import load_novel_text, split_sentences
 from src.utils.token_counter import TokenCounter
@@ -17,6 +19,8 @@ from src.utils.token_counter import TokenCounter
 
 class NovelDistiller:
     """Generic novel character distillation driven by editable markdown rules."""
+
+    logger = logging.getLogger(__name__)
 
     CHAPTER_HEADING_PATTERNS = (
         re.compile(r"^第[0-9零一二三四五六七八九十百千两]+章"),
@@ -611,7 +615,8 @@ class NovelDistiller:
             refined["arc_summary"] = self._infer_arc_summary(refined.get("arc", {}))
             refined["arc_confidence"] = self._safe_int(parsed.get("arc_confidence", refined.get("arc_confidence", 0)))
             return refined
-        except Exception:
+        except ZaomengError as exc:
+            self.logger.warning("Skipping LLM second pass for %s: %s", profile.get("name", "unknown"), exc)
             return profile
 
     def _should_use_llm_second_pass(self) -> bool:

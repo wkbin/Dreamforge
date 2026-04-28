@@ -43,6 +43,9 @@
 - Windows / PowerShell 优先使用 `py -3 runtime/zaomeng_cli.py ...`
 - 默认运行时数据目录为 `runtime/data/`
 - 包内 prompt 与 references 主要用于约束与说明，不应用来替代引擎入口
+- 当前运行时结构按两层组织：
+  - runtime 自持薄 wrapper：`runtime/src/core/main.py`、`runtime/src/core/runtime_factory.py`、`runtime/src/core/logging_utils.py`
+  - 共享实现镜像：`runtime/src/core/cli_app.py`、`runtime/src/core/runtime_parts.py`、`runtime/src/core/logging_setup.py` 及 `modules/`、`utils/` 下的共享业务模块
 
 ## 快速校验清单
 

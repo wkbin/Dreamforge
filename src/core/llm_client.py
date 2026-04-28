@@ -12,6 +12,7 @@ Responsibilities:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from datetime import datetime
@@ -21,11 +22,15 @@ from urllib import error, request
 
 try:
     import tiktoken
-except Exception:
+except ImportError:
     tiktoken = None
 
 from .config import Config
+from .exceptions import BudgetExceededError, LLMRequestError, MissingAPIKeyError
 from src.utils.file_utils import load_markdown_data, save_markdown_data
+
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -35,6 +40,7 @@ class LLMClient:
     DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
     DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
     LOCAL_PROVIDER = "local-rule-engine"
+    DEFAULT_RETRY_STATUS_CODES = (408, 429, 500, 502, 503, 504)
 
     def __init__(self, config: Optional[Config] = None):
         self.config = config or Config()
@@ -52,7 +58,7 @@ class LLMClient:
 
         try:
             self.encoder = tiktoken.get_encoding("cl100k_base") if tiktoken else None
-        except Exception:
+        except (AttributeError, ValueError):
             self.encoder = None
 
     def _load_cost_stats(self):
@@ -64,8 +70,8 @@ class LLMClient:
                 last = data.get("last_reset_date")
                 if last:
                     self.last_reset_date = datetime.fromisoformat(last).date()
-            except Exception:
-                pass
+            except (OSError, TypeError, ValueError) as exc:
+                logger.warning("Failed to load cost stats from %s: %s", stats_file, exc)
         self._check_reset_daily()
 
     def _save_cost_stats(self):
@@ -97,12 +103,12 @@ class LLMClient:
     def _check_budget(self):
         daily_budget = float(self.cost_config.get("daily_budget_usd", 10.0))
         if self.daily_cost >= daily_budget:
-            raise Exception(f"日预算已用完: ${self.daily_cost:.2f} >= ${daily_budget:.2f}")
+            raise BudgetExceededError(f"日预算已用完: ${self.daily_cost:.2f} >= ${daily_budget:.2f}")
         threshold = float(self.cost_config.get("warning_threshold", 0.8))
         if self.daily_cost >= daily_budget * threshold:
             remaining = daily_budget - self.daily_cost
-            print(f"警告: 日预算已使用 {self.daily_cost / daily_budget * 100:.1f}%")
-            print(f"剩余预算: ${remaining:.2f}")
+            logger.warning("警告: 日预算已使用 %.1f%%", self.daily_cost / daily_budget * 100)
+            logger.warning("剩余预算: $%.2f", remaining)
 
     def count_tokens(self, text: str) -> int:
         if not text:
@@ -130,11 +136,11 @@ class LLMClient:
         self.total_tokens += total_tokens
         self._save_cost_stats()
         if self.cost_config.get("enable_cost_warning", True):
-            print(
+            logger.info(
                 f"[Tokens: {prompt_tokens}+{completion_tokens}={total_tokens}] "
                 f"[Cost: ${cost:.4f}] [Time: {elapsed_time:.2f}s]"
             )
-            print(f"[Session: ${self.session_cost:.4f}] [Daily: ${self.daily_cost:.4f}]")
+            logger.info("[Session: $%.4f] [Daily: $%.4f]", self.session_cost, self.daily_cost)
         return {
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
@@ -359,15 +365,61 @@ class LLMClient:
         timeout = float(self.llm_config.get("timeout_seconds", 120) or 120)
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         req = request.Request(url=url, data=body, headers=request_headers, method="POST")
-        try:
-            with request.urlopen(req, timeout=timeout) as resp:
-                charset = resp.headers.get_content_charset() or "utf-8"
-                return json.loads(resp.read().decode(charset))
-        except error.HTTPError as exc:
-            body_text = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"LLM 请求失败: {exc.code} {exc.reason} | {body_text}") from exc
-        except error.URLError as exc:
-            raise RuntimeError(f"LLM 连接失败: {exc.reason}") from exc
+        attempts = self._retry_attempts()
+        retry_status_codes = self._retry_status_codes()
+        last_error: Optional[Exception] = None
+
+        for attempt in range(1, attempts + 1):
+            try:
+                with request.urlopen(req, timeout=timeout) as resp:
+                    charset = resp.headers.get_content_charset() or "utf-8"
+                    body_text = resp.read().decode(charset)
+                    return json.loads(body_text)
+            except error.HTTPError as exc:
+                body_text = exc.read().decode("utf-8", errors="replace")
+                last_error = exc
+                if attempt < attempts and exc.code in retry_status_codes:
+                    self._sleep_before_retry(attempt, f"HTTP {exc.code} {exc.reason}")
+                    continue
+                raise LLMRequestError(f"LLM 请求失败: {exc.code} {exc.reason} | {body_text}") from exc
+            except error.URLError as exc:
+                last_error = exc
+                if attempt < attempts:
+                    self._sleep_before_retry(attempt, f"connection error: {exc.reason}")
+                    continue
+                raise LLMRequestError(f"LLM 连接失败: {exc.reason}") from exc
+            except json.JSONDecodeError as exc:
+                raise LLMRequestError("LLM 返回了无法解析的 JSON 响应") from exc
+
+        raise LLMRequestError(f"LLM 请求失败: {last_error}") from last_error
+
+    def _retry_attempts(self) -> int:
+        return max(1, int(self.llm_config.get("retry_attempts", 3) or 1))
+
+    def _retry_backoff_seconds(self) -> float:
+        return max(0.0, float(self.llm_config.get("retry_backoff_seconds", 1.0) or 0.0))
+
+    def _retry_backoff_multiplier(self) -> float:
+        return max(1.0, float(self.llm_config.get("retry_backoff_multiplier", 2.0) or 1.0))
+
+    def _retry_status_codes(self) -> set[int]:
+        configured = self.llm_config.get("retry_status_codes", self.DEFAULT_RETRY_STATUS_CODES)
+        if not isinstance(configured, (list, tuple, set)):
+            configured = self.DEFAULT_RETRY_STATUS_CODES
+        return {int(code) for code in configured}
+
+    def _sleep_before_retry(self, attempt: int, reason: str) -> None:
+        delay = self._retry_backoff_seconds() * (self._retry_backoff_multiplier() ** (attempt - 1))
+        if delay <= 0:
+            return
+        logger.warning(
+            "LLM request retry %s/%s after %s (sleep %.2fs)",
+            attempt,
+            self._retry_attempts() - 1,
+            reason,
+            delay,
+        )
+        time.sleep(delay)
 
     def _resolve_api_key(self, provider: str) -> str:
         configured = str(self.llm_config.get("api_key", "")).strip()
@@ -388,7 +440,7 @@ class LLMClient:
             if value:
                 return value
 
-        raise RuntimeError(f"{provider} provider 缺少 API key，请在 config.yaml 或环境变量中配置。")
+        raise MissingAPIKeyError(f"{provider} provider 缺少 API key，请在 config.yaml 或环境变量中配置。")
 
     def _resolve_base_url(self, provider: str) -> str:
         configured = str(self.llm_config.get("base_url", "")).strip()
@@ -436,4 +488,4 @@ class LLMClient:
 
     def reset_session_cost(self):
         self.session_cost = 0.0
-        print("会话成本统计已重置")
+        logger.info("会话成本统计已重置")

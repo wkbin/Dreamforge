@@ -118,6 +118,20 @@ To run the real workflow, the host environment needs at least one of these:
 
 If the host does not allow local command execution, or lacks required Python dependencies, the real `zaomeng` CLI workflow cannot run.
 
+## Development Checks
+
+For local guardrails, use the bundled development check entrypoint:
+
+```bash
+python scripts/dev_checks.py
+```
+
+For a faster preflight pass that only runs mirror validation plus the runtime and packaging smoke checks:
+
+```bash
+python scripts/dev_checks.py --smoke-only
+```
+
 ## Example 1: Act Mode
 
 ```
@@ -532,6 +546,12 @@ python -m src.core.main correct --session <id> --message <raw> --corrected <fixe
 ```
 
 ## Project Structure
+
+The current layout separates shared implementation from thin compatibility wrappers:
+
+- shared core implementation lives in files such as `src/core/cli_app.py`, `src/core/runtime_parts.py`, and `src/core/logging_setup.py`
+- thin compatibility wrappers remain in `src/core/main.py`, `src/core/runtime_factory.py`, and `src/core/logging_utils.py`
+- the packaged runtime mirrors the shared implementation under `clawhub-zaomeng-skill/runtime/src/` while keeping its own thin wrappers
 
 ```text
 Dreamforge/

@@ -39,6 +39,9 @@ class RuleBook:
         value = self._sections.get(name, {})
         return dict(value) if isinstance(value, dict) else {}
 
+    def reload(self) -> None:
+        self._sections = self._load_sections()
+
     def get(self, section: str, key: str, default: Any = None) -> Any:
         return self.section(section).get(key, default)
 

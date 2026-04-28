@@ -3,7 +3,11 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List
+
+
+logger = logging.getLogger(__name__)
 
 
 class TokenCounter:
@@ -15,7 +19,8 @@ class TokenCounter:
             import tiktoken
 
             self._encoder = tiktoken.get_encoding("cl100k_base")
-        except Exception:
+        except (ImportError, AttributeError, ValueError):
+            logger.debug("tiktoken unavailable, falling back to heuristic token counting")
             self._encoder = None
 
     def count(self, text: str) -> int:
@@ -58,4 +63,3 @@ class TokenCounter:
             if start + char_chunk >= len(text):
                 break
         return chunks
-

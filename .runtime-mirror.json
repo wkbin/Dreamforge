@@ -1,0 +1,30 @@
+{
+  "include": [
+    "__init__.py",
+    "core/__init__.py",
+    "core/cli_app.py",
+    "core/config.py",
+    "core/contracts.py",
+    "core/exceptions.py",
+    "core/llm_client.py",
+    "core/logging_setup.py",
+    "core/path_provider.py",
+    "core/runtime_parts.py",
+    "core/rulebook.py",
+    "modules/__init__.py",
+    "modules/chat_engine.py",
+    "modules/distillation.py",
+    "modules/reflection.py",
+    "modules/relationships.py",
+    "modules/speaker.py",
+    "utils/__init__.py",
+    "utils/file_utils.py",
+    "utils/text_parser.py",
+    "utils/token_counter.py"
+  ],
+  "runtime_owned": [
+    "core/logging_utils.py",
+    "core/main.py",
+    "core/runtime_factory.py"
+  ]
+}
