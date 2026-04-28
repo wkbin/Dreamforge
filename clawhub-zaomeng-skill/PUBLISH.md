@@ -5,7 +5,7 @@
 - Type: OpenClaw Skill
 - Name: zaomeng-skill
 - Display Name: 造梦技能
-- Version: 3.1.0
+- Version: 3.2.0
 - License: MIT-0
 - Category: Writing / Roleplay / Character Simulation
 
@@ -26,6 +26,7 @@
 
 ## 版本说明
 
+- `3.2.0`：统一 skill 内嵌 runtime 的装配路径，围绕 `RuntimeParts` 收口依赖创建、懒加载、`fork()` 与增量 overrides；同时将 `runtime/src/core/main.py`、`runtime/src/core/runtime_factory.py`、`runtime/src/core/logging_utils.py` 纳入同一套 mirror / wrapper / packaging guardrails，并修复 Windows CI 下的路径与控制台编码问题。
 - `3.1.0`：将 prompt 引用从纯文本切换为 Markdown，对齐 Markdown-first 人格工作流，在 `references/output_schema.md` 中补充 26 维度人格覆盖说明，并新增 `references/style_differ.md` 与 `references/logic_constraint.md`，用于去同质化和防止人设崩坏。
 - `3.0.0`：将最小本地 zaomeng 运行时直接内嵌进 skill 包，去除主执行路径上的运行时 Git 引导，并将 skill 的执行入口切换到打包内的 `runtime/zaomeng_cli.py`。
 - `2.1.1`：将自动引导流程固定到外部 zaomeng 仓库的特定 commit `649f7466738f99d60c454e167835462215cffc7d`，降低运行时供应链漂移风险。

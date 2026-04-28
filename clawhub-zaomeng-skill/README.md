@@ -14,13 +14,13 @@
 
 ## 这版有什么变化
 
-当前发布线已经切到 `3.1.0`，重点变化是：
+当前发布线已经切到 `3.2.0`，重点变化是：
 
-- 改为 Markdown-first，人设主存储不再以旧版 JSON 为准
-- `clawhub-zaomeng-skill` 已内嵌最小可运行子集，不再把运行时克隆外部仓库作为主路径
-- 支持自然语言优先的使用方式：先蒸馏，再进入 `act` 或 `observe`
-- 人格约束拆成三层：格式、去同质化、逻辑底线
-- 第一阶段对话体验增强：支持真实 LLM 聊天生成、群聊顺序互动、角色可按相关性选择沉默
+- 继续保留 Markdown-first 的人物与关系工作流
+- `RuntimeParts` 统一 skill 内嵌 runtime 的装配路径，补充懒加载、依赖复用与增量 overrides
+- runtime 薄 wrapper 与共享实现镜像现在纳入同一套 mirror / wrapper / packaging guardrails
+- 修复 Windows CI 下的路径解析与控制台编码问题
+- 继续支持真实 LLM 聊天生成、群聊顺序互动、以及低相关角色按需沉默
 
 ## 对话生成模式
 

@@ -14,13 +14,13 @@ License: `MIT-0` (MIT No Attribution)
 
 ## What's New In This Version
 
-The current release line is `3.1.0`. The main changes are:
+The current release line is `3.2.0`. The main changes are:
 
-- markdown-first storage: persona data no longer treats legacy JSON as the source of truth
-- `clawhub-zaomeng-skill` now includes an embedded minimal runtime, instead of treating runtime cloning from an external repository as the primary path
-- natural-language-first usage: distill first, then enter `act` or `observe`
-- layered persona constraints: format, anti-homogenization, and logic floor are separated
-- phase-1 dialogue upgrade: real LLM chat generation, ordered group-chat interactions, and optional silence for low-relevance characters
+- markdown-first persona and relation workflows remain the default
+- `RuntimeParts` now centralizes embedded-runtime composition, lazy loading, dependency reuse, and incremental overrides
+- thin runtime wrappers and mirrored shared modules now share the same mirror, wrapper, and packaging guardrails
+- Windows CI path resolution and console encoding issues are fixed
+- real LLM chat generation, ordered group-chat interactions, and optional silence for low-relevance characters remain supported
 
 ## Dialogue Generation Modes
 
