@@ -14,7 +14,7 @@ License: `MIT-0` (MIT No Attribution)
 
 ## What's New In This Version
 
-The current release line is `3.2.0`. The main changes are:
+The current release line is `3.3.0`. The main changes are:
 
 - markdown-first persona and relation workflows remain the default
 - `RuntimeParts` now centralizes embedded-runtime composition, lazy loading, dependency reuse, and incremental overrides
