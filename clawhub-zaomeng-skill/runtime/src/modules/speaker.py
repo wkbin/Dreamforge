@@ -68,6 +68,25 @@ class Speaker:
         relation_state: Optional[Dict[str, Any]] = None,
         relation_hint: str = "",
     ) -> str:
+        guidance = self.build_generation_guidance(
+            character_profile=character_profile,
+            context=context,
+            history=history,
+            target_name=target_name,
+            relation_state=relation_state,
+            relation_hint=relation_hint,
+        )
+        return str(guidance.get("fallback_reply", "")).strip()
+
+    def build_generation_guidance(
+        self,
+        character_profile: Dict[str, Any],
+        context: str,
+        history: List[Dict[str, str]],
+        target_name: str = "",
+        relation_state: Optional[Dict[str, Any]] = None,
+        relation_hint: str = "",
+    ) -> Dict[str, Any]:
         relation_state = relation_state or {}
         name = str(character_profile.get("name", "角色")).strip() or "角色"
         recent = history[-6:]
@@ -91,7 +110,20 @@ class Speaker:
             self._memory_line(character_profile, voice, relation_hint),
             self._drive_line(voice, topic),
         ]
-        return self._compose_reply(segments, voice)
+        fallback_reply = self._compose_reply(segments, voice)
+        return {
+            "character_name": name,
+            "target_name": target_name,
+            "target_display": target_display,
+            "topic": topic,
+            "voice": voice,
+            "fallback_reply": fallback_reply,
+            "style_rules": self._summarize_style_rules(voice),
+            "behavior_rules": self._summarize_behavior_rules(character_profile, voice),
+            "relation_rules": self._summarize_relation_rules(target_display, relation_state, relation_hint),
+            "memory_cues": self._summarize_memory_cues(voice),
+            "similar_corrections": similar,
+        }
 
     @staticmethod
     def _preferred_target_name(speaker_name: str, target_name: str, relation_state: Dict[str, Any]) -> str:
@@ -100,6 +132,94 @@ class Speaker:
             return target_name
         preferred = str(appellations.get(f"{speaker_name}->{target_name}", "")).strip()
         return preferred or target_name
+
+    @staticmethod
+    def _summarize_style_rules(voice: Dict[str, Any]) -> List[str]:
+        speech_habits = voice.get("speech_habits", {})
+        rules = [
+            f"说话基调: {voice.get('speech_style', '') or '按人物既有口吻'}",
+            f"句长节奏: {speech_habits.get('cadence', 'medium')}",
+            f"表达取向: {'直接' if voice.get('direct') else '含蓄'}",
+            f"情绪克制度: {'克制' if voice.get('restrained') else '外放'}",
+        ]
+        if speech_habits.get("signature_phrases"):
+            rules.append(
+                "标志语汇: " + " / ".join(str(item) for item in speech_habits.get("signature_phrases", [])[:3])
+            )
+        if speech_habits.get("sentence_endings"):
+            rules.append(
+                "收尾习惯: " + " / ".join(str(item) for item in speech_habits.get("sentence_endings", [])[:2])
+            )
+        if speech_habits.get("forbidden_fillers"):
+            rules.append(
+                "禁用口水词: " + " / ".join(str(item) for item in speech_habits.get("forbidden_fillers", [])[:4])
+            )
+        return [item for item in rules if str(item).strip()]
+
+    @staticmethod
+    def _summarize_behavior_rules(profile: Dict[str, Any], voice: Dict[str, Any]) -> List[str]:
+        rules: List[str] = []
+        for key, label in (
+            ("identity_anchor", "核心身份"),
+            ("soul_goal", "核心动机"),
+            ("worldview", "世界观"),
+            ("thinking_style", "思考方式"),
+            ("action_style", "行事风格"),
+            ("reward_logic", "恩怨逻辑"),
+            ("belief_anchor", "信念支点"),
+            ("hidden_desire", "深层执念"),
+            ("inner_conflict", "内在矛盾"),
+        ):
+            value = str(profile.get(key, "") or voice.get(key.replace("soul_goal", "goal"), "")).strip()
+            if value:
+                rules.append(f"{label}: {value}")
+        if voice.get("decision_rules"):
+            rules.append("决策规则: " + " / ".join(str(item) for item in voice.get("decision_rules", [])[:4]))
+        if voice.get("taboo_topics"):
+            rules.append("禁区话题: " + " / ".join(str(item) for item in voice.get("taboo_topics", [])[:4]))
+        if voice.get("forbidden_behaviors"):
+            rules.append("绝不做: " + " / ".join(str(item) for item in voice.get("forbidden_behaviors", [])[:4]))
+        return rules
+
+    @staticmethod
+    def _summarize_relation_rules(
+        target_display: str,
+        relation_state: Dict[str, Any],
+        relation_hint: str,
+    ) -> List[str]:
+        if not relation_state and not relation_hint and not target_display:
+            return []
+        rules: List[str] = []
+        if target_display:
+            rules.append(f"当前主要对象: {target_display}")
+        if relation_state:
+            trust = relation_state.get("trust", 5)
+            affection = relation_state.get("affection", 5)
+            hostility = relation_state.get("hostility", max(0, 5 - int(affection)))
+            ambiguity = relation_state.get("ambiguity", 3)
+            rules.append(
+                f"关系状态: trust={trust}, affection={affection}, hostility={hostility}, ambiguity={ambiguity}"
+            )
+            for key, label in (("conflict_point", "冲突点"), ("typical_interaction", "典型互动")):
+                value = str(relation_state.get(key, "")).strip()
+                if value:
+                    rules.append(f"{label}: {value}")
+        if relation_hint:
+            rules.append(f"群体关系概览: {relation_hint}")
+        return rules
+
+    @staticmethod
+    def _summarize_memory_cues(voice: Dict[str, Any]) -> List[str]:
+        cues: List[str] = []
+        for key, label in (
+            ("user_edits", "用户纠正"),
+            ("relationship_updates", "关系更新"),
+            ("notable_interactions", "近期互动"),
+        ):
+            values = [str(item).strip() for item in voice.get(key, []) if str(item).strip()]
+            if values:
+                cues.append(f"{label}: {' / '.join(values[:3])}")
+        return cues
 
     def _build_voice(self, profile: Dict[str, Any]) -> Dict[str, Any]:
         values = {

@@ -13,13 +13,25 @@ from typing import Dict, Any, Optional
 
 class Config:
     """配置管理类"""
+
+    SUPPORTED_PROVIDERS = (
+        "local-rule-engine",
+        "openai",
+        "openai-compatible",
+        "anthropic",
+        "ollama",
+    )
     
     DEFAULT_CONFIG = {
         "llm": {
             "provider": "local-rule-engine",
             "model": "local-rule-engine",
             "temperature": 0.0,
-            "max_tokens": 0
+            "max_tokens": 0,
+            "base_url": "",
+            "api_key": "",
+            "api_key_env": "",
+            "timeout_seconds": 120,
         },
         "engine": {
             "name": "local-rule-engine",
@@ -54,7 +66,12 @@ class Config:
             "max_history_turns": 10,
             "max_speakers_per_turn": 4,
             "token_limit_per_turn": 500,
-            "enable_cost_display": True
+            "enable_cost_display": True,
+            "generation_mode": "auto",
+            "enable_turn_interactions": True,
+            "allow_character_silence": True,
+            "min_reply_relevance": 4,
+            "llm_history_messages": 8,
         },
         "paths": {
             "characters": "data/characters",
@@ -142,9 +159,12 @@ class Config:
     
     def _validate_config(self, config: Dict[str, Any]):
         """验证配置"""
-        # 本地模式下仅做基础校验
-        if config.get("llm", {}).get("provider") != "local-rule-engine":
-            print("警告: 当前版本为本地 skill 引擎，建议 provider 使用 local-rule-engine")
+        provider = str(config.get("llm", {}).get("provider", "local-rule-engine")).strip().lower()
+        if provider not in self.SUPPORTED_PROVIDERS:
+            print(
+                "警告: 未识别的 llm.provider="
+                f"{provider}，当前支持: {', '.join(self.SUPPORTED_PROVIDERS)}"
+            )
     
     def _ensure_paths(self):
         """确保所有必需的目录存在"""
@@ -210,8 +230,8 @@ class Config:
         self.config = self._merge_dicts(self.config, updates)
     
     def get_supported_models(self) -> list:
-        """保留兼容接口，返回本地引擎列表"""
-        return ["local-rule-engine"]
+        """保留兼容接口，返回支持的 provider 列表"""
+        return list(self.SUPPORTED_PROVIDERS)
     
     def set_api_key(self, api_key: str):
         """兼容旧接口；本地模式不需要 API key"""

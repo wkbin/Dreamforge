@@ -7,8 +7,8 @@ It is not a generic chat template. It is a local rule-based workflow built aroun
 More precisely:
 
 - `zaomeng` is responsible for character distillation, relationship extraction, persona navigation, persistent memory, and OOC constraints
-- in hosts such as OpenClaw, natural-language understanding and the final dialogue generation should still be handled by the host model
-- `zaomeng` is best used as the persona-and-constraint layer, rather than as the sole natural dialogue generator
+- by default, `zaomeng` can still be used purely as the persona-and-constraint layer
+- when a real LLM is configured, `zaomeng chat` can now also generate the final natural reply under persona, relation, and memory constraints
 
 License: `MIT-0` (MIT No Attribution)
 
@@ -20,6 +20,35 @@ The current release line is `3.1.0`. The main changes are:
 - `clawhub-zaomeng-skill` now includes an embedded minimal runtime, instead of treating runtime cloning from an external repository as the primary path
 - natural-language-first usage: distill first, then enter `act` or `observe`
 - layered persona constraints: format, anti-homogenization, and logic floor are separated
+- phase-1 dialogue upgrade: real LLM chat generation, ordered group-chat interactions, and optional silence for low-relevance characters
+
+## Dialogue Generation Modes
+
+You can now use chat in two ways:
+
+- `local-rule-engine`
+  Fully local rule-based generation with no external model call.
+- Real LLM
+  `zaomeng` first prepares persona, relation, and memory constraints, then calls an external model to produce the final reply.
+
+Example configuration:
+
+```yaml
+llm:
+  provider: "openai"               # or openai-compatible / anthropic / ollama
+  model: "gpt-4.1-mini"
+  api_key: ""
+  api_key_env: "OPENAI_API_KEY"
+  base_url: ""
+  temperature: 0.7
+  max_tokens: 300
+
+chat_engine:
+  generation_mode: "auto"          # auto / rule-only / llm-only
+  enable_turn_interactions: true
+  allow_character_silence: true
+  min_reply_relevance: 4
+```
 
 ## What It Does
 

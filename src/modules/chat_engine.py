@@ -66,6 +66,11 @@ class ChatEngine:
         self.characters_dir = self.path_provider.characters_root()
         self.sessions_dir = self.path_provider.sessions_dir()
         self.relations_dir = self.path_provider.relations_root()
+        self.generation_mode = str(self.config.get("chat_engine.generation_mode", "auto")).strip().lower()
+        self.enable_turn_interactions = bool(self.config.get("chat_engine.enable_turn_interactions", True))
+        self.allow_character_silence = bool(self.config.get("chat_engine.allow_character_silence", True))
+        self.min_reply_relevance = int(self.config.get("chat_engine.min_reply_relevance", 4))
+        self.llm_history_messages = int(self.config.get("chat_engine.llm_history_messages", 8))
         self.address_suffixes = tuple(
             getattr(self.distiller, "address_suffixes", ())
             or self.rulebook.get("distillation", "address_suffixes", list(self.ADDRESS_SUFFIXES))
@@ -170,7 +175,7 @@ class ChatEngine:
     def print_turn_cost(self) -> None:
         summary = self.llm.get_cost_summary()
         print(
-            f"[累计] token={summary['total_tokens']} "
+            f"[累计] provider={summary.get('provider', 'unknown')} token={summary['total_tokens']} "
             f"session=${summary['session_cost']:.4f} daily=${summary['daily_cost']:.4f}"
         )
 
@@ -193,21 +198,27 @@ class ChatEngine:
         self._persist_runtime_guidance(session, speaker, message)
         self._remember_focus_targets(session, speaker, responders)
         profiles = self._load_character_profiles(session.get("novel_id"))
+        ordered_responders = self._plan_turn_sequence(session, speaker, message, responders)
 
         responses: List[tuple[str, str]] = []
-        for name in responders:
+        for name in ordered_responders:
+            if self._should_skip_reply(session, speaker, name, message, responses):
+                continue
             profile = profiles.get(name, {"name": name})
-            target_name = self._infer_target(name, session["history"], session["characters"])
+            target_name = self._resolve_turn_target(session, speaker, name, message, responses)
             relation_state = self._get_relation_state(session, name, target_name)
-            reply = self.speaker.generate(
-                character_profile=profile,
-                context=message,
-                history=session["history"],
+            reply = self._generate_reply(
+                session=session,
+                speaker=speaker,
+                responder=name,
+                profile=profile,
+                message=message,
                 target_name=target_name,
                 relation_state=relation_state,
-                relation_hint=self._relation_hint(name, session["characters"], session.get("novel_id")),
+                prior_responses=responses,
             )
-            reply = self._guard_reply(profile, reply, relation_state, target_name)
+            if not reply:
+                continue
             responses.append((name, reply))
             session["history"].append(
                 {"speaker": name, "target": target_name, "message": reply, "ts": int(time.time())}
@@ -217,6 +228,237 @@ class ChatEngine:
         self._update_state(session)
         self._save_session(session)
         return responses
+
+    def _generate_reply(
+        self,
+        *,
+        session: Dict[str, Any],
+        speaker: str,
+        responder: str,
+        profile: Dict[str, Any],
+        message: str,
+        target_name: str,
+        relation_state: Dict[str, Any],
+        prior_responses: List[tuple[str, str]],
+    ) -> str:
+        relation_hint = self._relation_hint(responder, session["characters"], session.get("novel_id"))
+        guidance = self.speaker.build_generation_guidance(
+            character_profile=profile,
+            context=message,
+            history=session["history"],
+            target_name=target_name,
+            relation_state=relation_state,
+            relation_hint=relation_hint,
+        )
+        fallback_reply = str(guidance.get("fallback_reply", "")).strip()
+
+        if not self._should_use_llm_generation():
+            return self._finalize_reply(profile, fallback_reply, relation_state, target_name)
+
+        try:
+            llm_messages = self._build_llm_messages(
+                session=session,
+                speaker=speaker,
+                responder=responder,
+                message=message,
+                target_name=target_name,
+                guidance=guidance,
+                prior_responses=prior_responses,
+            )
+            llm_output = self.llm.chat_completion(
+                llm_messages,
+                temperature=float(self.config.get("llm.temperature", 0.2) or 0.2),
+                max_tokens=int(self.config.get("llm.max_tokens", 0) or 0) or None,
+            )
+            candidate = self._sanitize_generated_reply(
+                responder,
+                str(llm_output.get("content", "")),
+                fallback_reply=fallback_reply,
+            )
+        except Exception:
+            candidate = fallback_reply
+
+        final_reply = self._finalize_reply(profile, candidate, relation_state, target_name)
+        if final_reply:
+            return final_reply
+        return self._finalize_reply(profile, fallback_reply, relation_state, target_name)
+
+    def _should_use_llm_generation(self) -> bool:
+        if self.generation_mode == "rule-only":
+            return False
+        if self.generation_mode == "llm-only":
+            return True
+        return self.llm.is_generation_enabled()
+
+    def _finalize_reply(
+        self,
+        profile: Dict[str, Any],
+        reply: str,
+        relation_state: Dict[str, Any],
+        target_name: str,
+    ) -> str:
+        cleaned = self._strip_revision_tag(reply.strip())
+        if not cleaned:
+            return ""
+        guarded = self._guard_reply(profile, cleaned, relation_state, target_name)
+        return self._strip_revision_tag(guarded).strip()
+
+    def _plan_turn_sequence(
+        self,
+        session: Dict[str, Any],
+        speaker: str,
+        message: str,
+        responders: List[str],
+    ) -> List[str]:
+        if not responders:
+            return []
+        mentioned = self._mentioned_characters(message, responders)
+        ranked = self._rank_characters(session, speaker, responders, preferred=mentioned)
+        ordered: List[str] = []
+        seen = set()
+        for name in mentioned + ranked:
+            if name in seen:
+                continue
+            ordered.append(name)
+            seen.add(name)
+        return ordered or list(responders)
+
+    def _should_skip_reply(
+        self,
+        session: Dict[str, Any],
+        speaker: str,
+        responder: str,
+        message: str,
+        prior_responses: List[tuple[str, str]],
+    ) -> bool:
+        if not self.allow_character_silence:
+            return False
+        if session.get("mode") == "act":
+            return False
+        if not prior_responses:
+            return False
+        if responder in self._mentioned_characters(message, [responder]):
+            return False
+        speaker_score = self._relation_score(session, responder, speaker)
+        latest_score = 0
+        if prior_responses:
+            latest_speaker = prior_responses[-1][0]
+            if latest_speaker != responder:
+                latest_score = self._relation_score(session, responder, latest_speaker)
+        return max(speaker_score, latest_score) < self.min_reply_relevance
+
+    def _resolve_turn_target(
+        self,
+        session: Dict[str, Any],
+        speaker: str,
+        responder: str,
+        message: str,
+        prior_responses: List[tuple[str, str]],
+    ) -> str:
+        candidates = [name for name in session["characters"] if name != responder]
+        mentioned = self._mentioned_characters(message, candidates)
+        if mentioned:
+            return mentioned[0]
+        if self.enable_turn_interactions and prior_responses:
+            latest = prior_responses[-1][0]
+            if latest != responder:
+                return latest
+        remembered = self._remembered_target(session, responder, candidates)
+        if remembered:
+            return remembered
+        return self._infer_target(responder, session["history"], session["characters"])
+
+    def _build_llm_messages(
+        self,
+        *,
+        session: Dict[str, Any],
+        speaker: str,
+        responder: str,
+        message: str,
+        target_name: str,
+        guidance: Dict[str, Any],
+        prior_responses: List[tuple[str, str]],
+    ) -> List[Dict[str, str]]:
+        style_rules = guidance.get("style_rules", [])
+        behavior_rules = guidance.get("behavior_rules", [])
+        relation_rules = guidance.get("relation_rules", [])
+        memory_cues = guidance.get("memory_cues", [])
+        corrections = guidance.get("similar_corrections", [])
+
+        system_lines = [
+            f"你现在只扮演 {responder}。",
+            "你的任务是生成自然、流畅、去模板化的中文角色回应。",
+            "只输出该角色此刻会说出的内容，不要解释规则，不要输出字段名。",
+            "允许极少量动作或神态描写，但不能抢成旁白大段叙述。",
+            "优先遵守人物档案、关系约束、用户纠正、记忆约束。",
+            "严禁复读通用 AI 套话、总结腔、万能过渡句。",
+            "不要照抄约束草案，要把它转成自然说话。",
+        ]
+        for section_title, items in (
+            ("风格约束", style_rules),
+            ("行为约束", behavior_rules),
+            ("关系约束", relation_rules),
+            ("记忆约束", memory_cues),
+        ):
+            if not items:
+                continue
+            system_lines.append(f"{section_title}:")
+            system_lines.extend(f"- {item}" for item in items[:8])
+        if corrections:
+            system_lines.append("历史纠错参考:")
+            for item in corrections[:2]:
+                corrected = str(item.get("corrected_message", "")).strip()
+                reason = str(item.get("reason", "")).strip()
+                if corrected:
+                    suffix = f" | 原因: {reason}" if reason else ""
+                    system_lines.append(f"- 更接近人物的表达: {corrected}{suffix}")
+        fallback_reply = str(guidance.get("fallback_reply", "")).strip()
+        if fallback_reply:
+            system_lines.append(f"约束草案（不要照抄）: {fallback_reply}")
+
+        recent_window = session["history"][-self.llm_history_messages :]
+        history_lines = [f"{item.get('speaker', '')}: {item.get('message', '')}" for item in recent_window]
+        turn_lines = [f"{speaker}: {message}"]
+        if prior_responses:
+            turn_lines.extend(f"{name}: {reply}" for name, reply in prior_responses)
+
+        user_lines = [
+            f"会话模式: {session.get('mode', 'observe')}",
+            f"当前轮发起者: {speaker}",
+            f"当前回应角色: {responder}",
+            f"当前主要回应对象: {target_name or '未指定'}",
+        ]
+        if history_lines:
+            user_lines.append("最近对话:")
+            user_lines.extend(f"- {line}" for line in history_lines)
+        user_lines.append("本轮已发生:")
+        user_lines.extend(f"- {line}" for line in turn_lines)
+        user_lines.append("请输出 1 到 3 句符合人物个性、关系与场景推进的自然回应。")
+
+        return [
+            {"role": "system", "content": "\n".join(system_lines)},
+            {"role": "user", "content": "\n".join(user_lines)},
+        ]
+
+    @staticmethod
+    def _sanitize_generated_reply(responder: str, content: str, fallback_reply: str = "") -> str:
+        text = str(content or "").strip()
+        if not text:
+            return fallback_reply
+        patterns = (
+            rf"^\s*{re.escape(responder)}\s*[：:]\s*",
+            r"^\s*assistant\s*[：:]\s*",
+        )
+        for pattern in patterns:
+            text = re.sub(pattern, "", text, count=1, flags=re.IGNORECASE).strip()
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return fallback_reply
+        return "\n".join(lines[:3]).strip()
+
+    @staticmethod
+    def _strip_revision_tag(reply: str) -> str:
+        return re.sub(r"\s*\(needs_revision:.*?\)\s*$", "", str(reply or "").strip())
 
     def _remember_focus_targets(self, session: Dict[str, Any], speaker: str, responders: List[str]) -> None:
         if speaker in self.SYSTEM_SPEAKERS or not responders:

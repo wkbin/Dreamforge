@@ -13,7 +13,7 @@ It does three things:
 It is not a generic chatbot.  
 It is better understood as a fiction character engine.
 
-License: `MIT-0` (MIT No Attribution)
+License: the main project is `AGPL-3.0-only`; the `clawhub-zaomeng-skill` subdirectory remains `MIT-0`
 
 The current recommended direction is:
 
@@ -21,6 +21,35 @@ The current recommended direction is:
 - natural-language first: distill first, then enter `act` / `observe` through natural-language intent
 - embedded minimal runtime in the skill package: `clawhub-zaomeng-skill` now ships with a packaged minimal runtime
 - layered constraints: `output_schema.md` handles format, `style_differ.md` handles anti-homogenization, and `logic_constraint.md` handles persona-stability and anti-OOC rules
+- layered dialogue generation: `zaomeng` keeps persona, relation, and memory constraints, while a real LLM can turn them into more natural final dialogue when configured
+
+## Dialogue Generation
+
+Chat now supports two generation paths:
+
+- `local-rule-engine`
+  Fully local rule-based generation with no external model call.
+- Real LLM chat generation
+  `zaomeng` prepares persona, relation, and memory constraints first, then a real model produces the final line. In group chat, later speakers can see replies already produced earlier in the same turn.
+
+Example configuration:
+
+```yaml
+llm:
+  provider: "openai"               # or openai-compatible / anthropic / ollama
+  model: "gpt-4.1-mini"
+  api_key: ""
+  api_key_env: "OPENAI_API_KEY"
+  base_url: ""
+  temperature: 0.7
+  max_tokens: 300
+
+chat_engine:
+  generation_mode: "auto"          # auto / rule-only / llm-only
+  enable_turn_interactions: true
+  allow_character_silence: true
+  min_reply_relevance: 4
+```
 
 ## Installation
 
@@ -558,4 +587,6 @@ Dreamforge/
 
 ## License
 
-`MIT-0`
+Main project: `AGPL-3.0-only`
+
+`clawhub-zaomeng-skill`: `MIT-0`

@@ -7,8 +7,8 @@
 更准确地说：
 
 - `zaomeng` 负责人物蒸馏、关系抽取、人格导航、持久记忆与 OOC 约束
-- 在 OpenClaw 这类宿主中，真正的自然语言理解与最终对话生成，仍应由宿主模型完成
-- `zaomeng` 更适合做“人格与约束层”，而不是独自承担最终的自然对话生成
+- 默认情况下，`zaomeng` 仍可作为“人格与约束层”使用
+- 如果配置了真实 LLM，`zaomeng chat` 现在也可以在人物/关系/记忆约束下直接生成更自然的最终台词
 
 许可证：`MIT-0`（MIT No Attribution）
 
@@ -20,6 +20,35 @@
 - `clawhub-zaomeng-skill` 已内嵌最小可运行子集，不再把运行时克隆外部仓库作为主路径
 - 支持自然语言优先的使用方式：先蒸馏，再进入 `act` 或 `observe`
 - 人格约束拆成三层：格式、去同质化、逻辑底线
+- 第一阶段对话体验增强：支持真实 LLM 聊天生成、群聊顺序互动、角色可按相关性选择沉默
+
+## 对话生成模式
+
+你现在可以按两种方式使用聊天：
+
+- `local-rule-engine`
+  完全本地规则生成，不调用外部模型。
+- 真实 LLM
+  由 `zaomeng` 先整理人物约束、关系约束、记忆约束，再调用外部模型生成最终回复。
+
+配置示例：
+
+```yaml
+llm:
+  provider: "openai"               # 也可用 openai-compatible / anthropic / ollama
+  model: "gpt-4.1-mini"
+  api_key: ""
+  api_key_env: "OPENAI_API_KEY"
+  base_url: ""
+  temperature: 0.7
+  max_tokens: 300
+
+chat_engine:
+  generation_mode: "auto"          # auto / rule-only / llm-only
+  enable_turn_interactions: true
+  allow_character_silence: true
+  min_reply_relevance: 4
+```
 
 ## 它能做什么
 

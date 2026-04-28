@@ -13,7 +13,7 @@
 它不是普通陪聊机器人。  
 它更像一个“小说角色引擎”。
 
-许可证：`MIT-0`（MIT No Attribution）
+许可证：主项目为 `AGPL-3.0-only`；`clawhub-zaomeng-skill` 子目录继续使用 `MIT-0`
 
 当前推荐版本思路是：
 
@@ -21,6 +21,35 @@
 - 自然语言优先：先蒸馏，再通过自然语言进入 `act` / `observe`
 - skill 内嵌最小运行子集：`clawhub-zaomeng-skill` 已内置可运行的最小运行时
 - 约束分层：`output_schema.md` 管格式，`style_differ.md` 管去同质化，`logic_constraint.md` 管防 OOC
+- 聊天分层：`zaomeng` 继续负责人物约束、关系约束、记忆约束；若配置真实 LLM，则由 LLM 负责把回复说得更自然
+
+## 对话生成
+
+当前聊天支持两种生成路径：
+
+- `local-rule-engine`
+  不调用外部模型，直接按人物档案与规则生成，优点是稳定、离线；缺点是自然度有限。
+- 真实 LLM 聊天生成
+  `zaomeng` 先整理人物/关系/记忆约束，再把这些约束喂给 LLM 生成最终台词，群聊时后发言角色还会看到本轮前面已经说过的话。
+
+常见配置示例：
+
+```yaml
+llm:
+  provider: "openai"               # 也可用 openai-compatible / anthropic / ollama
+  model: "gpt-4.1-mini"
+  api_key: ""
+  api_key_env: "OPENAI_API_KEY"
+  base_url: ""
+  temperature: 0.7
+  max_tokens: 300
+
+chat_engine:
+  generation_mode: "auto"          # auto / rule-only / llm-only
+  enable_turn_interactions: true   # 群聊里后发言角色可接前一句
+  allow_character_silence: true    # 低相关角色可以不强行插话
+  min_reply_relevance: 4
+```
 
 ## 安装方式
 
@@ -520,4 +549,6 @@ Dreamforge/
 
 ## License
 
-`MIT-0`
+主项目：`AGPL-3.0-only`
+
+`clawhub-zaomeng-skill`：`MIT-0`
