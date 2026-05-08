@@ -544,3 +544,4 @@ textarea {
 .primary-button:hover {
   transform: translateY(-1px);
   background: linear-gradient(180deg, #ce9a86 0%, #b97761 100%);
+}
