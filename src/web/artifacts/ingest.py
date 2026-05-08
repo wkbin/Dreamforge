@@ -7,7 +7,7 @@ from typing import Any
 
 
 def _helper_root() -> Path:
-    return Path(__file__).resolve().parents[2] / "zaomeng-skill" / "tools"
+    return Path(__file__).resolve().parents[3] / "zaomeng-skill" / "tools"
 
 
 HELPER_ROOT = _helper_root()

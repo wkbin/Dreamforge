@@ -1158,9 +1158,14 @@ class WebAppRouteTests(unittest.TestCase):
                     "- name: 林黛玉",
                     "- novel_id: hongloumeng",
                     "- core_identity: 贾府外来才女",
+                    "- identity_anchor: 真心与自尊都很重",
                     "- soul_goal: 守住真心",
                     "- worldview: 世情热闹，真心难得",
                     "- speech_style: 清冷带刺",
+                    "- cadence: 先轻后冷",
+                    "- signature_phrases: 也罢；我原知道",
+                    "- typical_lines: 你也不用哄我；我原知道",
+                    "- key_bonds: 贾宝玉；紫鹃",
                 ]
             )
             service.ingest_character_result(
@@ -1171,18 +1176,29 @@ class WebAppRouteTests(unittest.TestCase):
 
             review = service.get_persona_review(payload["run_id"], "林黛玉")
             self.assertEqual(review["fields"]["core_identity"], "贾府外来才女")
+            self.assertEqual(review["fields"]["identity_anchor"], "真心与自尊都很重")
+            self.assertEqual(review["fields"]["signature_phrases"], "也罢；我原知道")
 
             saved = service.save_persona_review(
                 payload["run_id"],
                 "林黛玉",
                 {
                     "core_identity": "自尊极重的外来才女",
+                    "identity_anchor": "我最看重真心，也最不肯委屈自己",
                     "worldview": "人情再热闹，也比不过一颗真心。",
                     "restraint_threshold": "平日克制，唯独真心受损时会失控。",
+                    "signature_phrases": "也罢；你又来哄我",
+                    "typical_lines": "你也不用哄我；我心里自然明白",
+                    "key_bonds": "贾宝玉；紫鹃；贾母",
+                    "anger_style": "先收住声气，再把冷意压进话里。",
                 },
             )
             self.assertEqual(saved["fields"]["core_identity"], "自尊极重的外来才女")
             self.assertIn("真心", saved["fields"]["worldview"])
+            self.assertIn("真心", saved["fields"]["identity_anchor"])
+            self.assertEqual(saved["fields"]["signature_phrases"], "也罢；你又来哄我")
+            self.assertIn("贾母", saved["fields"]["key_bonds"])
+            self.assertIn("冷意", saved["fields"]["anger_style"])
 
     def test_relation_details_list_exposes_evidence_lines(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1288,6 +1304,45 @@ class WebAppRouteTests(unittest.TestCase):
 
 @unittest.skipUnless(TestClient and create_app, "fastapi test client is unavailable")
 class WebAppRouteTests(unittest.TestCase):
+    def test_persona_review_route_accepts_extended_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    "- name: 林黛玉\n- novel_id: hongloumeng\n- core_identity: 贾府外来才女\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            client = TestClient(create_app(service))
+
+            response = client.put(
+                f"/api/web/runs/{run['run_id']}/personas/林黛玉",
+                json={
+                    "identity_anchor": "我最看重真心，也最不肯委屈自己",
+                    "signature_phrases": "也罢；你又来哄我",
+                    "key_bonds": "贾宝玉；紫鹃；贾母",
+                    "anger_style": "先收住声气，再把冷意压进话里。",
+                },
+            )
+
+            self.assertEqual(response.status_code, 200)
+            fields = response.json()["fields"]
+            self.assertIn("真心", fields["identity_anchor"])
+            self.assertIn("贾母", fields["key_bonds"])
+            self.assertIn("冷意", fields["anger_style"])
+
     def test_model_settings_route_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp:
             app = create_app(WebRunService(tmp))

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from src.web.host_ingest import load_profile_source
+from src.web.artifacts.ingest import load_profile_source
 
 
 def _utc_now() -> str:

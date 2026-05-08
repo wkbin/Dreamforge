@@ -1,0 +1,246 @@
+from __future__ import annotations
+
+import re
+from typing import Any
+
+
+_SPEECH_LIST_FIELDS = {
+    "signature_phrases",
+    "sentence_openers",
+    "connective_tokens",
+    "sentence_endings",
+    "forbidden_fillers",
+}
+_EMOTION_FIELDS = {"anger_style", "joy_style", "grievance_style"}
+
+
+def collect_profile_repair_targets(
+    profile: dict[str, Any],
+    *,
+    rewrite_fields: tuple[str, ...],
+    dialogue_evidence: list[str] | None = None,
+) -> dict[str, str]:
+    issues: dict[str, str] = {}
+    for field in rewrite_fields:
+        value = str(profile.get(field, "")).strip()
+        if not value:
+            issues[field] = "为空"
+            continue
+        if value == "证据不足":
+            continue
+        if looks_like_unstable_profile_scalar(value):
+            issues[field] = f"像剧情碎句或叙述片段 -> {value}"
+            continue
+        if len(value) <= 4:
+            issues[field] = f"过短，像未完成结论 -> {value}"
+    if dialogue_evidence:
+        speech_style = str(profile.get("speech_style", "")).strip()
+        cadence = str(profile.get("cadence", "")).strip() or str(
+            (profile.get("speech_habits", {}) or {}).get("cadence", "")
+        ).strip()
+        signature_phrases = profile_list_value(profile, "signature_phrases")
+        typical_lines = profile_list_value(profile, "typical_lines")
+        sentence_openers = profile_list_value(profile, "sentence_openers")
+        sentence_endings = profile_list_value(profile, "sentence_endings")
+
+        if not speech_style or looks_generic_style_scalar(speech_style):
+            issues["speech_style"] = f"太泛，缺少对白味道 -> {speech_style or '空'}"
+        if not cadence:
+            issues["cadence"] = "为空"
+        if len(signature_phrases) == 0 and len(typical_lines) < 2:
+            issues["signature_phrases"] = "太少，口头禅不够"
+            issues["typical_lines"] = "太少，代表句不够"
+        if len(sentence_openers) == 0 and len(sentence_endings) == 0:
+            issues["sentence_openers"] = "缺少稳定的起句习惯"
+            issues["sentence_endings"] = "缺少稳定的收尾习惯"
+    return issues
+
+
+def collect_profile_completion_groups(
+    profile: dict[str, Any],
+    *,
+    completion_groups: tuple[tuple[str, tuple[str, ...]], ...],
+    repair_targets: dict[str, str] | None = None,
+) -> list[tuple[str, tuple[str, ...], dict[str, str]]]:
+    groups: list[tuple[str, tuple[str, ...], dict[str, str]]] = []
+    repair_lookup = dict(repair_targets or {})
+    for group_name, fields in completion_groups:
+        missing = tuple(field for field in fields if profile_field_is_effectively_empty(profile, field))
+        group_repairs = {field: repair_lookup[field] for field in fields if field in repair_lookup}
+        target_fields = tuple(dict.fromkeys([*group_repairs.keys(), *missing]))
+        if target_fields:
+            groups.append((group_name, target_fields, group_repairs))
+    return groups
+
+
+def profile_field_is_effectively_empty(profile: dict[str, Any], field: str) -> bool:
+    if field == "cadence":
+        value = str((profile.get("speech_habits", {}) or {}).get("cadence", "")).strip() or str(profile.get("cadence", "")).strip()
+        return not value
+    if field in _SPEECH_LIST_FIELDS:
+        return len(profile_list_value(profile, field)) == 0
+    if field in _EMOTION_FIELDS:
+        value = str((profile.get("emotion_profile", {}) or {}).get(field, "")).strip() or str(profile.get(field, "")).strip()
+        return not value
+    value = profile.get(field, "")
+    if isinstance(value, list):
+        return len([str(item).strip() for item in value if str(item).strip()]) == 0
+    if isinstance(value, dict):
+        return not bool(value)
+    return not str(value or "").strip()
+
+
+def merge_profile_patch(
+    profile: dict[str, Any],
+    patch_text: str,
+    *,
+    profile_list_fields: set[str],
+    profile_map_fields: set[str],
+) -> None:
+    for raw_line in str(patch_text or "").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("- ") or ":" not in line:
+            continue
+        field, raw_value = line[2:].split(":", 1)
+        key = str(field or "").strip()
+        value_text = str(raw_value or "").strip()
+        if not key:
+            continue
+        if key in profile_map_fields:
+            parsed_map = parse_profile_metric_map(value_text)
+            if parsed_map:
+                profile["values"] = parsed_map
+            continue
+        if key in profile_list_fields:
+            items = split_profile_list_value(value_text)
+            profile[key] = items or (["证据不足"] if value_text == "证据不足" else [])
+            if key in _SPEECH_LIST_FIELDS:
+                profile.setdefault("speech_habits", {})
+                profile["speech_habits"][key] = list(profile[key])
+            continue
+        profile[key] = value_text
+        if key == "cadence":
+            profile.setdefault("speech_habits", {})
+            profile["speech_habits"]["cadence"] = value_text
+        elif key in _EMOTION_FIELDS:
+            profile.setdefault("emotion_profile", {})
+            profile["emotion_profile"][key] = value_text
+
+
+def apply_profile_missing_fallbacks(
+    profile: dict[str, Any],
+    *,
+    completion_fields: tuple[str, ...],
+    profile_list_fields: set[str],
+    profile_map_fields: set[str],
+) -> None:
+    for field in completion_fields:
+        if not profile_field_is_effectively_empty(profile, field):
+            continue
+        if field in profile_map_fields:
+            continue
+        if field in profile_list_fields:
+            profile[field] = ["证据不足"]
+            if field in _SPEECH_LIST_FIELDS:
+                profile.setdefault("speech_habits", {})
+                profile["speech_habits"][field] = ["证据不足"]
+            continue
+        profile[field] = "证据不足"
+        if field == "cadence":
+            profile.setdefault("speech_habits", {})
+            profile["speech_habits"]["cadence"] = "证据不足"
+        elif field in _EMOTION_FIELDS:
+            profile.setdefault("emotion_profile", {})
+            profile["emotion_profile"][field] = "证据不足"
+
+
+def split_profile_list_value(value: str) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [item.strip() for item in re.split(r"\s*[；;]\s*", text) if item.strip()]
+
+
+def parse_profile_metric_map(value: str) -> dict[str, Any]:
+    text = str(value or "").strip()
+    if not text:
+        return {}
+    parsed: dict[str, Any] = {}
+    for part in re.split(r"\s*[；;]\s*", text):
+        if "=" not in part:
+            continue
+        key, raw = part.split("=", 1)
+        key_text = key.strip()
+        raw_text = raw.strip()
+        if not key_text:
+            continue
+        try:
+            parsed[key_text] = int(raw_text)
+        except ValueError:
+            parsed[key_text] = raw_text
+    return parsed
+
+
+def profile_list_value(profile: dict[str, Any], key: str) -> list[str]:
+    direct = profile.get(key, [])
+    if isinstance(direct, list):
+        return [str(item).strip() for item in direct if str(item).strip()]
+    speech_habits = profile.get("speech_habits", {})
+    if isinstance(speech_habits, dict):
+        nested = speech_habits.get(key, [])
+        if isinstance(nested, list):
+            return [str(item).strip() for item in nested if str(item).strip()]
+    return []
+
+
+def looks_generic_style_scalar(value: str) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return True
+    generic_tokens = (
+        "冷静",
+        "克制",
+        "温和",
+        "直接",
+        "理性",
+        "简短",
+        "平静",
+        "含蓄",
+        "尖锐",
+        "轻声",
+    )
+    return len(text) <= 8 and any(token in text for token in generic_tokens)
+
+
+def extract_dialogue_evidence(payload: dict[str, Any], *, character: str) -> list[str]:
+    request = dict(payload.get("request", {}) or {})
+    lines: list[str] = []
+    for block in [request.get("excerpt", ""), *(dict(request.get("excerpt_stages", {}) or {}).values())]:
+        for raw_line in str(block or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if character in line or any(token in line for token in ("“", "”", "\"", "道", "说道", "笑道", "问道")):
+                if line not in lines:
+                    lines.append(line)
+            if len(lines) >= 8:
+                return lines
+    return lines
+
+
+def looks_like_unstable_profile_scalar(value: str) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if any(token in text for token in ('"', "“", "”", "‘", "’", "「", "」")):
+        return True
+    if text.endswith(("：", ":", "，", ",", "；", ";", "、")):
+        return True
+    if len(text) > 46:
+        return True
+    return bool(
+        re.search(
+            r"(只见|忽见|回头|转过|只听|听见|听得|说道|笑道|问道|喝道|骂道|叹道|叫道|大家想着|心里还自|拍着手|走了出来|看了.*一眼|旧诗有云|薛蟠)",
+            text,
+        )
+    )
