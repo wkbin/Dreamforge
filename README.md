@@ -60,7 +60,15 @@ pip install -r requirements.txt
 
 ### Web UI
 
-如果你不想从 skill 或 CLI 入口开始，现在也可以直接启动 Web UI：
+如果你不想从 skill 或 CLI 入口开始，现在也可以直接启动 Web UI。
+
+启动前请先安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+然后再执行：
 
 ```bash
 python scripts/run_webui.py --reload
