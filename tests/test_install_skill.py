@@ -754,6 +754,52 @@ class InstallSkillTests(unittest.TestCase):
             self.assertEqual(payload["merge_payload"]["mode"], "relation_merge")
             self.assertEqual(payload["host_plan"]["execution"], "sequential_chunks_then_merge")
 
+    def test_installed_build_prompt_payload_emits_stderr_warning_and_verbose_summary_for_no_match(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            novel_path = tmp_root / "novel.txt"
+            repeated = "前文只有旁白，谁都没有真正露面，局势像蒙着一层雾，所有人都在绕圈试探却始终不落到目标角色身上。"
+            novel_path.write_text((repeated + "。") * 320, encoding="utf-8")
+            payload_path = tmp_root / "distill_payload.json"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_prompt_payload.py"),
+                    "--mode",
+                    "distill",
+                    "--novel",
+                    str(novel_path),
+                    "--characters",
+                    "齐夏",
+                    "--max-sentences",
+                    "500",
+                    "--max-chars",
+                    "50000",
+                    "--output",
+                    str(payload_path),
+                    "--verbose",
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(payload_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["request"]["chunk_mode"], "chunked")
+            self.assertEqual(payload["request"]["excerpt_focus"]["matched_characters"], [])
+            self.assertIn("未匹配到任何目标角色", payload["meta"]["warnings"][0])
+            self.assertTrue(any("chunk 分块" in item for item in payload["meta"]["warnings"]))
+            self.assertIn("[build_prompt_payload] warning:", result.stderr)
+            self.assertIn("chunk 分块", result.stderr)
+            self.assertIn("mode=distill", result.stderr)
+            self.assertIn("matched=[]", result.stderr)
+
     def test_installed_skill_end_to_end_host_workflow(self):
         repo_root = Path(__file__).resolve().parents[1]
         packaged_src = repo_root / "zaomeng-skill"

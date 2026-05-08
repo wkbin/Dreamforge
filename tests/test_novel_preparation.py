@@ -73,6 +73,21 @@ class NovelPreparationTests(unittest.TestCase):
             self.assertEqual(payload["matched_characters"], ["齐夏"])
             self.assertEqual(payload["missing_characters"], ["肖冉"])
 
+    def test_build_excerpt_payload_matches_simplified_names_against_traditional_text(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            novel_path = Path(tmpdir) / "novel.txt"
+            novel_path.write_text("齊夏看了章晨澤一眼。旁人還在說話。", encoding="utf-8")
+            payload = build_excerpt_payload(
+                novel_path,
+                characters=["齐夏", "章晨泽"],
+                max_sentences=4,
+                max_chars=200,
+            )
+
+        self.assertEqual(payload["matched_characters"], ["齐夏", "章晨泽"])
+        self.assertEqual(payload["missing_characters"], [])
+        self.assertIn("齊夏看了章晨澤一眼", payload["excerpt"])
+
     def test_prepare_novel_excerpt_spreads_single_character_evidence_across_timeline(self):
         text = (
             "贾宝玉初入大观园。"

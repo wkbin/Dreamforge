@@ -21,6 +21,48 @@ from _skill_support.workflow_completion import (
 )
 
 
+def _stderr(message: str) -> None:
+    print(str(message), file=sys.stderr)
+
+
+def _warning_messages(payload: dict[str, object]) -> list[str]:
+    meta = dict(payload.get("meta", {}) or {})
+    return [str(item).strip() for item in list(meta.get("warnings", [])) if str(item).strip()]
+
+
+def _emit_warnings(payload: dict[str, object]) -> None:
+    for message in _warning_messages(payload):
+        _stderr(f"[build_prompt_payload] warning: {message}")
+
+
+def _emit_verbose_summary(
+    *,
+    args: argparse.Namespace,
+    payload: dict[str, object],
+    output_path: Path | None,
+    status_path: Path,
+) -> None:
+    request = dict(payload.get("request", {}) or {})
+    meta = dict(payload.get("meta", {}) or {})
+    excerpt_focus = dict(request.get("excerpt_focus", {}) or {})
+    _stderr(
+        "[build_prompt_payload] "
+        f"mode={args.mode} novel={Path(args.novel).resolve()} output={output_path.resolve() if output_path else '<stdout>'}"
+    )
+    _stderr(
+        "[build_prompt_payload] "
+        f"status={status_path.resolve()} chunk_mode={request.get('chunk_mode', '')} "
+        f"chunk_count={meta.get('chunk_count', 0)} merge_required={meta.get('merge_required', False)}"
+    )
+    _stderr(
+        "[build_prompt_payload] "
+        f"requested={excerpt_focus.get('requested_characters', [])} "
+        f"matched={excerpt_focus.get('matched_characters', [])} "
+        f"missing={excerpt_focus.get('missing_characters', [])} "
+        f"strategy={excerpt_focus.get('strategy', '')}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Build a prompt-first payload for host-side LLM execution."
@@ -35,6 +77,7 @@ def main() -> int:
     parser.add_argument("--output", help="Optional JSON output path")
     parser.add_argument("--status-output", help="Optional status JSON output path")
     parser.add_argument("--run-manifest", help="Optional run_manifest.json path")
+    parser.add_argument("--verbose", action="store_true", help="Emit diagnostic summary to stderr")
     args = parser.parse_args()
 
     max_sentences = max(1, int(args.max_sentences))
@@ -141,6 +184,15 @@ def main() -> int:
             total_characters=len(status_payload["outputs"].get("locked_characters", []))
             if args.mode == "distill"
             else None,
+        )
+
+    _emit_warnings(payload)
+    if args.verbose:
+        _emit_verbose_summary(
+            args=args,
+            payload=payload,
+            output_path=output_path,
+            status_path=status_path,
         )
 
     if not output_path:

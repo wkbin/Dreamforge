@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,48 @@ from src.utils.text_parser import load_novel_text, split_sentences
 
 MIXED_EXCERPT_MIN_CHARS = 3_000
 MIXED_EXCERPT_MIN_SENTENCES = 40
+
+CHARACTER_VARIANT_MAP = str.maketrans(
+    {
+        "寶": "宝",
+        "釵": "钗",
+        "賈": "贾",
+        "夢": "梦",
+        "樓": "楼",
+        "藍": "蓝",
+        "無": "无",
+        "羨": "羡",
+        "齊": "齐",
+        "澤": "泽",
+        "劉": "刘",
+        "備": "备",
+        "關": "关",
+        "寧": "宁",
+        "蘇": "苏",
+        "葉": "叶",
+        "鐘": "钟",
+        "鍾": "钟",
+        "餘": "余",
+        "後": "后",
+        "臺": "台",
+        "蕭": "萧",
+        "萬": "万",
+        "陳": "陈",
+        "吳": "吴",
+        "鄭": "郑",
+        "趙": "赵",
+        "孫": "孙",
+        "錢": "钱",
+        "馬": "马",
+        "許": "许",
+        "顧": "顾",
+        "謝": "谢",
+        "韓": "韩",
+        "歐": "欧",
+    }
+)
+
+MATCH_IGNORED_PATTERN = re.compile(r"[\s\u3000\u00b7\u2027\u30fb'\"`~!@#$%^&*()_+\-=\[\]{}\\|;:,.<>/?，。！？：；、“”‘’《》【】（）]")
 
 
 def prepare_novel_excerpt(
@@ -125,6 +168,18 @@ def _normalize_characters(characters: list[str] | None) -> list[str]:
     return ordered
 
 
+def _normalize_match_text(text: str) -> str:
+    sample = unicodedata.normalize("NFKC", str(text or "")).translate(CHARACTER_VARIANT_MAP)
+    return MATCH_IGNORED_PATTERN.sub("", sample).lower()
+
+
+def _sentence_mentions_character(sentence: str, character: str) -> bool:
+    normalized_character = _normalize_match_text(character)
+    if not normalized_character:
+        return False
+    return normalized_character in _normalize_match_text(sentence)
+
+
 def _leading_excerpt(sentences: list[str], *, max_sentences: int, max_chars: int) -> str:
     selected_indices = _select_leading_indices(sentences, max_sentences=max_sentences, max_chars=max_chars)
     return _render_excerpt_from_indices(sentences, selected_indices, max_chars=max_chars)
@@ -162,7 +217,7 @@ def _character_focused_excerpt(
 
     for idx, sentence in enumerate(sentences):
         for name in characters:
-            if name and name in sentence:
+            if _sentence_mentions_character(sentence, name):
                 character_hits[name].append(idx)
 
     matched = [name for name, hits in character_hits.items() if hits]
@@ -342,7 +397,7 @@ def _dialogue_candidate_indices(sentences: list[str], characters: list[str]) -> 
         text = str(sentence or "").strip()
         if not text or not _looks_like_dialogue_sentence(text):
             continue
-        if any(name and name in text for name in characters):
+        if any(_sentence_mentions_character(text, name) for name in characters):
             primary.append(idx)
         else:
             secondary.append(idx)
@@ -356,7 +411,7 @@ def _thought_or_evaluation_indices(sentences: list[str], characters: list[str]) 
         text = str(sentence or "").strip()
         if not text or not _looks_like_thought_or_evaluation_sentence(text):
             continue
-        if any(name and name in text for name in characters):
+        if any(_sentence_mentions_character(text, name) for name in characters):
             primary.append(idx)
         else:
             secondary.append(idx)

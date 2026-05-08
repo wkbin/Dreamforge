@@ -15,6 +15,26 @@ from _skill_support.novel_preparation import build_excerpt_payload
 from _skill_support.workflow_completion import build_capability_status, default_status_path, infer_novel_id, update_run_manifest, write_json
 
 
+def _stderr(message: str) -> None:
+    print(str(message), file=sys.stderr)
+
+
+def _excerpt_warnings(payload: dict[str, object]) -> list[str]:
+    requested = [str(item).strip() for item in list(payload.get("requested_characters", [])) if str(item).strip()]
+    matched = [str(item).strip() for item in list(payload.get("matched_characters", [])) if str(item).strip()]
+    missing = [str(item).strip() for item in list(payload.get("missing_characters", [])) if str(item).strip()]
+    strategy = str(payload.get("excerpt_strategy", "")).strip()
+
+    warnings: list[str] = []
+    if requested and not matched:
+        warnings.append("未匹配到任何目标角色，excerpt 已回退为开头片段；请检查角色名写法、简繁体或异体字。")
+    elif missing:
+        warnings.append(f"部分目标角色未匹配到：{'、'.join(missing)}。")
+    if strategy == "character_windows_mixed":
+        warnings.append("目标角色命中较稀疏，excerpt 已混入时间线/对话补充句来补足上下文。")
+    return warnings
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Prepare a prompt-sized novel excerpt for prompt-first skill workflows."
@@ -26,6 +46,7 @@ def main() -> int:
     parser.add_argument("--output", help="Optional JSON output path")
     parser.add_argument("--status-output", help="Optional status JSON output path")
     parser.add_argument("--run-manifest", help="Optional run_manifest.json path")
+    parser.add_argument("--verbose", action="store_true", help="Emit diagnostic summary to stderr")
     args = parser.parse_args()
 
     payload = build_excerpt_payload(
@@ -79,6 +100,15 @@ def main() -> int:
                 "payloads": {"excerpt": str(output_path.resolve()) if output_path else ""},
                 "status_files": {"excerpt": str(status_path.resolve())},
             },
+        )
+    for message in _excerpt_warnings(payload):
+        _stderr(f"[prepare_novel_excerpt] warning: {message}")
+    if args.verbose:
+        _stderr(
+            "[prepare_novel_excerpt] "
+            f"novel={Path(args.novel).resolve()} output={output_path.resolve() if output_path else '<stdout>'} "
+            f"strategy={payload.get('excerpt_strategy', '')} matched={payload.get('matched_characters', [])} "
+            f"missing={payload.get('missing_characters', [])} status={status_path.resolve()}"
         )
     if not output_path:
         print(rendered)

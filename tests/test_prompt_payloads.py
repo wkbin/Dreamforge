@@ -127,6 +127,22 @@ class PromptPayloadTests(unittest.TestCase):
         self.assertEqual(payload["request"]["excerpt_focus"]["matched_characters"], ["肖冉"])
         self.assertEqual(payload["request"]["excerpt_focus"]["missing_characters"], [])
 
+    def test_build_distill_prompt_payload_emits_warning_when_no_requested_character_is_matched(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            novel_path = Path(tmpdir) / "novel.txt"
+            novel_path.write_text("前文只有旁白。没有目标角色出场。", encoding="utf-8")
+            payload = build_distill_prompt_payload(
+                novel_path,
+                characters=["齐夏"],
+                max_sentences=4,
+                max_chars=200,
+            )
+
+        self.assertEqual(payload["request"]["excerpt_focus"]["matched_characters"], [])
+        self.assertEqual(payload["request"]["excerpt_focus"]["missing_characters"], ["齐夏"])
+        self.assertTrue(payload["meta"]["warnings"])
+        self.assertIn("未匹配到任何目标角色", payload["meta"]["warnings"][0])
+
 
 if __name__ == "__main__":
     unittest.main()

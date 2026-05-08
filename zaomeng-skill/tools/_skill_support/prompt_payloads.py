@@ -28,6 +28,40 @@ def _read_utf8(path: Path) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
+def _dedupe_warnings(messages: list[str]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for item in messages:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        ordered.append(text)
+    return ordered
+
+
+def _build_excerpt_focus_warnings(request: dict[str, Any], *, chunked: bool = False) -> list[str]:
+    excerpt_focus = dict(request.get("excerpt_focus", {}) or {})
+    requested = [str(item).strip() for item in list(excerpt_focus.get("requested_characters", [])) if str(item).strip()]
+    matched = [str(item).strip() for item in list(excerpt_focus.get("matched_characters", [])) if str(item).strip()]
+    missing = [str(item).strip() for item in list(excerpt_focus.get("missing_characters", [])) if str(item).strip()]
+    strategy = str(excerpt_focus.get("strategy", "")).strip()
+
+    warnings: list[str] = []
+    if requested and not matched:
+        warnings.append("未匹配到任何目标角色，excerpt 已回退为开头片段；请检查角色名写法、简繁体或异体字。")
+    elif missing:
+        warnings.append(f"部分目标角色未匹配到：{'、'.join(missing)}。")
+
+    if strategy == "character_windows_mixed":
+        warnings.append("目标角色命中较稀疏，excerpt 已混入时间线/对话补充句来补足上下文。")
+
+    if chunked and requested and not matched:
+        warnings.append("当前 chunk 分块基于回退 excerpt 生成，而不是目标角色命中窗口。")
+
+    return _dedupe_warnings(warnings)
+
+
 def build_distill_prompt_payload(
     novel_path: str | Path,
     *,
@@ -88,6 +122,7 @@ def build_distill_prompt_payload(
             "characters_root": str(characters_root_path) if characters_root_path else "",
             "existing_profile_paths": existing_profile_paths,
             "existing_character_count": len(existing_profiles),
+            "warnings": [],
         },
     }
     return _attach_distill_chunk_bundle(payload)
@@ -132,6 +167,7 @@ def build_relation_prompt_payload(
             "source_path": excerpt_payload["source_path"],
             "max_sentences": max_sentences,
             "max_chars": max_chars,
+            "warnings": [],
         },
     }
     return _attach_relation_chunk_bundle(payload)
@@ -140,6 +176,7 @@ def build_relation_prompt_payload(
 def _attach_distill_chunk_bundle(payload: dict[str, Any]) -> dict[str, Any]:
     request = dict(payload.get("request", {}) or {})
     excerpt = str(request.get("excerpt", "")).strip()
+    warnings = _build_excerpt_focus_warnings(request)
     if not _should_use_chunking(
         excerpt,
         trigger_chars=DISTILL_CHUNK_TRIGGER_CHARS,
@@ -154,6 +191,7 @@ def _attach_distill_chunk_bundle(payload: dict[str, Any]) -> dict[str, Any]:
         )
         payload["meta"] = {
             **dict(payload.get("meta", {}) or {}),
+            "warnings": warnings,
             "chunked": False,
             "chunk_count": 0,
             "merge_required": False,
@@ -174,6 +212,7 @@ def _attach_distill_chunk_bundle(payload: dict[str, Any]) -> dict[str, Any]:
     )
     payload["meta"] = {
         **dict(payload.get("meta", {}) or {}),
+        "warnings": _dedupe_warnings([*warnings, *_build_excerpt_focus_warnings(request, chunked=True)]),
         "chunked": True,
         "chunk_count": len(chunk_entries),
         "merge_required": True,
@@ -184,6 +223,7 @@ def _attach_distill_chunk_bundle(payload: dict[str, Any]) -> dict[str, Any]:
 def _attach_relation_chunk_bundle(payload: dict[str, Any]) -> dict[str, Any]:
     request = dict(payload.get("request", {}) or {})
     excerpt = str(request.get("excerpt", "")).strip()
+    warnings = _build_excerpt_focus_warnings(request)
     if not _should_use_chunking(
         excerpt,
         trigger_chars=RELATION_CHUNK_TRIGGER_CHARS,
@@ -198,6 +238,7 @@ def _attach_relation_chunk_bundle(payload: dict[str, Any]) -> dict[str, Any]:
         )
         payload["meta"] = {
             **dict(payload.get("meta", {}) or {}),
+            "warnings": warnings,
             "chunked": False,
             "chunk_count": 0,
             "merge_required": False,
@@ -218,6 +259,7 @@ def _attach_relation_chunk_bundle(payload: dict[str, Any]) -> dict[str, Any]:
     )
     payload["meta"] = {
         **dict(payload.get("meta", {}) or {}),
+        "warnings": _dedupe_warnings([*warnings, *_build_excerpt_focus_warnings(request, chunked=True)]),
         "chunked": True,
         "chunk_count": len(chunk_entries),
         "merge_required": True,
