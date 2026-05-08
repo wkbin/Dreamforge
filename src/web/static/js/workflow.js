@@ -19,11 +19,35 @@ function syncTopbar() {
 }
 
 function applyModelSettingsView() {
+  ensureConnectionDetailsVisible();
   setValue("model-provider", modelSettings.provider || "openai-compatible");
   setValue("model-name", modelSettings.model || "");
   setValue("model-base-url", modelSettings.base_url || "");
   setValue("model-api-key", "");
-  setValue("model-max-tokens", modelSettings.max_tokens || 0);
+  setValue("model-max-tokens", modelSettings.max_tokens > 0 ? modelSettings.max_tokens : "");
+  const apiKeyInput = el("model-api-key");
+  if (apiKeyInput) {
+    apiKeyInput.placeholder = modelSettings.api_key_configured
+      ? "当前密钥已保存，如需更换再填写"
+      : "把密钥放在这里，故事才会真正开口";
+  }
+  setText(
+    "model-api-key-hint",
+    modelSettings.api_key_configured ? "当前密钥已经保存，留空提交时会继续沿用。" : "留空时会沿用已经保存的密钥。",
+    ""
+  );
+  const maxTokensInput = el("model-max-tokens");
+  if (maxTokensInput) {
+    maxTokensInput.placeholder =
+      modelSettings.max_tokens > 0 ? String(modelSettings.max_tokens) : "留空或填 0，则沿用推荐值";
+  }
+  setText(
+    "model-max-tokens-hint",
+    modelSettings.max_tokens > 0
+      ? `当前单次输出上限为 ${modelSettings.max_tokens}，留空或填 0 会改回默认值。`
+      : "当前未另设单次输出上限，会沿用默认值。",
+    ""
+  );
   setText(
     "sidebar-status",
     modelSettings.configured
@@ -33,9 +57,6 @@ function applyModelSettingsView() {
   setText("model-provider-view", humanizeProvider(modelSettings.provider));
   toggle("model-summary", modelSettings.configured);
   syncChoiceGroup("model-provider-options", "model-provider");
-  if (modelSettings.configured) {
-    setConnectionDetailsVisible(false);
-  }
   syncTopbar();
 }
 

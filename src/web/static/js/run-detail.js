@@ -395,6 +395,7 @@ function fillPersonaReviewCharacterOptions(run) {
   } else if (names.length) {
     select.value = names[0];
   }
+  renderPersonaReviewCharacterOptions(names, select.value);
 }
 
 function renderPersonaReview(payload) {
@@ -403,19 +404,74 @@ function renderPersonaReview(payload) {
   if (payload?.character && el("persona-review-character")) {
     el("persona-review-character").value = payload.character;
   }
+  renderPersonaReviewCharacterOptions(getRunCharacterNames(currentRun), valueOf("persona-review-character", ""));
+}
+
+function renderPersonaReviewCharacterOptions(names, currentValue) {
+  const root = el("persona-review-character-options");
+  const select = el("persona-review-character");
+  if (!root || !select) return;
+  root.innerHTML = "";
+  if (!(names || []).length) {
+    const hint = document.createElement("span");
+    hint.className = "pill hint-pill";
+    hint.textContent = "请先选择一卷已完成的人物";
+    root.appendChild(hint);
+    return;
+  }
+
+  names.forEach((name) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pill persona-pill";
+    button.textContent = name;
+    if (name === currentValue) {
+      button.classList.add("active");
+    }
+    button.addEventListener("click", () => {
+      if (select.value === name) {
+        return;
+      }
+      select.value = name;
+      renderPersonaReviewCharacterOptions(names, name);
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    root.appendChild(button);
+  });
 }
 
 function fillPersonaReviewFields(fields) {
   setValue("persona-core-identity", fields.core_identity || "");
   setValue("persona-story-role", fields.story_role || "");
+  setValue("persona-identity-anchor", fields.identity_anchor || "");
+  setValue("persona-temperament-type", fields.temperament_type || "");
   setValue("persona-soul-goal", fields.soul_goal || "");
+  setValue("persona-hidden-desire", fields.hidden_desire || "");
+  setValue("persona-inner-conflict", fields.inner_conflict || "");
+  setValue("persona-self-cognition", fields.self_cognition || "");
+  setValue("persona-private-self", fields.private_self || "");
+  setValue("persona-core-traits", fields.core_traits || "");
   setValue("persona-speech-style", fields.speech_style || "");
+  setValue("persona-cadence", fields.cadence || "");
+  setValue("persona-typical-lines", fields.typical_lines || "");
+  setValue("persona-signature-phrases", fields.signature_phrases || "");
+  setValue("persona-sentence-openers", fields.sentence_openers || "");
+  setValue("persona-sentence-endings", fields.sentence_endings || "");
   setValue("persona-social-mode", fields.social_mode || "");
+  setValue("persona-thinking-style", fields.thinking_style || "");
+  setValue("persona-decision-rules", fields.decision_rules || "");
+  setValue("persona-reward-logic", fields.reward_logic || "");
   setValue("persona-worldview", fields.worldview || "");
   setValue("persona-belief-anchor", fields.belief_anchor || "");
   setValue("persona-moral-bottom-line", fields.moral_bottom_line || "");
   setValue("persona-restraint-threshold", fields.restraint_threshold || "");
+  setValue("persona-key-bonds", fields.key_bonds || "");
+  setValue("persona-forbidden-behaviors", fields.forbidden_behaviors || "");
   setValue("persona-stress-response", fields.stress_response || "");
+  setValue("persona-emotion-model", fields.emotion_model || "");
+  setValue("persona-anger-style", fields.anger_style || "");
+  setValue("persona-joy-style", fields.joy_style || "");
+  setValue("persona-grievance-style", fields.grievance_style || "");
   setValue("persona-others-impression", fields.others_impression || "");
 }
 

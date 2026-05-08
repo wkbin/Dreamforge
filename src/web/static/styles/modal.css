@@ -2,10 +2,17 @@
   position: fixed;
   inset: 0;
   z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 1rem;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(90, 67, 55, 0.22);
   backdrop-filter: blur(8px);
@@ -13,14 +20,24 @@
 
 .modal-card {
   position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.72rem;
   width: min(700px, calc(100vw - 28px));
-  margin: 42px auto 0;
-  padding: 24px;
+  max-height: calc(100dvh - 2rem);
+  margin: 0;
+  padding: 20px;
+  flex: 0 1 auto;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .inspector-modal-card {
   width: min(760px, calc(100vw - 28px));
-  max-height: calc(100vh - 64px);
+  max-height: calc(100dvh - 2rem);
   overflow: auto;
 }
 
@@ -37,13 +54,13 @@
 
 .relation-details-list {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.7rem;
 }
 
 .relation-detail-card {
   display: grid;
-  gap: 0.6rem;
-  padding: 0.95rem 1rem;
+  gap: 0.45rem;
+  padding: 0.82rem 0.88rem;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(170, 146, 127, 0.12);
   background: rgba(255, 255, 255, 0.76);
@@ -102,11 +119,163 @@
 
 .connection-details {
   display: grid;
-  gap: 18px;
+  gap: 0.7rem;
+}
+
+.review-group {
+  display: grid;
+  gap: 0.72rem;
+  padding: 0.18rem 0 0.12rem;
+}
+
+.review-group + .review-group {
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(170, 146, 127, 0.12);
+}
+
+.review-group-head {
+  display: grid;
+  gap: 0.18rem;
+  padding: 0 0.1rem;
+}
+
+.review-group-head strong {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.review-group-head p {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.modal-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding-right: 0.12rem;
+}
+
+.modal-scroll > .stack-form,
+.modal-scroll > .relation-details-list {
+  min-width: 0;
 }
 
 .modal-actions {
   margin-top: 0;
+}
+
+#settings-modal .modal-card {
+  width: min(720px, calc(100vw - 28px));
+}
+
+#settings-modal .stack-form {
+  gap: 0.72rem;
+}
+
+#settings-modal .panel-head,
+#persona-review-modal .panel-head,
+#relation-details-modal .panel-head {
+  gap: 0.7rem;
+}
+
+#settings-modal .panel-copy,
+#persona-review-modal .panel-copy,
+#relation-details-modal .panel-copy {
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+
+#settings-modal .field-card,
+#persona-review-modal .field-card {
+  gap: 0.5rem;
+  padding: 0.82rem 0.88rem 0.8rem;
+}
+
+#settings-modal .field-card span,
+#persona-review-modal .field-card span {
+  font-size: 11px;
+}
+
+#settings-modal .field-card small,
+#persona-review-modal .field-card small {
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+#persona-review-modal .review-group-head strong {
+  font-size: 0.78rem;
+}
+
+#persona-review-modal .review-group-head p {
+  font-size: 0.68rem;
+}
+
+#settings-modal input,
+#settings-modal textarea,
+#persona-review-modal input,
+#persona-review-modal textarea {
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+#settings-modal .mini-grid,
+#persona-review-modal .mini-grid {
+  gap: 0.72rem;
+}
+
+#settings-modal .modal-actions,
+#settings-modal .card-actions,
+#persona-review-modal .card-actions {
+  gap: 0.55rem;
+}
+
+#settings-modal .soft-button,
+#settings-modal .primary-button,
+#persona-review-modal .soft-button,
+#persona-review-modal .primary-button,
+#relation-details-modal .soft-button {
+  min-height: 2rem;
+  padding: 0 0.78rem;
+  font-size: 0.76rem;
+}
+
+#settings-modal .card-note,
+#persona-review-modal .card-note,
+#relation-details-modal .card-note {
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+#settings-modal .choice-card {
+  min-height: 3.85rem;
+}
+
+#settings-modal .compact-choice-card {
+  padding: 0.62rem 0.72rem;
+  gap: 0.22rem;
+}
+
+#settings-modal .compact-choice-card strong {
+  font-size: 0.78rem;
+}
+
+#settings-modal .compact-choice-card span {
+  font-size: 0.65rem;
+  line-height: 1.35;
+}
+
+#persona-review-modal .persona-pill,
+#persona-review-modal .hint-pill {
+  min-height: 1.95rem;
+  padding: 0 0.82rem;
+  font-size: 0.74rem;
 }
 
 @keyframes fade-card {

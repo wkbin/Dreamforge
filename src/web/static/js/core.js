@@ -195,6 +195,79 @@ function updateNovelFileView() {
   });
 }
 
+function closeCustomSelect(selectId) {
+  const root = el(`${selectId}-select`);
+  const trigger = el(`${selectId}-trigger`);
+  const menu = el(`${selectId}-menu`);
+  if (!root || !trigger || !menu) return;
+  root.classList.remove("open");
+  menu.classList.add("hidden");
+  trigger.setAttribute("aria-expanded", "false");
+}
+
+function syncCustomSelect(selectId) {
+  const select = el(selectId);
+  const root = el(`${selectId}-select`);
+  const trigger = el(`${selectId}-trigger`);
+  const menu = el(`${selectId}-menu`);
+  if (!(select instanceof HTMLSelectElement) || !root || !trigger || !menu) return;
+  const label = trigger.querySelector(".custom-select-label");
+
+  const options = Array.from(select.options);
+  const current = options.find((option) => option.value === select.value) || options[0] || null;
+  if (label) {
+    label.textContent = current?.textContent?.trim() || "请选择";
+  }
+  menu.innerHTML = "";
+
+  options.forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "custom-select-option";
+    if (option.value === select.value) {
+      button.classList.add("active");
+    }
+    button.textContent = option.textContent || option.value;
+    button.setAttribute("data-value", option.value);
+    button.addEventListener("click", () => {
+      select.value = option.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      syncCustomSelect(selectId);
+      closeCustomSelect(selectId);
+    });
+    menu.appendChild(button);
+  });
+}
+
+function initCustomSelect(selectId) {
+  const select = el(selectId);
+  const root = el(`${selectId}-select`);
+  const trigger = el(`${selectId}-trigger`);
+  const menu = el(`${selectId}-menu`);
+  if (!(select instanceof HTMLSelectElement) || !root || !trigger || !menu) return;
+  if (root.dataset.bound === "true") {
+    syncCustomSelect(selectId);
+    return;
+  }
+  root.dataset.bound = "true";
+  syncCustomSelect(selectId);
+  trigger.addEventListener("click", (event) => {
+    event.preventDefault();
+    const opening = menu.classList.contains("hidden");
+    document.querySelectorAll(".custom-select.open").forEach((node) => {
+      const currentId = node.id.replace(/-select$/, "");
+      closeCustomSelect(currentId);
+    });
+    if (!opening) {
+      return;
+    }
+    root.classList.add("open");
+    menu.classList.remove("hidden");
+    trigger.setAttribute("aria-expanded", "true");
+  });
+  select.addEventListener("change", () => syncCustomSelect(selectId));
+}
+
 function updateRedistillFileView() {
   const file = el("redistill-novel-file")?.files?.[0];
   setText("redistill-file-name", file?.name || "沿用当前书段", "");
@@ -438,9 +511,11 @@ function roundToStep(value, step) {
   return Math.max(unit, Math.round(amount / unit) * unit);
 }
 
-function setConnectionDetailsVisible(visible) {
-  toggle("connection-details", visible);
-  setText("toggle-connection-details-button", visible ? "收起连接细节" : "填写连接细节", "");
+function ensureConnectionDetailsVisible() {
+  const details = el("connection-details");
+  if (details) {
+    details.classList.remove("hidden");
+  }
 }
 
 function toggleNameInInput(inputId, name) {
@@ -578,6 +653,12 @@ function humanizeProvider(provider) {
   return mapping[provider] || provider || "未接入";
 }
 
+function syncModalScrollLock() {
+  const hasVisibleModal = Boolean(document.querySelector(".modal:not(.hidden)"));
+  document.documentElement.classList.toggle("modal-open", hasVisibleModal);
+  document.body.classList.toggle("modal-open", hasVisibleModal);
+}
+
 function findRunById(runId) {
   return allRuns.find((item) => item.run_id === runId) || null;
 }
@@ -633,28 +714,34 @@ function formatWeakTime(value) {
 }
 
 function openSettingsModal() {
-  setConnectionDetailsVisible(!modelSettings.configured);
+  ensureConnectionDetailsVisible();
   toggle("settings-modal", true);
+  syncModalScrollLock();
 }
 
 function closeSettingsModal() {
   toggle("settings-modal", false);
+  syncModalScrollLock();
 }
 
 function openPersonaReviewModal() {
   toggle("persona-review-modal", true);
+  syncModalScrollLock();
 }
 
 function closePersonaReviewModal() {
   toggle("persona-review-modal", false);
+  syncModalScrollLock();
 }
 
 function openRelationDetailsModal() {
   toggle("relation-details-modal", true);
+  syncModalScrollLock();
 }
 
 function closeRelationDetailsModal() {
   toggle("relation-details-modal", false);
+  syncModalScrollLock();
 }
 
 async function apiJson(url, options = {}, fallbackMessage = "请求失败。") {

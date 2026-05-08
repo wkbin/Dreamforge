@@ -282,14 +282,35 @@ async function handlePersonaReviewSubmit(event) {
           body: JSON.stringify({
             core_identity: trimmedValue("persona-core-identity", ""),
             story_role: trimmedValue("persona-story-role", ""),
+            identity_anchor: trimmedValue("persona-identity-anchor", ""),
+            temperament_type: trimmedValue("persona-temperament-type", ""),
             soul_goal: trimmedValue("persona-soul-goal", ""),
+            hidden_desire: trimmedValue("persona-hidden-desire", ""),
+            inner_conflict: trimmedValue("persona-inner-conflict", ""),
+            self_cognition: trimmedValue("persona-self-cognition", ""),
+            private_self: trimmedValue("persona-private-self", ""),
+            core_traits: trimmedValue("persona-core-traits", ""),
             speech_style: trimmedValue("persona-speech-style", ""),
+            cadence: trimmedValue("persona-cadence", ""),
+            typical_lines: trimmedValue("persona-typical-lines", ""),
+            signature_phrases: trimmedValue("persona-signature-phrases", ""),
+            sentence_openers: trimmedValue("persona-sentence-openers", ""),
+            sentence_endings: trimmedValue("persona-sentence-endings", ""),
             social_mode: trimmedValue("persona-social-mode", ""),
+            thinking_style: trimmedValue("persona-thinking-style", ""),
+            decision_rules: trimmedValue("persona-decision-rules", ""),
+            reward_logic: trimmedValue("persona-reward-logic", ""),
             worldview: trimmedValue("persona-worldview", ""),
             belief_anchor: trimmedValue("persona-belief-anchor", ""),
             moral_bottom_line: trimmedValue("persona-moral-bottom-line", ""),
             restraint_threshold: trimmedValue("persona-restraint-threshold", ""),
+            key_bonds: trimmedValue("persona-key-bonds", ""),
+            forbidden_behaviors: trimmedValue("persona-forbidden-behaviors", ""),
             stress_response: trimmedValue("persona-stress-response", ""),
+            emotion_model: trimmedValue("persona-emotion-model", ""),
+            anger_style: trimmedValue("persona-anger-style", ""),
+            joy_style: trimmedValue("persona-joy-style", ""),
+            grievance_style: trimmedValue("persona-grievance-style", ""),
             others_impression: trimmedValue("persona-others-impression", ""),
           }),
         },
@@ -385,10 +406,6 @@ function bindEvents() {
   bind("close-settings-button", "click", closeSettingsModal);
   bind("close-persona-review-button", "click", closePersonaReviewModal);
   bind("close-relation-details-button", "click", closeRelationDetailsModal);
-  bind("toggle-connection-details-button", "click", () => {
-    const details = el("connection-details");
-    setConnectionDetailsVisible(details?.classList.contains("hidden"));
-  });
   bind("toggle-sidebar-button", "click", () => {
     sidebarCollapsed = !sidebarCollapsed;
     applySidebarState();
@@ -454,9 +471,9 @@ function bindEvents() {
     }
   });
 
-  bindChoiceGroup("model-provider-options", "model-provider");
   bindChoiceGroup("dialogue-mode-options", "dialogue-mode", syncModeFields);
   bindChoiceGroup("dialogue-mode-options", "dialogue-mode", updateCharacterPillState);
+  bindChoiceGroup("model-provider-options", "model-provider");
 
   document.addEventListener("click", (event) => {
     const target = event.target;
@@ -475,9 +492,10 @@ function bindEvents() {
 }
 
 async function boot() {
+  ensureConnectionDetailsVisible();
   syncModeFields();
-  syncChoiceGroup("model-provider-options", "model-provider");
   syncChoiceGroup("dialogue-mode-options", "dialogue-mode");
+  syncChoiceGroup("model-provider-options", "model-provider");
   updateNovelFileView();
   updateRedistillFileView();
   resizeComposer();

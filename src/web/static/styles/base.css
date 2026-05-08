@@ -38,6 +38,12 @@ body {
   overflow-y: auto;
 }
 
+html.modal-open,
+body.modal-open {
+  overflow: hidden;
+  height: 100%;
+}
+
 body {
   margin: 0;
   color: var(--ink);

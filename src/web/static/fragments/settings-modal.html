@@ -1,71 +1,70 @@
 <div id="settings-modal" class="modal hidden">
   <div class="modal-backdrop" data-close-modal="true"></div>
   <div class="modal-card">
-    <div class="panel-head">
-      <div>
-        <p class="eyebrow">故事声源</p>
-        <h3>为故事接通声源</h3>
-        <p class="panel-copy">先轻轻点亮入口，细节需要时再展开。</p>
-      </div>
-      <button id="close-settings-button" type="button" class="soft-button">稍后再说</button>
+    <div class="modal-scroll">
+      <form id="model-settings-form" class="stack-form">
+        <section id="connection-details" class="connection-details">
+          <label class="field-card">
+            <span>故事声源</span>
+            <select id="model-provider" class="native-hidden">
+              <option value="openai-compatible">通用接口</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="ollama">Ollama</option>
+            </select>
+            <div id="model-provider-options" class="choice-deck provider-deck modal-choice-deck">
+              <button type="button" class="choice-card compact-choice-card" data-value="openai-compatible">
+                <strong>通用接口</strong>
+                <span>适合大多数兼容 OpenAI 的声源</span>
+              </button>
+              <button type="button" class="choice-card compact-choice-card" data-value="openai">
+                <strong>OpenAI</strong>
+                <span>直接连到 OpenAI 官方接口</span>
+              </button>
+              <button type="button" class="choice-card compact-choice-card" data-value="anthropic">
+                <strong>Anthropic</strong>
+                <span>用 Claude 系列声源继续故事</span>
+              </button>
+              <button type="button" class="choice-card compact-choice-card" data-value="ollama">
+                <strong>Ollama</strong>
+                <span>连接本地已运行的模型服务</span>
+              </button>
+            </div>
+          </label>
+
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>声源名</span>
+              <input id="model-name" type="text" placeholder="例如：deepseek-chat / gpt-4.1 / qwen2.5:14b" />
+            </label>
+            <label class="field-card">
+              <span>入口地址</span>
+              <input id="model-base-url" type="text" placeholder="例如：https://api.openai.com/v1" />
+            </label>
+          </div>
+
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>通信密钥</span>
+              <input id="model-api-key" type="password" placeholder="把密钥放在这里，故事才会真正开口" />
+              <small id="model-api-key-hint">留空时会沿用已经保存的密钥。</small>
+            </label>
+            <label class="field-card">
+              <span>单次输出上限</span>
+              <input id="model-max-tokens" type="number" min="0" max="16000" step="100" placeholder="留空或填 0，则沿用推荐值" />
+              <small id="model-max-tokens-hint">未另设时会沿用当前默认值。</small>
+            </label>
+          </div>
+        </section>
+
+        <div class="card-actions">
+          <button id="close-settings-button" type="button" class="soft-button">稍后再说</button>
+          <button id="save-model-settings-button" type="submit" class="primary-button">保存</button>
+        </div>
+      </form>
+
+      <p id="model-settings-status" class="card-note"></p>
     </div>
-
-    <form id="model-settings-form" class="stack-form">
-      <div class="card-actions modal-actions">
-        <button id="toggle-connection-details-button" type="button" class="soft-button">填写连接细节</button>
-      </div>
-      <section id="connection-details" class="connection-details hidden">
-        <input id="model-provider" type="hidden" value="openai-compatible" />
-
-        <div id="model-provider-options" class="choice-deck provider-deck">
-          <button type="button" class="choice-card active" data-value="openai-compatible">
-            <strong>通用接口</strong>
-            <span>适合大多数模型服务。</span>
-          </button>
-          <button type="button" class="choice-card" data-value="openai">
-            <strong>OpenAI</strong>
-            <span>官方接口。</span>
-          </button>
-          <button type="button" class="choice-card" data-value="anthropic">
-            <strong>Anthropic</strong>
-            <span>Claude 系列。</span>
-          </button>
-          <button type="button" class="choice-card" data-value="ollama">
-            <strong>Ollama</strong>
-            <span>连接本地模型。</span>
-          </button>
-        </div>
-
-        <div class="mini-grid">
-          <label class="field-card">
-            <span>声源名</span>
-            <input id="model-name" type="text" placeholder="例如：deepseek-chat / gpt-4.1 / qwen2.5:14b" />
-          </label>
-          <label class="field-card">
-            <span>入口地址</span>
-            <input id="model-base-url" type="text" placeholder="例如：https://api.openai.com/v1" />
-          </label>
-        </div>
-
-        <label class="field-card">
-          <span>通行密钥</span>
-          <input id="model-api-key" type="password" placeholder="把密钥放在这里，故事才会真正开口" />
-        </label>
-
-        <div class="mini-grid">
-          <label class="field-card">
-            <span>单次输出上限</span>
-            <input id="model-max-tokens" type="number" min="0" max="16000" step="100" placeholder="留空或填 0，则沿用推荐值" />
-          </label>
-        </div>
-      </section>
-
-      <div class="card-actions">
-        <button id="save-model-settings-button" type="submit" class="primary-button">保存</button>
-      </div>
-    </form>
-
-    <p id="model-settings-status" class="card-note"></p>
   </div>
 </div>
 
@@ -80,67 +79,193 @@
       </div>
       <button id="close-persona-review-button" type="button" class="soft-button">先放一放</button>
     </div>
-
-    <form id="persona-review-form" class="stack-form">
-      <label class="field-card">
-        <span>当前人物</span>
-        <select id="persona-review-character"></select>
-      </label>
-
-      <div class="mini-grid">
+    <div class="modal-scroll">
+      <form id="persona-review-form" class="stack-form">
         <label class="field-card">
-          <span>核心身份</span>
-          <input id="persona-core-identity" type="text" />
+          <span>当前人物</span>
+          <select id="persona-review-character" class="native-hidden"></select>
+          <div id="persona-review-character-options" class="pill-row persona-pill-row modal-pill-row">
+            <span class="pill hint-pill">请先选择一卷已完成的人物</span>
+          </div>
         </label>
-        <label class="field-card">
-          <span>故事位置</span>
-          <input id="persona-story-role" type="text" />
-        </label>
-      </div>
 
-      <label class="field-card">
-        <span>灵魂目标</span>
-        <textarea id="persona-soul-goal" rows="2"></textarea>
-      </label>
-      <label class="field-card">
-        <span>说话方式</span>
-        <textarea id="persona-speech-style" rows="2"></textarea>
-      </label>
-      <label class="field-card">
-        <span>社交模式</span>
-        <textarea id="persona-social-mode" rows="2"></textarea>
-      </label>
-      <label class="field-card">
-        <span>世界观</span>
-        <textarea id="persona-worldview" rows="2"></textarea>
-      </label>
-      <label class="field-card">
-        <span>信念支点</span>
-        <textarea id="persona-belief-anchor" rows="2"></textarea>
-      </label>
-      <label class="field-card">
-        <span>道德底线</span>
-        <textarea id="persona-moral-bottom-line" rows="2"></textarea>
-      </label>
-      <label class="field-card">
-        <span>失控阈值</span>
-        <textarea id="persona-restraint-threshold" rows="2"></textarea>
-      </label>
-      <label class="field-card">
-        <span>应激反应</span>
-        <textarea id="persona-stress-response" rows="2"></textarea>
-      </label>
-      <label class="field-card">
-        <span>他人观感</span>
-        <textarea id="persona-others-impression" rows="2"></textarea>
-      </label>
+        <section class="review-group">
+          <div class="review-group-head">
+            <strong>身份与内核</strong>
+            <p>先把人物的站位、气质和真正想守住的东西写准。</p>
+          </div>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>核心身份</span>
+              <input id="persona-core-identity" type="text" />
+            </label>
+            <label class="field-card">
+              <span>故事位置</span>
+              <input id="persona-story-role" type="text" />
+            </label>
+          </div>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>身份锚点</span>
+              <input id="persona-identity-anchor" type="text" />
+            </label>
+            <label class="field-card">
+              <span>气质底色</span>
+              <input id="persona-temperament-type" type="text" />
+            </label>
+          </div>
+          <label class="field-card">
+            <span>灵魂目标</span>
+            <textarea id="persona-soul-goal" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>隐秘渴望</span>
+            <textarea id="persona-hidden-desire" rows="2"></textarea>
+          </label>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>内在冲突</span>
+              <textarea id="persona-inner-conflict" rows="2"></textarea>
+            </label>
+            <label class="field-card">
+              <span>自我认知</span>
+              <textarea id="persona-self-cognition" rows="2"></textarea>
+            </label>
+          </div>
+          <label class="field-card">
+            <span>私下的一面</span>
+            <textarea id="persona-private-self" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>核心特质</span>
+            <textarea id="persona-core-traits" rows="2" placeholder="用；分开"></textarea>
+          </label>
+        </section>
 
-      <div class="card-actions">
-        <button id="save-persona-review-button" type="submit" class="primary-button">保存校对</button>
-      </div>
-    </form>
+        <section class="review-group">
+          <div class="review-group-head">
+            <strong>判断与关系</strong>
+            <p>把人物怎么想、怎么选、会向谁靠近补完整。</p>
+          </div>
+          <label class="field-card">
+            <span>思考方式</span>
+            <textarea id="persona-thinking-style" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>社交模式</span>
+            <textarea id="persona-social-mode" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>决策规则</span>
+            <textarea id="persona-decision-rules" rows="2" placeholder="用；分开"></textarea>
+          </label>
+          <label class="field-card">
+            <span>回报逻辑</span>
+            <textarea id="persona-reward-logic" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>重要牵系</span>
+            <textarea id="persona-key-bonds" rows="2" placeholder="用；分开"></textarea>
+          </label>
+          <label class="field-card">
+            <span>不会做的事</span>
+            <textarea id="persona-forbidden-behaviors" rows="2" placeholder="用；分开"></textarea>
+          </label>
+        </section>
 
-    <p id="persona-review-status" class="card-note"></p>
+        <section class="review-group">
+          <div class="review-group-head">
+            <strong>语气与对白</strong>
+            <p>这一组最影响聊天味道，口头禅和句式都可以直接改。</p>
+          </div>
+          <label class="field-card">
+            <span>说话方式</span>
+            <textarea id="persona-speech-style" rows="2"></textarea>
+          </label>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>语句节奏</span>
+              <input id="persona-cadence" type="text" />
+            </label>
+            <label class="field-card">
+              <span>句尾习惯</span>
+              <input id="persona-sentence-endings" type="text" placeholder="用；分开" />
+            </label>
+          </div>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>起句习惯</span>
+              <input id="persona-sentence-openers" type="text" placeholder="用；分开" />
+            </label>
+            <label class="field-card">
+              <span>口头禅</span>
+              <input id="persona-signature-phrases" type="text" placeholder="用；分开" />
+            </label>
+          </div>
+          <label class="field-card">
+            <span>代表句</span>
+            <textarea id="persona-typical-lines" rows="3" placeholder="用；分开"></textarea>
+          </label>
+        </section>
+
+        <section class="review-group">
+          <div class="review-group-head">
+            <strong>情绪与边界</strong>
+            <p>这部分会决定人物在委屈、愤怒、快乐时到底怎么变。</p>
+          </div>
+          <label class="field-card">
+            <span>世界观</span>
+            <textarea id="persona-worldview" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>信念支点</span>
+            <textarea id="persona-belief-anchor" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>道德底线</span>
+            <textarea id="persona-moral-bottom-line" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>失控阈值</span>
+            <textarea id="persona-restraint-threshold" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>应激反应</span>
+            <textarea id="persona-stress-response" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>情绪底模</span>
+            <textarea id="persona-emotion-model" rows="2"></textarea>
+          </label>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>发怒方式</span>
+              <textarea id="persona-anger-style" rows="2"></textarea>
+            </label>
+            <label class="field-card">
+              <span>开心方式</span>
+              <textarea id="persona-joy-style" rows="2"></textarea>
+            </label>
+          </div>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>委屈方式</span>
+              <textarea id="persona-grievance-style" rows="2"></textarea>
+            </label>
+            <label class="field-card">
+              <span>他人观感</span>
+              <textarea id="persona-others-impression" rows="2"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <div class="card-actions">
+          <button id="save-persona-review-button" type="submit" class="primary-button">保存校对</button>
+        </div>
+      </form>
+
+      <p id="persona-review-status" class="card-note"></p>
+    </div>
   </div>
 </div>
 
@@ -155,8 +280,9 @@
       </div>
       <button id="close-relation-details-button" type="button" class="soft-button">稍后再看</button>
     </div>
-
-    <div id="relation-details-list" class="relation-details-list"></div>
-    <p id="relation-details-status" class="card-note"></p>
+    <div class="modal-scroll">
+      <div id="relation-details-list" class="relation-details-list"></div>
+      <p id="relation-details-status" class="card-note"></p>
+    </div>
   </div>
 </div>

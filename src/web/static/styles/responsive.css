@@ -99,3 +99,39 @@
     width: 100%;
   }
 }
+
+@media (max-width: 640px) {
+  .modal {
+    padding: 0.45rem;
+    align-items: stretch;
+  }
+
+  .modal-card,
+  .inspector-modal-card,
+  #settings-modal .modal-card {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - 1.1rem);
+    padding: 0.88rem;
+    border-radius: 1.2rem;
+  }
+
+  .modal-card .panel-head,
+  .inspector-modal-card .panel-head {
+    gap: 0.55rem;
+  }
+
+  .connection-details {
+    gap: 0.62rem;
+  }
+
+  #settings-modal .choice-card,
+  #settings-modal .compact-choice-card {
+    min-height: auto;
+  }
+
+  #settings-modal .field-card,
+  #persona-review-modal .field-card {
+    padding: 0.74rem 0.78rem 0.72rem;
+  }
+}

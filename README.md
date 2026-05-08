@@ -92,6 +92,7 @@ python scripts/run_webui.py --reload
 
 ![Web UI 首页预览](docs/images/webui-home.png)
 ![Web UI 书架预览](docs/images/webui-bookshelf.png)
+![Web UI 聊天预览](docs/images/webui-chat.png)
 
 ## 你可以拿它做什么
 
