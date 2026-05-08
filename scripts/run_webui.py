@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 from pathlib import Path
 import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+_PACKAGE_PREFIX = f"{__package__}." if __package__ else ""
+_web_asset_version = importlib.import_module(f"{_PACKAGE_PREFIX}web_asset_version")
 
 
 def main() -> int:
@@ -39,10 +43,14 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+        static_version = _web_asset_version.read_web_asset_version(PROJECT_ROOT)
+        print(f"Starting zaomeng Web UI with static asset version: {static_version}")
         uvicorn.run("src.web.app:app", host=args.host, port=args.port, reload=True)
         return 0
 
     app = create_app(WebRunService(args.storage_root))
+    static_version = _web_asset_version.read_web_asset_version(PROJECT_ROOT)
+    print(f"Starting zaomeng Web UI with static asset version: {static_version}")
     uvicorn.run(app, host=args.host, port=args.port, reload=False)
     return 0
 

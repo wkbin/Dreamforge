@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +66,30 @@ class ReleaseSkillScriptTests(unittest.TestCase):
             self.assertIn("zaomeng-skill/SKILL.md", names)
             self.assertIn("zaomeng-skill/README.md", names)
             self.assertIn("zaomeng-skill/PUBLISH.md", names)
+
+    def test_release_skill_cli_reports_web_static_asset_version(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        script_path = repo_root / "scripts" / "release_skill.py"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "dist"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    "--output-dir",
+                    str(output_dir),
+                    "--skip-checks",
+                    "--no-bump-web-assets",
+                ],
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertIn("Web static asset version:", result.stdout)
+            self.assertIn("Released skill archive:", result.stdout)
 
 
 if __name__ == "__main__":

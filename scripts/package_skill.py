@@ -10,6 +10,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 _PACKAGE_PREFIX = f"{__package__}." if __package__ else ""
 _install_skill = importlib.import_module(f"{_PACKAGE_PREFIX}install_skill")
 _skill_metadata = importlib.import_module(f"{_PACKAGE_PREFIX}skill_metadata")
+_web_asset_version = importlib.import_module(f"{_PACKAGE_PREFIX}web_asset_version")
 _IGNORED_DIR_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache"}
 
 
@@ -77,6 +78,16 @@ def main() -> int:
         default="",
         help="Optional top-level folder name inside the zip archive. Default: pack skill files at archive root",
     )
+    parser.add_argument(
+        "--no-bump-web-assets",
+        action="store_true",
+        help="Skip refreshing the web static asset version before packaging.",
+    )
+    parser.add_argument(
+        "--static-version",
+        default="",
+        help="Optional explicit web static asset version. Implies bumping web assets before packaging.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -86,6 +97,12 @@ def main() -> int:
     if not skill_dir.exists():
         raise FileNotFoundError(f"Missing skill directory: {skill_dir}")
 
+    if args.static_version:
+        _web_asset_version.sync_web_asset_version(repo_root, args.static_version)
+    elif not args.no_bump_web_assets:
+        _web_asset_version.bump_web_asset_version(repo_root)
+
+    resolved_static_version = _web_asset_version.read_web_asset_version(repo_root)
     version = args.version or _skill_metadata.read_skill_version(skill_dir)
     archive_path = build_archive(
         skill_dir,
@@ -94,6 +111,7 @@ def main() -> int:
         package_name=args.package_name,
         archive_root=args.archive_root,
     )
+    print(f"Web static asset version: {resolved_static_version}")
     print(f"Packaged skill archive: {archive_path}")
     return 0
 

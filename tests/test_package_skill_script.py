@@ -20,19 +20,23 @@ class PackageSkillScriptTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir) / "dist"
-            subprocess.run(
+            result = subprocess.run(
                 [
                     sys.executable,
                     str(script_path),
                     "--output-dir",
                     str(output_dir),
+                    "--no-bump-web-assets",
                 ],
                 cwd=repo_root,
                 check=True,
+                capture_output=True,
+                text=True,
             )
 
             archive_path = output_dir / f"zaomeng-{version}.skill.zip"
             self.assertTrue(archive_path.exists())
+            self.assertIn("Web static asset version:", result.stdout)
 
             with ZipFile(archive_path) as zf:
                 names = set(zf.namelist())
@@ -66,18 +70,22 @@ class PackageSkillScriptTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir) / "dist"
-            subprocess.run(
+            result = subprocess.run(
                 [
                     sys.executable,
                     str(script_path),
                     "--output-dir",
                     str(output_dir),
+                    "--no-bump-web-assets",
                 ],
                 cwd=repo_root,
                 check=True,
+                capture_output=True,
+                text=True,
             )
 
             archive_path = output_dir / f"zaomeng-{version}.skill.zip"
+            self.assertIn("Web static asset version:", result.stdout)
             with ZipFile(archive_path) as zf:
                 names = set(zf.namelist())
 
