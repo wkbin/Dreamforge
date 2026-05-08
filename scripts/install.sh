@@ -210,8 +210,13 @@ Requirements: ${requirements_path}
 Shell rc:     ${rc_file}
 
 Next:
-  source "${rc_file}"
+  Open a new shell, or run:
+  export PATH="\$HOME/.local/bin:\$PATH"
   zaomeng
+
+If your shell rc already contains unrelated broken lines and "source ${rc_file}" reports errors,
+you can still start zaomeng right away with:
+  ${launcher_path}
 
 Useful:
   zaomeng web --reload
