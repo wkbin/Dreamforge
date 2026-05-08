@@ -60,7 +60,15 @@ pip install -r requirements.txt
 
 ### Web UI
 
-If you want a direct product entrypoint instead of starting from the skill or CLI, you can run the Web UI:
+If you want a direct product entrypoint instead of starting from the skill or CLI, you can run the Web UI.
+
+Install dependencies first:
+
+```bash
+pip install -r requirements.txt
+```
+
+Then run:
 
 ```bash
 python scripts/run_webui.py --reload
