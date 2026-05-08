@@ -15,6 +15,17 @@ from _skill_support.novel_preparation import build_excerpt_payload
 from _skill_support.workflow_completion import build_capability_status, default_status_path, infer_novel_id, update_run_manifest, write_json
 
 
+def _warning_code(message: str) -> str:
+    text = str(message).strip()
+    if "未匹配到任何目标角色" in text:
+        return "no_character_match"
+    if "部分目标角色未匹配到" in text:
+        return "partial_character_match"
+    if "目标角色命中较稀疏" in text:
+        return "sparse_character_hits"
+    return "general"
+
+
 def _stderr(message: str) -> None:
     print(str(message), file=sys.stderr)
 
@@ -102,7 +113,7 @@ def main() -> int:
             },
         )
     for message in _excerpt_warnings(payload):
-        _stderr(f"[prepare_novel_excerpt] warning: {message}")
+        _stderr(f"[prepare_novel_excerpt] warning({_warning_code(message)}): {message}")
     if args.verbose:
         _stderr(
             "[prepare_novel_excerpt] "

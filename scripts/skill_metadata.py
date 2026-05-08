@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 
 def _split_skill_frontmatter(text: str) -> tuple[dict[str, Any], str]:

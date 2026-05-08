@@ -21,6 +21,19 @@ from _skill_support.workflow_completion import (
 )
 
 
+def _warning_code(message: str) -> str:
+    text = str(message).strip()
+    if "未匹配到任何目标角色" in text:
+        return "no_character_match"
+    if "部分目标角色未匹配到" in text:
+        return "partial_character_match"
+    if "目标角色命中较稀疏" in text:
+        return "sparse_character_hits"
+    if "chunk 分块" in text:
+        return "chunk_fallback"
+    return "general"
+
+
 def _stderr(message: str) -> None:
     print(str(message), file=sys.stderr)
 
@@ -32,7 +45,7 @@ def _warning_messages(payload: dict[str, object]) -> list[str]:
 
 def _emit_warnings(payload: dict[str, object]) -> None:
     for message in _warning_messages(payload):
-        _stderr(f"[build_prompt_payload] warning: {message}")
+        _stderr(f"[build_prompt_payload] warning({_warning_code(message)}): {message}")
 
 
 def _emit_verbose_summary(

@@ -795,8 +795,8 @@ class InstallSkillTests(unittest.TestCase):
             self.assertEqual(payload["request"]["excerpt_focus"]["matched_characters"], [])
             self.assertIn("未匹配到任何目标角色", payload["meta"]["warnings"][0])
             self.assertTrue(any("chunk 分块" in item for item in payload["meta"]["warnings"]))
-            self.assertIn("[build_prompt_payload] warning:", result.stderr)
-            self.assertIn("chunk 分块", result.stderr)
+            self.assertIn("[build_prompt_payload] warning(", result.stderr)
+            self.assertIn("warning(chunk_fallback)", result.stderr)
             self.assertIn("mode=distill", result.stderr)
             self.assertIn("matched=[]", result.stderr)
 
