@@ -58,9 +58,47 @@ python scripts/install_skill.py --skills-dir <your-skills-root>
 pip install -r requirements.txt
 ```
 
+如果你只是想运行 Web UI 或使用一键安装脚本，通常只需要：
+
+```bash
+pip install -r requirements.runtime.txt
+```
+
 ### Web UI 🖥️
 
 如果你不想从 skill 或 CLI 入口开始，现在也可以直接启动 Web UI。
+
+#### 一键安装（Linux / macOS / WSL2 / Termux）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/wkbin/zaomeng/main/scripts/install.sh | bash
+source ~/.bashrc
+zaomeng
+```
+
+如果你用的是 `zsh`，把第二行改成：
+
+```bash
+source ~/.zshrc
+```
+
+安装脚本会：
+
+- 下载当前仓库到 `~/.local/share/zaomeng`
+- 创建独立虚拟环境
+- 默认安装更轻的 `requirements.runtime.txt`
+- 写入 `~/.local/bin/zaomeng` 启动命令
+- 自动把 `~/.local/bin` 加入 shell 的 `PATH`
+
+安装完成后，`zaomeng` 默认直接启动 Web UI。你也可以使用：
+
+```bash
+zaomeng web --reload
+zaomeng bump-web-assets
+zaomeng install-skill --skills-dir <your-skills-root>
+```
+
+#### 手动启动
 
 启动前请先安装依赖：
 

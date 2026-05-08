@@ -58,9 +58,47 @@ python scripts/install_skill.py --skills-dir <your-skills-root>
 pip install -r requirements.txt
 ```
 
+If you only want to run the Web UI or use the one-line installer, this is usually enough:
+
+```bash
+pip install -r requirements.runtime.txt
+```
+
 ### Web UI 🖥️
 
 If you want a direct product entrypoint instead of starting from the skill or CLI, you can run the Web UI.
+
+#### One-line Install (Linux / macOS / WSL2 / Termux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/wkbin/zaomeng/main/scripts/install.sh | bash
+source ~/.bashrc
+zaomeng
+```
+
+If you use `zsh`, replace the second line with:
+
+```bash
+source ~/.zshrc
+```
+
+The installer will:
+
+- download the repository into `~/.local/share/zaomeng`
+- create an isolated virtual environment
+- install the lighter `requirements.runtime.txt` by default
+- create a `~/.local/bin/zaomeng` launcher
+- add `~/.local/bin` to your shell `PATH`
+
+After installation, `zaomeng` starts the Web UI by default. You can also run:
+
+```bash
+zaomeng web --reload
+zaomeng bump-web-assets
+zaomeng install-skill --skills-dir <your-skills-root>
+```
+
+#### Manual Start
 
 Install dependencies first:
 
