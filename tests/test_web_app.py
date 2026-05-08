@@ -740,6 +740,69 @@ class WebRunServiceTests(unittest.TestCase):
                 ["林黛玉", "薛宝钗"],
             )
 
+    def test_automatic_pipeline_relation_graph_failure_does_not_fail_chat_ready_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="novel.txt",
+                novel_content_base64=base64.b64encode("Alpha meets Beta.".encode("utf-8")).decode("ascii"),
+                characters=["Alpha"],
+            )
+            run_dir = Path(tmp) / "runs" / payload["run_id"]
+            manifest_path = run_dir / "run_manifest.json"
+            novel_path = run_dir / "input" / "novel.txt"
+
+            class _FakePathProvider:
+                def __init__(self, base_dir: Path) -> None:
+                    self.base_dir = base_dir
+
+                def characters_root(self, novel_id: str) -> Path:
+                    path = self.base_dir / "artifacts" / "characters" / novel_id
+                    path.mkdir(parents=True, exist_ok=True)
+                    return path
+
+                def relations_file(self, novel_id: str) -> Path:
+                    path = self.base_dir / "artifacts" / "relations" / f"{novel_id}_relations.md"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    return path
+
+            fake_parts = Mock()
+            fake_parts.path_provider = _FakePathProvider(run_dir)
+
+            def fake_chat_completion(messages, **kwargs):
+                prompt = messages[1]["content"]
+                if "RELATION_GRAPH" in prompt:
+                    return {"content": "# RELATION_GRAPH\n\n这里不是可解析的关系图正文。"}
+                return {
+                    "content": "# PROFILE\n- name: Alpha\n- novel_id: novel\n- core_identity: 核心人物\n- soul_goal: 守住答案\n- speech_style: 先压低语气再落结论\n- cadence: 慢半拍后落点\n- signature_phrases: 先看清；别急着站位\n- typical_lines: 先看清再说；别急着站位\n- sentence_openers: 先；别急\n- sentence_endings: 再说；也罢\n- worldview: 先把局势看清，再决定站位。\n- belief_anchor: 关键时刻不能自乱阵脚。\n- moral_bottom_line: 不把同伴当代价随手抛掉。\n- restraint_threshold: 平时克制，底线被逼穿时才会失控。\n- stress_response: 压力越大越会先收声，再集中判断。\n"
+                }
+
+            fake_parts.llm.chat_completion = Mock(side_effect=fake_chat_completion)
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts):
+                result = service._run_automatic_pipeline(
+                    manifest_path=manifest_path,
+                    novel_path=novel_path,
+                    locked_characters=["Alpha"],
+                    max_sentences=120,
+                    max_chars=50000,
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["status"], "ready")
+            self.assertEqual(result["summary"]["status_text"], "workflow_complete")
+            self.assertEqual(result["summary"]["graph_status"], "failed")
+            self.assertEqual(result["progress"]["graph_status"], "failed")
+            self.assertIn("关系图谱生成失败", result["progress"]["message"])
+            self.assertFalse(result["capabilities"]["export_graph"]["success"])
+            self.assertTrue((run_dir / "artifacts" / "characters" / "novel" / "Alpha" / "PROFILE.generated.md").exists())
+
     def test_automatic_pipeline_uses_llm_generated_profiles_and_materializes_persona_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
@@ -1369,6 +1432,23 @@ class WebAppRouteTests(unittest.TestCase):
             groups = service._collect_profile_completion_groups({}, repair_targets={})
 
             self.assertEqual([name for name, _, _ in groups], ["Inner Core", "Decision Logic", "Emotion And Stress", "Voice"])
+
+    def test_profile_completion_groups_treat_evidence_insufficient_as_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            groups = service._collect_profile_completion_groups(
+                {
+                    "soul_goal": "证据不足",
+                    "speech_style": "证据不足",
+                    "speech_habits": {"cadence": "证据不足", "signature_phrases": ["证据不足"]},
+                    "emotion_profile": {"anger_style": "证据不足"},
+                },
+                repair_targets={},
+            )
+
+            self.assertIn("Inner Core", [name for name, _, _ in groups])
+            self.assertIn("Emotion And Stress", [name for name, _, _ in groups])
+            self.assertIn("Voice", [name for name, _, _ in groups])
 
     def test_profile_repair_prompt_is_single_group_patch_only(self):
         with tempfile.TemporaryDirectory() as tmp:

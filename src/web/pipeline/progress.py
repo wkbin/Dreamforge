@@ -199,6 +199,78 @@ def finalize_workflow_success(
     )
 
 
+def finalize_workflow_success_without_graph(
+    refreshed: dict[str, Any],
+    *,
+    graph_error: str,
+    utc_now: Callable[[], str],
+    finalize_manifest_timing: Callable[[dict[str, Any], str], None],
+) -> None:
+    refreshed["status"] = "ready"
+    refreshed["success"] = True
+    refreshed["updated_at"] = utc_now()
+    finalize_manifest_timing(refreshed, "completed")
+    refreshed.setdefault("summary", {})["status_text"] = "workflow_complete"
+    refreshed["summary"]["graph_status"] = "failed"
+    if refreshed.get("timing", {}).get("elapsed_text"):
+        refreshed["summary"]["elapsed_text"] = refreshed["timing"]["elapsed_text"]
+
+    progress = refreshed.setdefault("progress", {})
+    progress["graph_status"] = "failed"
+    progress["stage"] = "graph_failed"
+    progress["current_character"] = ""
+    progress["message"] = f"人物蒸馏已完成，关系图谱生成失败：{graph_error}"
+
+    refreshed.setdefault("capabilities", {})["distill"] = {
+        "status": "complete",
+        "success": True,
+        "updated_at": utc_now(),
+        "message": "canonical profiles generated",
+    }
+    refreshed["capabilities"]["materialize"] = {
+        "status": "complete",
+        "success": True,
+        "updated_at": utc_now(),
+        "message": "persona bundle written",
+    }
+    refreshed["capabilities"]["export_graph"] = {
+        "status": "failed",
+        "success": False,
+        "updated_at": utc_now(),
+        "message": graph_error,
+    }
+    refreshed["capabilities"]["verify_workflow"] = {
+        "status": "complete",
+        "success": True,
+        "updated_at": utc_now(),
+        "message": "automatic workflow finished without relation graph",
+    }
+    refreshed.setdefault("events", []).append(
+        {
+            "stage": "graph_failed",
+            "status": "failed",
+            "message": f"关系图谱生成失败：{graph_error}",
+            "character": "",
+            "capability": "export_graph",
+            "timestamp": utc_now(),
+        }
+    )
+    refreshed.setdefault("events", []).append(
+        {
+            "stage": "workflow_complete",
+            "status": "complete",
+            "message": (
+                f"人物已可入场，关系图未生成；本次整理耗时 {refreshed['timing']['elapsed_text']}"
+                if refreshed.get("timing", {}).get("elapsed_text")
+                else "人物已可入场，关系图未生成。"
+            ),
+            "character": "",
+            "capability": "verify_workflow",
+            "timestamp": utc_now(),
+        }
+    )
+
+
 def finalize_workflow_stopped(
     stopped: dict[str, Any],
     *,

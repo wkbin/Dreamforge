@@ -76,18 +76,21 @@ def collect_profile_completion_groups(
 def profile_field_is_effectively_empty(profile: dict[str, Any], field: str) -> bool:
     if field == "cadence":
         value = str((profile.get("speech_habits", {}) or {}).get("cadence", "")).strip() or str(profile.get("cadence", "")).strip()
-        return not value
+        return (not value) or value == "证据不足"
     if field in _SPEECH_LIST_FIELDS:
-        return len(profile_list_value(profile, field)) == 0
+        values = profile_list_value(profile, field)
+        return len(values) == 0 or values == ["证据不足"]
     if field in _EMOTION_FIELDS:
         value = str((profile.get("emotion_profile", {}) or {}).get(field, "")).strip() or str(profile.get(field, "")).strip()
-        return not value
+        return (not value) or value == "证据不足"
     value = profile.get(field, "")
     if isinstance(value, list):
-        return len([str(item).strip() for item in value if str(item).strip()]) == 0
+        items = [str(item).strip() for item in value if str(item).strip()]
+        return len(items) == 0 or items == ["证据不足"]
     if isinstance(value, dict):
         return not bool(value)
-    return not str(value or "").strip()
+    text = str(value or "").strip()
+    return (not text) or text == "证据不足"
 
 
 def merge_profile_patch(

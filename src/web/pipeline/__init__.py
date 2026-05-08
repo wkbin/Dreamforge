@@ -29,6 +29,7 @@ from .progress import (
     finalize_workflow_failed,
     finalize_workflow_stopped,
     finalize_workflow_success,
+    finalize_workflow_success_without_graph,
 )
 from .quality import (
     build_progress_chunking_from_artifacts,
@@ -55,6 +56,7 @@ __all__ = [
     "finalize_workflow_failed",
     "finalize_workflow_stopped",
     "finalize_workflow_success",
+    "finalize_workflow_success_without_graph",
     "generate_character_profile_markdown",
     "generate_character_profile_markdown_chunked",
     "generate_relation_markdown",

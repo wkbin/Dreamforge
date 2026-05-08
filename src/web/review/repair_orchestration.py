@@ -21,11 +21,20 @@ def maybe_repair_generated_relations(
     llm_cap: Callable[[Config, str, int], int],
     relation_repair_max_tokens: int,
 ) -> str | None:
+    issues: list[str] = []
     try:
         relation_payload = load_relations_source(relations_file)
+        parsed_relations = dict(relation_payload.get("relations", {}) or {})
+        if not parsed_relations:
+            issues.append(
+                "当前草稿未能解析出任何关系对；请严格改写成完整的 RELATION_GRAPH Markdown，并为每对角色使用 `## 角色A_角色B` 小节。"
+            )
+        else:
+            issues.extend(collect_relation_repair_issues(relation_payload))
     except Exception:
-        return None
-    issues = collect_relation_repair_issues(relation_payload)
+        issues.append(
+            "当前草稿格式无法解析；请严格改写成完整的 RELATION_GRAPH Markdown，并为每对角色使用 `## 角色A_角色B` 小节。"
+        )
     if not issues:
         return None
     repair_result = parts.llm.chat_completion(

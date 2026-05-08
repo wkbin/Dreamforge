@@ -9,6 +9,7 @@ from src.web.pipeline import (
     apply_relation_progress,
     build_quality_snapshot,
     finalize_workflow_failed,
+    finalize_workflow_success_without_graph,
     finalize_workflow_stopped,
     finalize_workflow_success,
     process_distill_character,
@@ -140,41 +141,52 @@ class AutomaticPipelineMixin:
                     },
                 )
 
-            process_relation_graph(
-                novel_path=novel_path,
-                graph_cast=graph_cast,
-                max_sentences=max_sentences,
-                max_chars=max_chars,
-                manifest_path=manifest_path,
-                manifest_seed=manifest,
-                payload_dir=payload_dir,
-                novel_id=novel_id,
-                parts=parts,
-                config=config,
-                on_relation=on_relation,
-                assert_run_not_stopped=self._assert_run_not_stopped,
-                write_json=self._write_json,
-                load_manifest=self._load_manifest,
-                build_quality_snapshot=self._build_quality_snapshot,
-                update_manifest_chunk_progress=update_manifest_chunk_progress,
-                generate_relation_markdown=self._generate_relation_markdown,
-                maybe_repair_generated_relations=self._maybe_repair_generated_relations,
-                load_relations_source=load_relations_source,
-                export_relations_source=export_relations_source,
-                utc_now=_utc_now,
-                relation_repairs_state=(manifest.get("quality", {}) or {}).get("relation_repairs", {}),
-                quality_matched=quality_matched,
-                quality_missing=quality_missing,
-                quality_focus=quality_focus,
-                profile_repair_characters=profile_repair_characters,
-            )
-
             refreshed = self._discover_artifacts(self._load_manifest(manifest_path) or manifest)
-            finalize_workflow_success(
-                refreshed,
-                utc_now=_utc_now,
-                finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(target, outcome=outcome),
-            )
+            try:
+                process_relation_graph(
+                    novel_path=novel_path,
+                    graph_cast=graph_cast,
+                    max_sentences=max_sentences,
+                    max_chars=max_chars,
+                    manifest_path=manifest_path,
+                    manifest_seed=manifest,
+                    payload_dir=payload_dir,
+                    novel_id=novel_id,
+                    parts=parts,
+                    config=config,
+                    on_relation=on_relation,
+                    assert_run_not_stopped=self._assert_run_not_stopped,
+                    write_json=self._write_json,
+                    load_manifest=self._load_manifest,
+                    build_quality_snapshot=self._build_quality_snapshot,
+                    update_manifest_chunk_progress=update_manifest_chunk_progress,
+                    generate_relation_markdown=self._generate_relation_markdown,
+                    maybe_repair_generated_relations=self._maybe_repair_generated_relations,
+                    load_relations_source=load_relations_source,
+                    export_relations_source=export_relations_source,
+                    utc_now=_utc_now,
+                    relation_repairs_state=(manifest.get("quality", {}) or {}).get("relation_repairs", {}),
+                    quality_matched=quality_matched,
+                    quality_missing=quality_missing,
+                    quality_focus=quality_focus,
+                    profile_repair_characters=profile_repair_characters,
+                )
+                refreshed = self._discover_artifacts(self._load_manifest(manifest_path) or manifest)
+                finalize_workflow_success(
+                    refreshed,
+                    utc_now=_utc_now,
+                    finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(target, outcome=outcome),
+                )
+            except stopped_error_type:
+                raise
+            except Exception as relation_exc:
+                refreshed = self._discover_artifacts(self._load_manifest(manifest_path) or manifest)
+                finalize_workflow_success_without_graph(
+                    refreshed,
+                    graph_error=str(relation_exc),
+                    utc_now=_utc_now,
+                    finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(target, outcome=outcome),
+                )
             self._write_json(manifest_path, refreshed)
             return self._serialize_manifest(refreshed)
         except stopped_error_type as exc:
