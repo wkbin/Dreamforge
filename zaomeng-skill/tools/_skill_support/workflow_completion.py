@@ -27,6 +27,10 @@ STANDARD_PROGRESS_STAGES = (
     "characters_locked",
     "distill_payload_ready",
     "relation_payload_ready",
+    "chunk_started",
+    "chunk_completed",
+    "merge_started",
+    "merge_completed",
     "character_started",
     "character_completed",
     "graph_export_started",
@@ -129,6 +133,7 @@ def initialize_run_manifest(
             "total_characters": len(locked_characters),
             "completed_count": 0,
             "graph_status": "pending",
+            "chunking": {},
         },
         "capabilities": {
             "distill": {},
@@ -168,6 +173,7 @@ def update_run_manifest(
     status_file: str | Path | None = None,
     total_characters: int | None = None,
     graph_status: str = "",
+    chunk_progress: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     manifest_file = Path(manifest_path)
@@ -189,6 +195,7 @@ def update_run_manifest(
     progress.setdefault("completed_characters", [])
     progress.setdefault("completed_count", len(progress["completed_characters"]))
     progress.setdefault("graph_status", "pending")
+    progress.setdefault("chunking", {})
 
     if character:
         if stage == "character_started":
@@ -220,6 +227,11 @@ def update_run_manifest(
 
     if artifact_updates:
         _deep_merge(payload["artifacts"], artifact_updates)
+
+    if chunk_progress:
+        _update_chunk_progress(progress, chunk_progress)
+
+    _sync_chunking_overview_from_artifacts(payload)
 
     if extra:
         payload.update(dict(extra))
@@ -349,6 +361,7 @@ def _refresh_summary(payload: dict[str, Any], *, status: str) -> None:
     summary["characters_total"] = total
     summary["characters_completed"] = len(completed)
     summary["graph_status"] = graph_status
+    summary["chunking"] = _summarize_chunking(progress.get("chunking", {}))
     if verified_complete:
         payload["status"] = "complete"
         payload["success"] = True
@@ -370,6 +383,71 @@ def _refresh_summary(payload: dict[str, Any], *, status: str) -> None:
             summary["status_text"] = "waiting_for_host_generation"
         else:
             summary["status_text"] = "waiting_for_distill"
+
+
+def _update_chunk_progress(progress: dict[str, Any], chunk_progress: dict[str, Any]) -> None:
+    capability = str(chunk_progress.get("capability", "")).strip()
+    if not capability:
+        return
+    bucket = progress.setdefault("chunking", {})
+    current = dict(bucket.get(capability, {}))
+    current.update(
+        {
+            "capability": capability,
+            "mode": str(chunk_progress.get("mode", current.get("mode", ""))).strip(),
+            "chunk_count": int(chunk_progress.get("chunk_count", current.get("chunk_count", 0)) or 0),
+            "current_chunk": int(chunk_progress.get("current_chunk", current.get("current_chunk", 0)) or 0),
+            "current_label": str(chunk_progress.get("current_label", current.get("current_label", ""))).strip(),
+            "status": str(chunk_progress.get("status", current.get("status", "pending"))).strip() or "pending",
+            "merge_required": bool(chunk_progress.get("merge_required", current.get("merge_required", False))),
+            "merge_status": str(chunk_progress.get("merge_status", current.get("merge_status", "pending"))).strip()
+            or "pending",
+            "updated_at": utc_now(),
+        }
+    )
+    bucket[capability] = current
+
+
+def _sync_chunking_overview_from_artifacts(payload: dict[str, Any]) -> None:
+    artifacts = payload.setdefault("artifacts", {})
+    chunking = artifacts.get("chunking", {})
+    if not isinstance(chunking, dict):
+        return
+    progress = payload.setdefault("progress", {})
+    progress.setdefault("chunking", {})
+    for capability, item in chunking.items():
+        if not isinstance(item, dict):
+            continue
+        existing = dict(progress["chunking"].get(capability, {}))
+        progress["chunking"][capability] = {
+            "capability": capability,
+            "mode": str(existing.get("mode", item.get("chunk_mode", ""))).strip(),
+            "chunk_count": int(existing.get("chunk_count", item.get("chunk_count", 0)) or 0),
+            "current_chunk": int(existing.get("current_chunk", 0) or 0),
+            "current_label": str(existing.get("current_label", "")).strip(),
+            "status": str(existing.get("status", "pending")).strip() or "pending",
+            "merge_required": bool(existing.get("merge_required", item.get("merge_required", False))),
+            "merge_status": str(existing.get("merge_status", "pending")).strip() or "pending",
+            "updated_at": existing.get("updated_at", utc_now()),
+        }
+
+
+def _summarize_chunking(chunking: Any) -> dict[str, Any]:
+    if not isinstance(chunking, dict):
+        return {}
+    summary: dict[str, Any] = {}
+    for capability, item in chunking.items():
+        if not isinstance(item, dict):
+            continue
+        summary[capability] = {
+            "mode": str(item.get("mode", "")).strip(),
+            "chunk_count": int(item.get("chunk_count", 0) or 0),
+            "current_chunk": int(item.get("current_chunk", 0) or 0),
+            "status": str(item.get("status", "pending")).strip() or "pending",
+            "merge_required": bool(item.get("merge_required", False)),
+            "merge_status": str(item.get("merge_status", "pending")).strip() or "pending",
+        }
+    return summary
 
 
 def _append_event(

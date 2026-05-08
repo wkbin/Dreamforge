@@ -55,6 +55,7 @@ def main() -> int:
             args.novel,
             max_sentences=max_sentences,
             max_chars=max_chars,
+            characters=[item.strip() for item in str(args.characters or "").split(",") if item.strip()],
         )
 
     rendered = json.dumps(payload, ensure_ascii=True, indent=2)
@@ -80,6 +81,9 @@ def main() -> int:
             "mode": args.mode,
             "update_mode": str(payload.get("request", {}).get("update_mode", "")) if isinstance(payload.get("request", {}), dict) else "",
             "existing_character_count": int(payload.get("meta", {}).get("existing_character_count", 0)) if isinstance(payload.get("meta", {}), dict) else 0,
+            "chunk_mode": str(payload.get("request", {}).get("chunk_mode", "")) if isinstance(payload.get("request", {}), dict) else "",
+            "chunk_count": int(payload.get("meta", {}).get("chunk_count", 0)) if isinstance(payload.get("meta", {}), dict) else 0,
+            "merge_required": bool(payload.get("meta", {}).get("merge_required", False)) if isinstance(payload.get("meta", {}), dict) else False,
             "locked_characters": list(payload.get("request", {}).get("characters", []))
             if isinstance(payload.get("request", {}), dict)
             else [],
@@ -108,6 +112,9 @@ def main() -> int:
                 "update_mode": str(payload_request.get("update_mode", "")),
                 "existing_character_count": int(payload_meta.get("existing_character_count", 0)),
                 "characters_root": str(payload_meta.get("characters_root", "")),
+                "chunk_mode": str(payload_request.get("chunk_mode", "")),
+                "chunk_count": int(payload_meta.get("chunk_count", 0)),
+                "merge_required": bool(payload_meta.get("merge_required", False)),
                 "existing_profile_paths": dict(payload_meta.get("existing_profile_paths", {}))
                 if isinstance(payload_meta.get("existing_profile_paths", {}), dict)
                 else {},
@@ -123,6 +130,13 @@ def main() -> int:
                 "payloads": {artifact_key: str(output_path.resolve()) if output_path else ""},
                 "status_files": {status_name: str(status_path.resolve())},
                 "distill_context": distill_context,
+                "chunking": {
+                    capability: {
+                        "chunk_mode": str(payload_request.get("chunk_mode", "")),
+                        "chunk_count": int(payload_meta.get("chunk_count", 0)),
+                        "merge_required": bool(payload_meta.get("merge_required", False)),
+                    }
+                },
             },
             total_characters=len(status_payload["outputs"].get("locked_characters", []))
             if args.mode == "distill"

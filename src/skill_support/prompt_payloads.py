@@ -63,6 +63,7 @@ def build_distill_prompt_payload(
         "request": {
             "characters": requested_characters,
             "excerpt": excerpt_payload["excerpt"],
+            "excerpt_stages": excerpt_payload["excerpt_stages"],
             "source_name": excerpt_payload["source_name"],
             "excerpt_focus": {
                 "requested_characters": excerpt_payload["requested_characters"],
@@ -90,12 +91,14 @@ def build_relation_prompt_payload(
     *,
     max_sentences: int = 80,
     max_chars: int = 12_000,
+    characters: list[str] | None = None,
 ) -> dict[str, object]:
     skill_root = _skill_root()
     excerpt_payload = build_excerpt_payload(
         novel_path,
         max_sentences=max_sentences,
         max_chars=max_chars,
+        characters=characters,
     )
     return {
         "mode": "relation",
@@ -107,7 +110,15 @@ def build_relation_prompt_payload(
         },
         "request": {
             "excerpt": excerpt_payload["excerpt"],
+            "excerpt_stages": excerpt_payload["excerpt_stages"],
             "source_name": excerpt_payload["source_name"],
+            "characters": excerpt_payload["requested_characters"],
+            "excerpt_focus": {
+                "requested_characters": excerpt_payload["requested_characters"],
+                "matched_characters": excerpt_payload["matched_characters"],
+                "missing_characters": excerpt_payload["missing_characters"],
+                "strategy": excerpt_payload["excerpt_strategy"],
+            },
         },
         "meta": {
             "source_path": excerpt_payload["source_path"],

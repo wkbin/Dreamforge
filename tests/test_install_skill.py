@@ -383,6 +383,7 @@ class InstallSkillTests(unittest.TestCase):
             manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(manifest_payload["progress"]["stage"], "distill_payload_ready")
             self.assertEqual(manifest_payload["summary"]["status_text"], "waiting_for_host_generation")
+            self.assertIn("chunking", manifest_payload["progress"])
 
             subprocess.run(
                 [
@@ -571,6 +572,187 @@ class InstallSkillTests(unittest.TestCase):
             self.assertEqual(manifest_payload["artifacts"]["distill_context"]["update_mode"], "incremental")
             self.assertEqual(manifest_payload["artifacts"]["distill_context"]["existing_character_count"], 1)
             self.assertIn("林黛玉", manifest_payload["artifacts"]["distill_context"]["existing_profile_paths"])
+
+    def test_installed_run_manifest_tracks_chunk_overview_and_chunk_progress(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            novel_path = tmp_root / "long_novel.txt"
+            repeated = (
+                "林黛玉与贾宝玉在园中对看一眼，各有心事，"
+                + ("真情与体面彼此牵扯，试探与怜惜交替翻涌，谁都不肯先把话说破，" * 18)
+                + "却又句句都绕着彼此的心事打转。"
+            )
+            novel_path.write_text(repeated * 420, encoding="utf-8")
+            manifest_path = tmp_root / "run_manifest.json"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "init_host_run.py"),
+                    "--novel",
+                    str(novel_path),
+                    "--characters",
+                    "林黛玉,贾宝玉",
+                    "--output",
+                    str(manifest_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_prompt_payload.py"),
+                    "--mode",
+                    "distill",
+                    "--novel",
+                    str(novel_path),
+                    "--characters",
+                    "林黛玉,贾宝玉",
+                    "--output",
+                    str(tmp_root / "distill_payload.json"),
+                    "--run-manifest",
+                    str(manifest_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest_payload["progress"]["chunking"]["distill"]["mode"], "chunked")
+            self.assertGreaterEqual(manifest_payload["progress"]["chunking"]["distill"]["chunk_count"], 2)
+            self.assertTrue(manifest_payload["summary"]["chunking"]["distill"]["merge_required"])
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "update_run_progress.py"),
+                    "--run-manifest",
+                    str(manifest_path),
+                    "--stage",
+                    "chunk_started",
+                    "--message",
+                    "正在执行第 1 块",
+                    "--chunk-capability",
+                    "distill",
+                    "--chunk-mode",
+                    "chunked",
+                    "--chunk-count",
+                    "3",
+                    "--current-chunk",
+                    "1",
+                    "--chunk-label",
+                    "前段-1",
+                    "--chunk-status",
+                    "running",
+                    "--merge-required",
+                    "--merge-status",
+                    "pending",
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest_payload["progress"]["chunking"]["distill"]["current_chunk"], 1)
+            self.assertEqual(manifest_payload["progress"]["chunking"]["distill"]["current_label"], "前段-1")
+            self.assertEqual(manifest_payload["progress"]["chunking"]["distill"]["status"], "running")
+
+    def test_installed_distill_payload_supports_chunk_bundle_for_large_excerpt(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            novel_path = tmp_root / "long_novel.txt"
+            repeated = (
+                "林黛玉与贾宝玉在园中对看一眼，各有心事，"
+                + ("真情与体面彼此牵扯，试探与怜惜交替翻涌，谁都不肯先把话说破，" * 18)
+                + "却又句句都绕着彼此的心事打转。"
+            )
+            novel_path.write_text(repeated * 420, encoding="utf-8")
+
+            distill_payload_path = tmp_root / "distill_payload.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_prompt_payload.py"),
+                    "--mode",
+                    "distill",
+                    "--novel",
+                    str(novel_path),
+                    "--characters",
+                    "林黛玉,贾宝玉",
+                    "--output",
+                    str(distill_payload_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+
+            payload = json.loads(distill_payload_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["request"]["chunk_mode"], "chunked")
+            self.assertGreaterEqual(payload["meta"]["chunk_count"], 2)
+            self.assertTrue(payload["meta"]["merge_required"])
+            self.assertTrue(payload["chunks"])
+            self.assertEqual(payload["host_plan"]["execution"], "sequential_chunks_then_merge")
+            self.assertEqual(payload["merge_payload"]["mode"], "distill_merge")
+            self.assertIn("chunk_drafts", payload["merge_payload"]["request"])
+
+    def test_installed_relation_payload_supports_chunk_bundle_for_large_excerpt(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            novel_path = tmp_root / "long_relation.txt"
+            repeated = (
+                "齐夏与肖冉互相试探，章晨泽在旁观察局势变化。"
+                "三个人的每一句问答都像在试边界、探底牌，也不断暴露各自的判断、怀疑与暂时结盟。"
+                "局面表面平静，实则张力一直绷着，谁更信谁、谁更防谁、谁又在暗中改变立场，都在对话细节里慢慢显形。"
+            )
+            novel_path.write_text(repeated * 360, encoding="utf-8")
+
+            relation_payload_path = tmp_root / "relation_payload.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_prompt_payload.py"),
+                    "--mode",
+                    "relation",
+                    "--novel",
+                    str(novel_path),
+                    "--characters",
+                    "齐夏,肖冉,章晨泽",
+                    "--max-sentences",
+                    "500",
+                    "--max-chars",
+                    "50000",
+                    "--output",
+                    str(relation_payload_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+
+            payload = json.loads(relation_payload_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["request"]["chunk_mode"], "chunked")
+            self.assertGreaterEqual(payload["meta"]["chunk_count"], 2)
+            self.assertTrue(payload["chunks"])
+            self.assertEqual(payload["merge_payload"]["mode"], "relation_merge")
+            self.assertEqual(payload["host_plan"]["execution"], "sequential_chunks_then_merge")
 
     def test_installed_skill_end_to_end_host_workflow(self):
         repo_root = Path(__file__).resolve().parents[1]

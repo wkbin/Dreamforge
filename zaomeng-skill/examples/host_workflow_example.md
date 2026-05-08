@@ -4,11 +4,12 @@ This example shows one complete host-side flow:
 
 1. initialize `run_manifest.json`
 2. build distill payload
-3. call the host LLM and write `PROFILE.generated.md`
-4. materialize persona bundles
-5. export the relationship graph
-6. verify workflow completeness
-7. hand off to host-driven dialogue
+3. choose single-pass or chunked execution
+4. call the host LLM and write `PROFILE.generated.md`
+5. materialize persona bundles
+6. generate / merge the relationship result and export the graph
+7. verify workflow completeness
+8. hand off to host-driven dialogue
 
 ## 1. Initialize The Run
 
@@ -34,9 +35,33 @@ Host expectation:
 - the host LLM reads this payload
 - `run_manifest.json` records payload paths and status updates
 
+The payload now supports two execution shapes:
+
+- `request.chunk_mode = single`
+  - the host can send the whole payload directly to the LLM
+- `request.chunk_mode = chunked`
+  - the host should iterate `chunks[]`
+  - collect each chunk result as a partial draft
+  - then execute `merge_payload` once to obtain the final artifact
+
+Useful fields:
+
+- `chunks[]`
+- `merge_payload`
+- `host_plan`
+- `meta.chunk_count`
+- `meta.merge_required`
+
+`run_manifest.json` will also expose:
+
+- `progress.chunking.distill`
+- `summary.chunking.distill`
+
 ## 3. Generate Canonical Profiles
 
-The host LLM consumes `runtime/distill_payload.json` and writes one canonical file per character:
+### A. Single-pass path
+
+If `request.chunk_mode = single`, the host writes one canonical file per character directly:
 
 ```text
 runtime/data/characters/hongloumeng/林黛玉/PROFILE.generated.md
@@ -52,6 +77,25 @@ python tools/update_run_progress.py --run-manifest runtime/run_manifest.json --s
 ```
 
 Repeat for each character.
+
+### B. Chunked path
+
+If `request.chunk_mode = chunked`, the host should:
+
+1. iterate `distill_payload.json -> chunks[]`
+2. call the host LLM once per chunk
+3. store each partial result
+4. place those partial drafts into `merge_payload.request.chunk_drafts`
+5. call the host LLM once more with `merge_payload`
+6. write the final merged `PROFILE.generated.md`
+
+Chunk progress can also be written back into the manifest:
+
+```bash
+python tools/update_run_progress.py --run-manifest runtime/run_manifest.json --stage chunk_started --message "正在执行第 1 块" --chunk-capability distill --chunk-mode chunked --chunk-count 6 --current-chunk 1 --chunk-label 前段-1 --chunk-status running --merge-required --merge-status pending
+python tools/update_run_progress.py --run-manifest runtime/run_manifest.json --stage merge_started --message "正在合并人物草稿" --chunk-capability distill --chunk-mode chunked --chunk-count 6 --current-chunk 6 --chunk-label 后段-2 --chunk-status complete --merge-required --merge-status running
+python tools/update_run_progress.py --run-manifest runtime/run_manifest.json --stage merge_completed --message "人物草稿已合并" --chunk-capability distill --chunk-mode chunked --chunk-count 6 --current-chunk 6 --chunk-label 后段-2 --chunk-status complete --merge-required --merge-status complete
+```
 
 ## 4. Materialize Persona Bundles
 
@@ -69,7 +113,12 @@ Host expectation:
 
 ## 5. Generate Relation Result And Export Graph
 
-First, the host LLM writes the relationship markdown:
+The relation payload follows the same rule:
+
+- `single`: generate the final relation markdown directly
+- `chunked`: run `chunks[]`, collect partial relation drafts, then execute `merge_payload`
+
+After the final merged relationship markdown exists, the host writes:
 
 ```text
 runtime/data/relations/hongloumeng_relations.md
@@ -87,6 +136,7 @@ Host expectation:
 - `*_relations.svg`
 - `*_relations.mermaid.md`
 - graph status JSON
+- `run_manifest.json -> progress.chunking.relation` if the host reports chunk progress
 
 ## 6. Verify Workflow
 
@@ -121,6 +171,13 @@ After the workflow completes, a host can safely surface:
 - relationship graph HTML / SVG
 - workflow summary from `run_manifest.json`
 - a clear invitation to enter `act`, `insert`, or `observe`
+
+For long novels, the host can also surface:
+
+- total distill chunks
+- current chunk number
+- whether merge is pending / running / complete
+- total relation chunks
 
 ## Cross References
 

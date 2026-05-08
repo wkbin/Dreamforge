@@ -97,6 +97,25 @@ The distill payload also exposes `request.excerpt_focus`:
 
 The host can use this to detect missing cast coverage before the LLM starts distilling from the wrong evidence.
 
+### Automatic Chunking For Long Novels
+
+When the excerpt becomes too large, the skill now switches to chunked mode automatically instead of forcing the host to guess a smaller limit:
+
+- `request.chunk_mode = chunked`
+- `meta.chunk_count` shows how many chunks were created
+- `meta.merge_required = true`
+- `chunks[]` contains ready-to-run partial payloads
+- `merge_payload` provides the template for merging chunk drafts into the final artifact
+
+Recommended host flow:
+
+1. check whether the payload is `chunked`
+2. if yes, run the LLM over `chunks[]` in order
+3. place each partial result into `merge_payload.request.chunk_drafts`
+4. run one final merge call to obtain the final `PROFILE.generated.md` or `RELATION_GRAPH`
+
+Short inputs still stay on the old single-pass path.
+
 ### Distill Post-Process
 
 Once the host LLM writes `PROFILE.generated.md`, do not stop at that single file.  
@@ -169,6 +188,19 @@ python tools/verify_host_workflow.py --characters-root <characters/<novel_id>> [
 ```bash
 python tools/prepare_novel_excerpt.py --novel shirizhongyan.txt --characters 齐夏,肖冉,章晨泽 --max-chars 50000
 ```
+
+If the JSON output includes `chunks` and `merge_payload`, the host should treat that run as an automatic chunked distillation / extraction flow.
+
+If the host wants to record execution progress into `run_manifest.json`, it can also call:
+
+```bash
+python tools/update_run_progress.py --run-manifest <run_manifest.json> --stage chunk_started --message "running chunk 1" --chunk-capability distill --chunk-mode chunked --chunk-count 6 --current-chunk 1 --chunk-label start-1 --chunk-status running --merge-required --merge-status pending
+```
+
+This will populate:
+
+- `progress.chunking`
+- `summary.chunking`
 
 ## Recommended Usage
 

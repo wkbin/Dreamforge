@@ -97,6 +97,25 @@
 
 宿主可以据此判断：这次 excerpt 是否真的覆盖了请求角色，是否有角色根本没在文本里命中。
 
+### 长篇自动分批
+
+当 excerpt 过长时，这个 skill 不再只给宿主一个“大而全”的单次 payload，而是会自动切换为分批模式：
+
+- `request.chunk_mode = chunked`
+- `meta.chunk_count` 标明总块数
+- `meta.merge_required = true`
+- `chunks[]` 给出每一块可直接调用宿主 LLM 的局部 payload
+- `merge_payload` 给出最终合并局部草稿的模板 payload
+
+也就是说，宿主拿到结果后可以这样跑：
+
+1. 先判断是不是 `chunked`
+2. 如果是，就按 `chunks[]` 顺序逐块生成局部草稿
+3. 把每块草稿塞回 `merge_payload.request.chunk_drafts`
+4. 再执行一次 merge，得到最终 `PROFILE.generated.md` 或最终 `RELATION_GRAPH`
+
+短文本仍然保持旧的单次流程，不会被额外复杂化。
+
 ### Distill Post-Process
 
 宿主 LLM 写出 `PROFILE.generated.md` 后，不要停在单文件状态。  
@@ -169,6 +188,19 @@ python tools/verify_host_workflow.py --characters-root <characters/<novel_id>> [
 ```bash
 python tools/prepare_novel_excerpt.py --novel 十日终焉.txt --characters 齐夏,肖冉,章晨泽 --max-chars 50000
 ```
+
+如果输出 JSON 中出现了 `chunks` 和 `merge_payload`，就说明这次已经进入长篇自动分批模式。
+
+如果宿主希望把执行进度写进 `run_manifest.json`，还可以继续调用：
+
+```bash
+python tools/update_run_progress.py --run-manifest <run_manifest.json> --stage chunk_started --message "正在执行第 1 块" --chunk-capability distill --chunk-mode chunked --chunk-count 6 --current-chunk 1 --chunk-label 前段-1 --chunk-status running --merge-required --merge-status pending
+```
+
+这样 manifest 里会有：
+
+- `progress.chunking`
+- `summary.chunking`
 
 ## 推荐使用方式
 

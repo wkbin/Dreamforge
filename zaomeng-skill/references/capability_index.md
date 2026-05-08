@@ -33,10 +33,25 @@ Standard outputs:
 - optional capability status JSON
 - optional `run_manifest.json` updates
 
+Payload contract:
+
+- `request.chunk_mode = single|chunked`
+- `chunks[]` for partial distill execution when the excerpt is too large
+- `merge_payload` for final profile merge
+- `host_plan.execution = single_pass|sequential_chunks_then_merge`
+- `meta.chunk_count`
+- `meta.merge_required`
+
 Host responsibility after this step:
 
-- hand the payload to the host LLM
-- write `PROFILE.generated.md`
+- if `single`, hand the payload to the host LLM and write `PROFILE.generated.md`
+- if `chunked`, iterate `chunks[]`, collect partial drafts, fill `merge_payload.request.chunk_drafts`, then execute the merge payload and write the final `PROFILE.generated.md`
+
+Recommended manifest fields to read:
+
+- `artifacts.chunking.distill`
+- `progress.chunking.distill`
+- `summary.chunking.distill`
 
 Reference:
 
@@ -74,6 +89,20 @@ Standard outputs:
 - `*_relations.svg`
 - `*_relations.mermaid.md`
 - graph `.status.json`
+
+If relation extraction is chunked on the host side, the same contract applies:
+
+- `request.chunk_mode = single|chunked`
+- `chunks[]`
+- `merge_payload`
+- `meta.chunk_count`
+- `meta.merge_required`
+
+Recommended manifest fields to read:
+
+- `artifacts.chunking.relation`
+- `progress.chunking.relation`
+- `summary.chunking.relation`
 
 Reference:
 
