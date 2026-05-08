@@ -33,7 +33,7 @@ It is trying to do something more demanding:
 - make relationships visible, traceable, and reusable
 - make dialogue sound like something that specific person would actually say
 
-## Install
+## Install 🚀
 
 ### Install the skill
 
@@ -52,13 +52,13 @@ bunx clawhub@latest install zaomeng-skill
 python scripts/install_skill.py --skills-dir <your-skills-root>
 ```
 
-### Dependencies
+### Dependencies 🧩
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Web UI
+### Web UI 🖥️
 
 If you want a direct product entrypoint instead of starting from the skill or CLI, you can run the Web UI.
 
@@ -91,9 +91,9 @@ The current Web UI already supports:
 
 If you want to use `zaomeng` as an actual product entry instead of only as a skill companion, the Web UI is now the most complete primary surface.
 
-## What You Can Do With It
+## What You Can Do With It ✨
 
-### 1. Distill Characters
+### 1. Distill Characters 🎭
 
 Give it a novel, and it will try to build reusable persona bundles from the original text, including:
 
@@ -108,7 +108,7 @@ Give it a novel, and it will try to build reusable persona bundles from the orig
 
 The goal is not a one-page summary. The goal is a persona bundle that can keep supporting later dialogue, roleplay, correction, and incremental updates.
 
-### 2. Export Relationship Graphs
+### 2. Export Relationship Graphs 🕸️
 
 It does not stop at structured relationship fields. It also exports visual graphs so you can quickly see:
 
@@ -123,7 +123,7 @@ Typical outputs include:
 - HTML graph
 - SVG graph
 
-### 3. Enter Character Interaction
+### 3. Enter Character Interaction 💬
 
 After distillation, there are now **3 modes**:
 
@@ -144,7 +144,7 @@ In `insert`, the first session creates a lightweight scene card for you, usually
 - whether you want natural, immersive, or probing interaction
 - how much your presence should affect the scene
 
-## Usage
+## Usage 🛠️
 
 The recommended order is simple:
 
@@ -175,7 +175,7 @@ Let me enter Dream of the Red Chamber as myself and talk with Lin Daiyu and Jia 
 Generate the relationship graph. I want the HTML and SVG versions
 ```
 
-## How It Works Now
+## How It Works Now 🧠
 
 The current version is **LLM-first**:
 
@@ -185,7 +185,7 @@ The current version is **LLM-first**:
 
 The emphasis is no longer “hardcode a pile of rules and glue lines together.” The emphasis is giving the model clearer persona, relationship, and scene constraints so the output sounds more like the source character.
 
-## Incremental Distillation
+## Incremental Distillation ♻️
 
 The project supports incremental distillation.
 
@@ -202,7 +202,7 @@ This works especially well for:
 - long novels processed in batches
 - repeated correction loops that keep improving persona quality
 
-## Project Layout
+## Project Layout 📦
 
 The repository is currently split into three main layers:
 
@@ -218,7 +218,7 @@ The most important assets inside the skill bundle are usually:
 - `tools/build_prompt_payload.py`
 - `tools/export_relation_graph.py`
 
-## One-line Summary
+## One-line Summary ✨
 
 `zaomeng` is not trying to be “an AI that can talk.”  
 It is trying to let fictional people speak again with their own personality, relationships, tone, and memory intact.

@@ -33,7 +33,7 @@
 - 让关系不是一句描述，而是能被看见、被引用、被继续演化
 - 让对话不是统一腔调，而是真的像“这个人会说出来的话”
 
-## 安装
+## 安装 🚀
 
 ### 安装 skill
 
@@ -52,13 +52,13 @@ bunx clawhub@latest install zaomeng-skill
 python scripts/install_skill.py --skills-dir <your-skills-root>
 ```
 
-### 依赖
+### 依赖 🧩
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Web UI
+### Web UI 🖥️
 
 如果你不想从 skill 或 CLI 入口开始，现在也可以直接启动 Web UI。
 
@@ -102,9 +102,9 @@ python scripts/run_webui.py --reload
 ![Web UI 书架预览](docs/images/webui-bookshelf.png)
 ![Web UI 聊天预览](docs/images/webui-chat.png)
 
-## 你可以拿它做什么
+## 你可以拿它做什么 ✨
 
-### 1. 蒸馏人物
+### 1. 蒸馏人物 🎭
 
 给它一部小说，它会尽量从正文里整理出可复用的人物包，例如：
 
@@ -119,7 +119,7 @@ python scripts/run_webui.py --reload
 
 它不是只做一页“人物简介”，而是尽量产出后续还能继续用于聊天、演绎、纠错和增量更新的人设底稿。
 
-### 2. 生成人物关系图谱
+### 2. 生成人物关系图谱 🕸️
 
 除了结构化关系字段，它还会输出可视化图谱，让你直观看到：
 
@@ -134,7 +134,7 @@ python scripts/run_webui.py --reload
 - HTML 图谱
 - SVG 图谱
 
-### 3. 进入角色互动
+### 3. 进入角色互动 💬
 
 蒸馏完成后，现在是 **3 种玩法**：
 
@@ -155,7 +155,7 @@ python scripts/run_webui.py --reload
 - 你偏自然闲聊、沉浸互动，还是试探型互动
 - 你对剧情的影响范围
 
-## 使用方式
+## 使用方式 🛠️
 
 推荐顺序很简单：
 
@@ -186,7 +186,7 @@ python scripts/run_webui.py --reload
 生成关系图谱，我要看 HTML 和 SVG
 ```
 
-## 它现在怎么工作
+## 它现在怎么工作 🧠
 
 当前版本是 **LLM-first**：
 
@@ -196,7 +196,7 @@ python scripts/run_webui.py --reload
 
 重点已经不是“硬编码一堆规则把句子拼起来”，而是给模型更清楚的人设、关系和场景约束，让输出更像角色本人。
 
-## 增量蒸馏
+## 增量蒸馏 ♻️
 
 项目支持增量蒸馏。
 
@@ -213,7 +213,7 @@ python scripts/run_webui.py --reload
 - 长篇分批蒸馏
 - 多轮修正后持续提升人物质量
 
-## 长篇自动分批
+## 长篇自动分批 📚
 
 当正文体量较大，或者单次请求因为网关 / 连接问题不稳定时，`zaomeng` 会自动退回到分批模式：
 
@@ -230,7 +230,7 @@ Web UI 会直接告诉你：
 - 粗估人物蒸馏耗时、关系抽取耗时与整体耗时区间
 - 实际这次用了几块蒸馏 / 几块关系抽取
 
-## 项目结构
+## 项目结构 📦
 
 仓库目前主要分成三层：
 
@@ -246,7 +246,7 @@ Web UI 会直接告诉你：
 - `tools/build_prompt_payload.py`
 - `tools/export_relation_graph.py`
 
-## 一句话总结
+## 一句话总结 ✨
 
 `zaomeng` 想做的，不是“会说话的 AI”。  
 而是让小说里的人，带着自己的性格、关系、语气和记忆，重新开口。
