@@ -100,15 +100,12 @@ zaomeng install-skill --skills-dir <your-skills-root>
 
 #### 手动启动
 
-启动前请先安装依赖：
+如果你希望手动拉仓库并本地启动，可以按下面来：
 
 ```bash
+git clone https://github.com/wkbin/zaomeng.git
+cd zaomeng
 pip install -r requirements.txt
-```
-
-然后再执行：
-
-```bash
 python scripts/run_webui.py --reload
 ```
 

@@ -100,15 +100,12 @@ zaomeng install-skill --skills-dir <your-skills-root>
 
 #### Manual Start
 
-Install dependencies first:
+If you prefer to clone the repository and run it locally, use:
 
 ```bash
+git clone https://github.com/wkbin/zaomeng.git
+cd zaomeng
 pip install -r requirements.txt
-```
-
-Then run:
-
-```bash
 python scripts/run_webui.py --reload
 ```
 
