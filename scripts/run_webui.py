@@ -20,7 +20,26 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8000, help="Bind port")
     parser.add_argument("--storage-root", help="Optional storage root for web runs")
     parser.add_argument("--reload", action="store_true", help="Enable auto reload")
+    parser.add_argument(
+        "--bump-web-assets",
+        action="store_true",
+        help="Bump the web static asset version before starting the Web UI.",
+    )
+    parser.add_argument(
+        "--static-version",
+        default="",
+        help="Explicit web static asset version to sync before starting the Web UI.",
+    )
     args = parser.parse_args()
+
+    if args.bump_web_assets and str(args.static_version or "").strip():
+        print("Use either --bump-web-assets or --static-version, not both.", file=sys.stderr)
+        return 1
+
+    if str(args.static_version or "").strip():
+        _web_asset_version.sync_web_asset_version(PROJECT_ROOT, str(args.static_version).strip())
+    elif args.bump_web_assets:
+        _web_asset_version.bump_web_asset_version(PROJECT_ROOT)
 
     try:
         import uvicorn
