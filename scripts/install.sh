@@ -17,7 +17,7 @@ cleanup() {
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "Missing required command: $1" >&2
+    echo "Missing required command / 缺少必要命令: $1" >&2
     exit 1
   fi
 }
@@ -35,7 +35,7 @@ choose_python() {
     echo python
     return
   fi
-  echo "Python 3 is required. Please install python3 first." >&2
+  echo "Python 3 is required. Please install python3 first. / 需要 Python 3，请先安装 python3。" >&2
   exit 1
 }
 
@@ -48,7 +48,7 @@ choose_fetch() {
     echo wget
     return
   fi
-  echo "curl or wget is required." >&2
+  echo "curl or wget is required. / 需要安装 curl 或 wget。" >&2
   exit 1
 }
 
@@ -116,9 +116,9 @@ main() {
 
   mkdir -p "$extract_root" "$BIN_DIR" "$(dirname "$INSTALL_ROOT")"
 
-  echo "Downloading ${archive_url}"
+  echo "Downloading / 正在下载: ${archive_url}"
   if ! fetch_archive "$archive_url" "$archive_path" "$fetcher"; then
-    echo "Failed to download ${archive_url}. Please check your network connection and try again." >&2
+    echo "Failed to download ${archive_url}. Please check your network connection and try again. / 下载失败，请检查网络后重试。" >&2
     exit 1
   fi
 
@@ -126,17 +126,17 @@ main() {
   tar -xzf "$archive_path" -C "$extract_root"
   extracted_dir="$(find "$extract_root" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
   if [ -z "$extracted_dir" ]; then
-    echo "Failed to locate extracted repository directory." >&2
+    echo "Failed to locate extracted repository directory. / 未找到解压后的仓库目录。" >&2
     exit 1
   fi
   mv "$extracted_dir" "$INSTALL_ROOT"
 
   if [ ! -f "$requirements_path" ]; then
-    echo "Missing runtime requirements file: ${requirements_path}" >&2
+    echo "Missing runtime requirements file / 缺少运行时依赖文件: ${requirements_path}" >&2
     exit 1
   fi
 
-  echo "Creating virtual environment"
+  echo "Creating virtual environment / 正在创建虚拟环境"
   "$python_cmd" -m venv "$venv_dir"
   "$venv_dir/bin/python" -m pip install --upgrade pip setuptools wheel
   "$venv_dir/bin/python" -m pip install -r "$requirements_path"
@@ -149,7 +149,7 @@ INSTALL_ROOT="${INSTALL_ROOT}"
 PYTHON_BIN="\${INSTALL_ROOT}/.venv/bin/python"
 
 if [ ! -x "\${PYTHON_BIN}" ]; then
-  echo "zaomeng runtime is missing: \${PYTHON_BIN}" >&2
+  echo "zaomeng runtime is missing / 缺少 zaomeng 运行时: \${PYTHON_BIN}" >&2
   exit 1
 fi
 
@@ -181,14 +181,14 @@ PY
     ;;
   help|-h|--help)
     cat <<'HELP'
-zaomeng commands:
-  zaomeng                Start the Web UI on 127.0.0.1:8000
-  zaomeng web [args]     Forward args to scripts/run_webui.py
+zaomeng commands / 可用命令:
+  zaomeng                Start the Web UI on 127.0.0.1:8000 / 启动 Web UI
+  zaomeng web [args]     Forward args to scripts/run_webui.py / 转发参数给 run_webui.py
   zaomeng bump-web-assets [version]
-                         Bump or explicitly sync the static asset version
+                         Bump or explicitly sync the static asset version / 更新或同步静态资源版本号
   zaomeng install-skill [args]
-                         Forward args to scripts/install_skill.py
-  zaomeng version        Print the current web static asset version
+                         Forward args to scripts/install_skill.py / 转发参数给 install_skill.py
+  zaomeng version        Print the current web static asset version / 输出当前静态资源版本
 HELP
     ;;
   *)
@@ -200,25 +200,27 @@ EOF
   chmod +x "$launcher_path"
   append_path_line "$rc_file"
 
-  cat <<EOF
+cat <<EOF
 
 zaomeng is installed.
+zaomeng 已安装完成。
 
-Install root: ${INSTALL_ROOT}
-Launcher:     ${launcher_path}
-Requirements: ${requirements_path}
-Shell rc:     ${rc_file}
+Install root / 安装目录: ${INSTALL_ROOT}
+Launcher / 启动命令:     ${launcher_path}
+Requirements / 依赖文件: ${requirements_path}
+Shell rc / Shell 配置:  ${rc_file}
 
-Next:
-  Open a new shell, or run:
+Next / 下一步:
+  Open a new shell, or run / 打开一个新的 shell，或执行：
   export PATH="\$HOME/.local/bin:\$PATH"
   zaomeng
 
 If your shell rc already contains unrelated broken lines and "source ${rc_file}" reports errors,
-you can still start zaomeng right away with:
+如果你的 shell 配置里本来就有其他错误，导致 "source ${rc_file}" 报错，
+you can still start zaomeng right away with / 你仍然可以直接这样启动：
   ${launcher_path}
 
-Useful:
+Useful / 常用命令:
   zaomeng web --reload
   zaomeng bump-web-assets
   zaomeng install-skill --skills-dir <your-skills-root>
