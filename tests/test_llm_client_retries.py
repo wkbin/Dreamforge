@@ -104,6 +104,19 @@ class LLMRetryTests(unittest.TestCase):
         self.assertEqual(urlopen.call_count, 2)
         sleep.assert_called_once_with(0.01)
 
+    def test_post_json_wraps_connection_reset_as_llm_request_error(self):
+        client = self._make_client()
+        with patch(
+            "src.core.llm_client.request.urlopen",
+            side_effect=ConnectionResetError("[WinError 10054] remote host closed connection"),
+        ) as urlopen, patch("src.core.llm_client.time.sleep") as sleep:
+            with self.assertRaises(LLMRequestError) as ctx:
+                client._post_json(url="https://example.test", payload={"ping": "pong"})
+
+        self.assertIn("LLM 连接失败", str(ctx.exception))
+        self.assertEqual(urlopen.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+
     def test_post_json_does_not_retry_non_retryable_http_errors(self):
         client = self._make_client()
         http_error = error.HTTPError(

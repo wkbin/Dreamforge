@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Set, Tuple
 
 
@@ -43,11 +44,10 @@ class DistillationProfileBuilderMixin:
             fallback=self._INSUFFICIENT_EVIDENCE,
             used=used_scalars,
         )
-        worldview = self._select_distinct_seed(
+        worldview = self._select_reasoned_scalar_seed(
             thoughts,
             descriptions,
-            [soul_goal],
-            fallback=self._INSUFFICIENT_EVIDENCE,
+            fallback=self._infer_worldview(values, core_traits, archetype),
             used=used_scalars,
         )
         thinking_style = self._infer_thinking_style(values, core_traits, speech_style, archetype)
@@ -110,16 +110,16 @@ class DistillationProfileBuilderMixin:
             fallback=self._INSUFFICIENT_EVIDENCE,
             used=used_scalars,
         )
-        belief_anchor = self._select_distinct_seed(
+        belief_anchor = self._select_reasoned_scalar_seed(
             [worldview, soul_goal],
-            fallback=self._INSUFFICIENT_EVIDENCE,
+            fallback=self._infer_belief_anchor(values, worldview),
             used=used_scalars,
         )
         stance_stability = self._infer_stance_stability(values, decision_rules)
-        moral_bottom_line = self._select_distinct_seed(
+        moral_bottom_line = self._select_reasoned_scalar_seed(
             forbidden_behaviors,
             [belief_anchor],
-            fallback=self._INSUFFICIENT_EVIDENCE,
+            fallback=self._infer_moral_bottom_line(values, forbidden_behaviors, belief_anchor, archetype),
             used=used_scalars,
         )
         self_cognition = self._select_distinct_seed(
@@ -148,11 +148,11 @@ class DistillationProfileBuilderMixin:
             fallback=self._INSUFFICIENT_EVIDENCE,
             used=used_scalars,
         )
-        restraint_threshold = self._select_distinct_seed(
-            forbidden_behaviors,
+        restraint_threshold = self._select_reasoned_scalar_seed(
             thoughts,
+            forbidden_behaviors,
             [hidden_desire],
-            fallback=self._INSUFFICIENT_EVIDENCE,
+            fallback=self._infer_restraint_threshold(values, speech_style, hidden_desire, forbidden_behaviors, archetype),
             used=used_scalars,
         )
 
@@ -228,3 +228,44 @@ class DistillationProfileBuilderMixin:
     @staticmethod
     def _normalize_seed(value: str) -> str:
         return "".join(str(value or "").split())
+
+    def _select_reasoned_scalar_seed(
+        self,
+        *groups: List[str],
+        fallback: str,
+        used: Set[str],
+    ) -> str:
+        for group in groups:
+            for raw in group:
+                candidate = str(raw or "").strip()
+                normalized = self._normalize_seed(candidate)
+                if not normalized or normalized in used:
+                    continue
+                if not self._looks_like_reasoned_scalar(candidate):
+                    continue
+                used.add(normalized)
+                return candidate
+        fallback_text = str(fallback or "").strip() or self._INSUFFICIENT_EVIDENCE
+        normalized_fallback = self._normalize_seed(fallback_text)
+        if normalized_fallback:
+            used.add(normalized_fallback)
+        return fallback_text
+
+    @classmethod
+    def _looks_like_reasoned_scalar(cls, value: str) -> bool:
+        text = str(value or "").strip()
+        if not text or text == cls._INSUFFICIENT_EVIDENCE:
+            return False
+        if cls._looks_like_metadata_sentence(text):
+            return False
+        if any(token in text for token in ('"', "“", "”", "‘", "’", "「", "」")):
+            return False
+        if text.endswith(("：", ":", "，", ",", "；", ";", "、")):
+            return False
+        if re.search(r"(只见|忽见|回头|转过|只听|听见|听得|说道|笑道|问道|喝道|骂道|叹道|叫道|想道)", text):
+            return False
+        if re.search(r"(心里还自|大家想着|拍着手|走了出来|走进去|看了.*一眼)", text):
+            return False
+        if len(text) > 40:
+            return False
+        return True

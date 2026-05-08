@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -62,6 +63,7 @@ class LLMClient:
         self.last_reset_date = datetime.now().date()
         self.request_count = 0
         self.total_tokens = 0
+        self._usage_lock = threading.Lock()
 
         self._load_cost_stats()
 
@@ -137,14 +139,15 @@ class LLMClient:
         return self._calculate_cost(prompt_tokens, completion_tokens)
 
     def record_usage(self, prompt_tokens: int, completion_tokens: int = 0, elapsed_time: float = 0.0):
-        self._check_budget()
-        total_tokens = prompt_tokens + completion_tokens
-        cost = self._calculate_cost(prompt_tokens, completion_tokens)
-        self.session_cost += cost
-        self.daily_cost += cost
-        self.request_count += 1
-        self.total_tokens += total_tokens
-        self._save_cost_stats()
+        with self._usage_lock:
+            self._check_budget()
+            total_tokens = prompt_tokens + completion_tokens
+            cost = self._calculate_cost(prompt_tokens, completion_tokens)
+            self.session_cost += cost
+            self.daily_cost += cost
+            self.request_count += 1
+            self.total_tokens += total_tokens
+            self._save_cost_stats()
         if self.cost_config.get("enable_cost_warning", True):
             logger.info(
                 f"[Tokens: {prompt_tokens}+{completion_tokens}={total_tokens}] "
@@ -503,6 +506,12 @@ class LLMClient:
                     self._sleep_before_retry(attempt, f"connection error: {exc.reason}")
                     continue
                 raise LLMRequestError(f"LLM 连接失败: {exc.reason}") from exc
+            except OSError as exc:
+                last_error = exc
+                if attempt < attempts:
+                    self._sleep_before_retry(attempt, f"socket error: {exc}")
+                    continue
+                raise LLMRequestError(f"LLM 连接失败: {exc}") from exc
             except json.JSONDecodeError as exc:
                 raise LLMRequestError("LLM 返回了无法解析的 JSON 响应") from exc
 
