@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+yaml: Any = importlib.import_module("yaml")
 
 
 def _split_skill_frontmatter(text: str) -> tuple[dict[str, Any], str]:
