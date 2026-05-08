@@ -67,19 +67,6 @@ class WebRunService:
         "cadence",
     )
     PROFILE_COMPLETION_FIELDS = (
-        "faction_position",
-        "story_role",
-        "stance_stability",
-        "identity_anchor",
-        "world_rule_fit",
-        "background_imprint",
-        "life_experience",
-        "trauma_scar",
-        "taboo_topics",
-        "forbidden_behaviors",
-        "world_belong",
-        "rule_view",
-        "plot_restriction",
         "soul_goal",
         "hidden_desire",
         "core_traits",
@@ -103,19 +90,6 @@ class WebRunService:
         "anger_style",
         "joy_style",
         "grievance_style",
-        "social_mode",
-        "carry_style",
-        "others_impression",
-        "key_bonds",
-        "appearance_feature",
-        "habit_action",
-        "preference_like",
-        "dislike_hate",
-        "interest_claim",
-        "resource_dependence",
-        "trade_principle",
-        "disguise_switch",
-        "ooc_redline",
         "speech_style",
         "typical_lines",
         "cadence",
@@ -124,36 +98,10 @@ class WebRunService:
         "connective_tokens",
         "sentence_endings",
         "forbidden_fillers",
-        "strengths",
-        "weaknesses",
-        "arc_start",
-        "arc_mid",
-        "arc_end",
-        "arc_type",
-        "arc_blocker",
-        "arc_summary",
     )
     PROFILE_COMPLETION_GROUPS = (
         (
-            "基础与根源",
-            (
-                "faction_position",
-                "story_role",
-                "stance_stability",
-                "identity_anchor",
-                "world_rule_fit",
-                "background_imprint",
-                "life_experience",
-                "trauma_scar",
-                "taboo_topics",
-                "forbidden_behaviors",
-                "world_belong",
-                "rule_view",
-                "plot_restriction",
-            ),
-        ),
-        (
-            "精神内核",
+            "Inner Core",
             (
                 "soul_goal",
                 "hidden_desire",
@@ -167,7 +115,7 @@ class WebRunService:
             ),
         ),
         (
-            "冲突与决策",
+            "Decision Logic",
             (
                 "inner_conflict",
                 "self_cognition",
@@ -180,7 +128,7 @@ class WebRunService:
             ),
         ),
         (
-            "情绪与社交",
+            "Emotion And Stress",
             (
                 "fear_triggers",
                 "stress_response",
@@ -188,30 +136,10 @@ class WebRunService:
                 "anger_style",
                 "joy_style",
                 "grievance_style",
-                "social_mode",
-                "carry_style",
-                "others_impression",
-                "key_bonds",
             ),
         ),
         (
-            "外显与资源",
-            (
-                "appearance_feature",
-                "habit_action",
-                "preference_like",
-                "dislike_hate",
-                "interest_claim",
-                "resource_dependence",
-                "trade_principle",
-                "disguise_switch",
-                "ooc_redline",
-                "strengths",
-                "weaknesses",
-            ),
-        ),
-        (
-            "语言与弧光",
+            "Voice",
             (
                 "speech_style",
                 "typical_lines",
@@ -221,12 +149,6 @@ class WebRunService:
                 "connective_tokens",
                 "sentence_endings",
                 "forbidden_fillers",
-                "arc_start",
-                "arc_mid",
-                "arc_end",
-                "arc_type",
-                "arc_blocker",
-                "arc_summary",
             ),
         ),
     )
@@ -251,7 +173,7 @@ class WebRunService:
         "forbidden_fillers",
         "cognitive_limits",
     }
-    PROFILE_MAP_FIELDS = {"values", "arc_start", "arc_mid", "arc_end"}
+    PROFILE_MAP_FIELDS = {"values"}
     RELATION_REWRITE_FIELDS = (
         "conflict_point",
         "typical_interaction",
@@ -277,9 +199,9 @@ class WebRunService:
     RELATION_SINGLE_MAX_TOKENS = 1000
     RELATION_CHUNK_MAX_TOKENS = 800
     RELATION_MERGE_MAX_TOKENS = 1000
-    PROFILE_REPAIR_MAX_TOKENS = 900
+    PROFILE_REPAIR_MAX_TOKENS = 500
     PROFILE_COMPLETION_MAX_TOKENS = 700
-    PROFILE_COMPLETION_GROUP_LIMIT = 3
+    PROFILE_COMPLETION_GROUP_LIMIT = 4
     RELATION_REPAIR_MAX_TOKENS = 1000
 
     def __init__(self, storage_root: str | Path | None = None) -> None:
@@ -2956,50 +2878,42 @@ class WebRunService:
         except Exception:
             return None
         dialogue_evidence = self._extract_dialogue_evidence(payload, character=character)
-        issues = self._collect_profile_repair_issues(profile, dialogue_evidence=dialogue_evidence)
-        completion_issues = self._collect_profile_completion_issues(profile)
+        repair_targets = self._collect_profile_repair_targets(profile, dialogue_evidence=dialogue_evidence)
         updated = False
-        if issues or completion_issues:
-            repair_result = parts.llm.chat_completion(
-                self._build_distill_repair_messages(
-                    payload,
-                    character=character,
-                    peer_characters=peer_characters,
-                    profile=profile,
-                    issues=issues,
-                    completion_issues=completion_issues,
-                    dialogue_evidence=dialogue_evidence,
-                ),
-                temperature=float(config.get("llm.temperature", 0.15) or 0.15),
-                max_tokens=self._llm_cap(config, "llm.max_tokens", self.PROFILE_REPAIR_MAX_TOKENS),
-            )
-            repaired = self._sanitize_markdown_output(str(repair_result.get("content", "")))
-            if repaired:
-                source_path.write_text(repaired.strip() + "\n", encoding="utf-8")
-                try:
-                    profile = load_profile_source(source_path)
-                    updated = True
-                except Exception:
-                    return repaired or None
-
-        group_gaps = self._collect_profile_completion_groups(profile)
-        if not updated and not group_gaps:
+        group_tasks = self._collect_profile_completion_groups(profile, repair_targets=repair_targets)
+        if not updated and not group_tasks:
             return None
-        if group_gaps:
-            for group_name, fields in group_gaps[: self.PROFILE_COMPLETION_GROUP_LIMIT]:
-                completion_result = parts.llm.chat_completion(
-                    self._build_distill_completion_messages(
-                        payload,
-                        character=character,
-                        peer_characters=peer_characters,
-                        profile=profile,
-                        group_name=group_name,
-                        fields=fields,
-                        dialogue_evidence=dialogue_evidence,
-                    ),
-                    temperature=float(config.get("llm.temperature", 0.1) or 0.1),
-                    max_tokens=self._llm_cap(config, "llm.max_tokens", self.PROFILE_COMPLETION_MAX_TOKENS),
-                )
+        if group_tasks:
+            for group_name, fields, group_repairs in group_tasks[: self.PROFILE_COMPLETION_GROUP_LIMIT]:
+                if group_repairs:
+                    completion_result = parts.llm.chat_completion(
+                        self._build_distill_repair_messages(
+                            payload,
+                            character=character,
+                            peer_characters=peer_characters,
+                            profile=profile,
+                            group_name=group_name,
+                            fields=fields,
+                            repair_targets=group_repairs,
+                            dialogue_evidence=dialogue_evidence,
+                        ),
+                        temperature=float(config.get("llm.temperature", 0.15) or 0.15),
+                        max_tokens=self._llm_cap(config, "llm.max_tokens", self.PROFILE_REPAIR_MAX_TOKENS),
+                    )
+                else:
+                    completion_result = parts.llm.chat_completion(
+                        self._build_distill_completion_messages(
+                            payload,
+                            character=character,
+                            peer_characters=peer_characters,
+                            profile=profile,
+                            group_name=group_name,
+                            fields=fields,
+                            dialogue_evidence=dialogue_evidence,
+                        ),
+                        temperature=float(config.get("llm.temperature", 0.1) or 0.1),
+                        max_tokens=self._llm_cap(config, "llm.max_tokens", self.PROFILE_COMPLETION_MAX_TOKENS),
+                    )
                 patch_text = self._sanitize_markdown_output(str(completion_result.get("content", ""))).strip()
                 if not patch_text:
                     continue
@@ -3010,25 +2924,25 @@ class WebRunService:
         rendered = render_profile_md(profile).strip()
         return (rendered + "\n") if updated and rendered else (rendered if rendered else None)
 
-    def _collect_profile_repair_issues(
+    def _collect_profile_repair_targets(
         self,
         profile: dict[str, Any],
         *,
         dialogue_evidence: list[str] | None = None,
-    ) -> list[str]:
-        issues: list[str] = []
+    ) -> dict[str, str]:
+        issues: dict[str, str] = {}
         for field in self.PROFILE_REWRITE_FIELDS:
             value = str(profile.get(field, "")).strip()
             if not value:
-                issues.append(f"{field}: 为空")
+                issues[field] = "为空"
                 continue
             if value == "证据不足":
                 continue
             if self._looks_like_unstable_profile_scalar(value):
-                issues.append(f"{field}: 像剧情碎句或叙述片段 -> {value}")
+                issues[field] = f"像剧情碎句或叙述片段 -> {value}"
                 continue
             if len(value) <= 4:
-                issues.append(f"{field}: 过短，像未完成结论 -> {value}")
+                issues[field] = f"过短，像未完成结论 -> {value}"
         if dialogue_evidence:
             speech_style = str(profile.get("speech_style", "")).strip()
             cadence = str(profile.get("cadence", "")).strip() or str(
@@ -3040,28 +2954,31 @@ class WebRunService:
             sentence_endings = self._profile_list_value(profile, "sentence_endings")
 
             if not speech_style or self._looks_generic_style_scalar(speech_style):
-                issues.append(f"speech_style: 太泛，缺少对白味道 -> {speech_style or '空'}")
+                issues["speech_style"] = f"太泛，缺少对白味道 -> {speech_style or '空'}"
             if not cadence:
-                issues.append("cadence: 为空")
+                issues["cadence"] = "为空"
             if len(signature_phrases) == 0 and len(typical_lines) < 2:
-                issues.append("signature_phrases / typical_lines: 太少，口头禅与代表句不够")
+                issues["signature_phrases"] = "太少，口头禅不够"
+                issues["typical_lines"] = "太少，代表句不够"
             if len(sentence_openers) == 0 and len(sentence_endings) == 0:
-                issues.append("sentence_openers / sentence_endings: 缺少稳定的起句或收尾习惯")
+                issues["sentence_openers"] = "缺少稳定的起句习惯"
+                issues["sentence_endings"] = "缺少稳定的收尾习惯"
         return issues
 
-    def _collect_profile_completion_issues(self, profile: dict[str, Any]) -> list[str]:
-        issues: list[str] = []
-        for field in self.PROFILE_COMPLETION_FIELDS:
-            if self._profile_field_is_effectively_empty(profile, field):
-                issues.append(f"{field}: 为空，请结合正文补齐；若仍无证据则写“证据不足”")
-        return issues
-
-    def _collect_profile_completion_groups(self, profile: dict[str, Any]) -> list[tuple[str, tuple[str, ...]]]:
-        groups: list[tuple[str, tuple[str, ...]]] = []
+    def _collect_profile_completion_groups(
+        self,
+        profile: dict[str, Any],
+        *,
+        repair_targets: dict[str, str] | None = None,
+    ) -> list[tuple[str, tuple[str, ...], dict[str, str]]]:
+        groups: list[tuple[str, tuple[str, ...], dict[str, str]]] = []
+        repair_lookup = dict(repair_targets or {})
         for group_name, fields in self.PROFILE_COMPLETION_GROUPS:
             missing = tuple(field for field in fields if self._profile_field_is_effectively_empty(profile, field))
-            if missing:
-                groups.append((group_name, missing))
+            group_repairs = {field: repair_lookup[field] for field in fields if field in repair_lookup}
+            target_fields = tuple(dict.fromkeys([*group_repairs.keys(), *missing]))
+            if target_fields:
+                groups.append((group_name, target_fields, group_repairs))
         return groups
 
     def _profile_field_is_effectively_empty(self, profile: dict[str, Any], field: str) -> bool:
@@ -3073,10 +2990,6 @@ class WebRunService:
         if field in {"anger_style", "joy_style", "grievance_style"}:
             value = str((profile.get("emotion_profile", {}) or {}).get(field, "")).strip() or str(profile.get(field, "")).strip()
             return not value
-        if field in {"arc_start", "arc_mid", "arc_end"}:
-            arc_key = field.replace("arc_", "")
-            value = (profile.get("arc", {}) or {}).get(arc_key, {})
-            return not bool(value)
         value = profile.get(field, "")
         if isinstance(value, list):
             return len([str(item).strip() for item in value if str(item).strip()]) == 0
@@ -3096,12 +3009,8 @@ class WebRunService:
                 continue
             if key in self.PROFILE_MAP_FIELDS:
                 parsed_map = self._parse_profile_metric_map(value_text)
-                if key == "values":
-                    if parsed_map:
-                        profile["values"] = parsed_map
-                else:
-                    profile.setdefault("arc", {})
-                    profile["arc"][key.replace("arc_", "")] = parsed_map
+                if parsed_map:
+                    profile["values"] = parsed_map
                 continue
             if key in self.PROFILE_LIST_FIELDS:
                 items = self._split_profile_list_value(value_text)
@@ -3236,29 +3145,30 @@ class WebRunService:
         character: str,
         peer_characters: list[str],
         profile: dict[str, Any],
-        issues: list[str],
-        completion_issues: list[str] | None = None,
+        group_name: str,
+        fields: tuple[str, ...],
+        repair_targets: dict[str, str],
         dialogue_evidence: list[str] | None = None,
     ) -> list[dict[str, str]]:
         base_messages = self._build_distill_llm_messages(payload, character=character, peer_characters=peer_characters)
         draft_markdown = render_profile_md(profile)
-        completion_items = list(completion_issues or [])
         repair_instruction = "\n".join(
             [
                 "## REPAIR_TASK",
-                "你刚刚生成的人物档案里，有少数高风险字段像剧情碎句、叙述片段或未收束结论。",
-                "同时，有一批关键字段仍然留空，需要你基于正文证据补齐。",
-                "请优先修正这些高风险字段，并补齐列出的空字段，让它们变成稳定、可演绎、能落进人格档案的概括表达。",
-                "请保留原档案里其他已经合理的字段，不要整份改写成另一种人格。",
-                "补空字段时，不要偷懒留空；只有在正文确实没有稳定证据时，才写“证据不足”。",
-                "如果问题落在说话风格，请优先从对白里收束语气、口头禅、起句、收尾和句子节奏，不要只回到抽象标签。",
-                "输出仍然必须是完整的 PROFILE.generated.md Markdown，不要解释。",
+                f"请只修补这一组字段：{group_name}",
+                "你只修补下面列出的高风险字段，不要自由重写整份 PROFILE。",
+                "如果这一组里还有空字段，也一并补齐；只有正文确实没有稳定证据时才写“证据不足”。",
+                "输出必须只包含这些字段的 Markdown 行，每个字段一行，格式严格为 `- field: value`。",
+                "不要输出标题，不要输出代码块，不要解释，不要附加其他字段。",
+                "请把剧情碎句、对白残句、未收束结论改写成稳定、可演绎的人格概括。",
+                "如果问题落在说话风格，请优先从对白里收束语气、口头禅、起句、收尾和句子节奏。",
+                "列表字段用中文分号 `；` 分隔；`values` 用 `键=值；键=值`。",
                 "",
-                "### HIGH_RISK_FIELDS",
-                *([f"- {item}" for item in issues] or ["- 无"]),
+                "### TARGET_FIELDS",
+                *[f"- {field}" for field in fields],
                 "",
-                "### EMPTY_FIELDS_TO_FILL",
-                *([f"- {item}" for item in completion_items] or ["- 无"]),
+                "### FIELD_ISSUES",
+                *[f"- {field}: {issue}" for field, issue in repair_targets.items()],
                 "",
                 "### DIALOGUE_EVIDENCE",
                 *([f"- {item}" for item in list(dialogue_evidence or [])] or ["- 证据不足"]),
@@ -3291,7 +3201,7 @@ class WebRunService:
                 f"请只补齐这一组字段：{group_name}",
                 "你必须只输出下面这些字段的 Markdown 行，每个字段一行，格式严格为 `- field: value`。",
                 "不要输出标题，不要输出代码块，不要解释，不要附加其他字段。",
-                "列表字段用中文分号 `；` 分隔；`values` / `arc_*` 用 `键=值；键=值`。",
+                "列表字段用中文分号 `；` 分隔；`values` 用 `键=值；键=值`。",
                 "如果正文没有稳定证据，不要留空，直接写“证据不足”。",
                 "",
                 "### TARGET_FIELDS",

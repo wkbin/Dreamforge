@@ -965,7 +965,7 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertIn("贾宝玉初入大观园", messages[1]["content"])
             self.assertIn("贾宝玉看破繁华", messages[1]["content"])
 
-    def test_profile_repair_issues_flag_generic_style_when_dialogue_exists(self):
+    def test_profile_repair_targets_flag_generic_style_when_dialogue_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
             profile = {
@@ -981,14 +981,50 @@ class WebAppRouteTests(unittest.TestCase):
                 "restraint_threshold": "平日克制，真心受损时会失控。",
                 "stress_response": "压力越大越先把情绪压低。",
             }
-            issues = service._collect_profile_repair_issues(
+            issues = service._collect_profile_repair_targets(
                 profile,
                 dialogue_evidence=["贾宝玉道：“你瞧瞧，这个好不好？”"],
             )
 
-            self.assertTrue(any("speech_style" in item for item in issues))
-            self.assertTrue(any("cadence" in item for item in issues))
-            self.assertTrue(any("signature_phrases" in item for item in issues))
+            self.assertIn("speech_style", issues)
+            self.assertIn("cadence", issues)
+            self.assertIn("signature_phrases", issues)
+
+    def test_profile_completion_groups_are_limited_to_four_target_sections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            groups = service._collect_profile_completion_groups({}, repair_targets={})
+
+            self.assertEqual([name for name, _, _ in groups], ["Inner Core", "Decision Logic", "Emotion And Stress", "Voice"])
+
+    def test_profile_repair_prompt_is_single_group_patch_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            payload = {
+                "prompt": "系统提示",
+                "references": {"output_schema": "schema", "style_differ": "style", "logic_constraint": "logic", "validation_policy": "policy"},
+                "request": {"excerpt": "贾宝玉道：“你也不用哄我。”"},
+                "meta": {"novel_id": "hongloumeng"},
+            }
+
+            messages = service._build_distill_repair_messages(
+                payload,
+                character="贾宝玉",
+                peer_characters=["贾宝玉", "林黛玉"],
+                profile={"name": "贾宝玉", "novel_id": "hongloumeng"},
+                group_name="Voice",
+                fields=("speech_style", "cadence", "signature_phrases"),
+                repair_targets={"speech_style": "太泛，缺少对白味道 -> 冷静克制", "cadence": "为空"},
+                dialogue_evidence=["贾宝玉道：“你也不用哄我。”"],
+            )
+
+            prompt = messages[1]["content"]
+            self.assertIn("REPAIR_TASK", prompt)
+            self.assertIn("请只修补这一组字段：Voice", prompt)
+            self.assertIn("不要自由重写整份 PROFILE", prompt)
+            self.assertIn("- speech_style", prompt)
+            self.assertIn("- cadence", prompt)
+            self.assertNotIn("完整的 PROFILE.generated.md Markdown", prompt)
 
     def test_refresh_run_discovers_character_cards_and_graph_outputs(self):
         with tempfile.TemporaryDirectory() as tmp:
