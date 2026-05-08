@@ -65,3 +65,25 @@ def reply_dialogue_turn_payload(
     except LLMRequestError as exc:
         raise ValueError(friendly_dialogue_llm_error(exc)) from exc
     return dialogue.ingest_turn_responses(run_id, session_id=session_id, responses=responses)
+
+
+def suggest_dialogue_turn_payload(
+    *,
+    run_id: str,
+    session_id: str,
+    seed_text: str,
+    manifest: dict[str, Any],
+    dialogue: Any,
+    generate_dialogue_suggestion: Callable[[str, dict[str, Any]], str],
+    friendly_dialogue_llm_error: Callable[[Exception], str],
+) -> dict[str, str]:
+    payload = dialogue.build_suggestion_payload(
+        manifest,
+        session_id=session_id,
+        seed_text=seed_text,
+    )
+    try:
+        suggestion = generate_dialogue_suggestion(run_id, payload)
+    except LLMRequestError as exc:
+        raise ValueError(friendly_dialogue_llm_error(exc)) from exc
+    return {"suggestion": suggestion}

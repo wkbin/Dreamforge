@@ -138,6 +138,10 @@ function stopRunPolling() {
   }
 }
 
+function syncViewportHeightVar() {
+  document.documentElement.style.setProperty("--viewport-height", `${window.innerHeight}px`);
+}
+
 function resizeComposer() {
   const area = el("dialogue-message");
   if (!area) return;
@@ -148,8 +152,10 @@ function resizeComposer() {
 function setComposerEnabled(enabled) {
   const area = el("dialogue-message");
   const sendButton = el("prepare-turn-button");
+  const suggestButton = el("suggest-turn-button");
   if (area) area.disabled = !enabled;
   if (sendButton) sendButton.disabled = !enabled;
+  if (suggestButton) suggestButton.disabled = !enabled;
 }
 
 function updatePillState(rootSelector, values) {

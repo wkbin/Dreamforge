@@ -9,6 +9,7 @@ from src.web.api.schemas import (
     CreateDialogueSessionRequest,
     IngestDialogueTurnRequest,
     PrepareDialogueTurnRequest,
+    SuggestDialogueTurnRequest,
 )
 from src.web.workflow import WebRunService
 
@@ -92,6 +93,21 @@ def reply_dialogue_turn(
 ) -> dict[str, Any]:
     try:
         return run_service.reply_dialogue_turn(run_id, session_id=session_id, message=payload.message)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Session not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/web/runs/{run_id}/dialogue/sessions/{session_id}/suggest")
+def suggest_dialogue_turn(
+    run_id: str,
+    session_id: str,
+    payload: SuggestDialogueTurnRequest,
+    run_service: WebRunService = Depends(get_run_service),
+) -> dict[str, str]:
+    try:
+        return run_service.suggest_dialogue_turn(run_id, session_id=session_id, seed_text=payload.seed_text)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Session not found.") from exc
     except ValueError as exc:

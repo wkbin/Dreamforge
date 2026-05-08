@@ -80,6 +80,79 @@ def build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool
     ]
 
 
+def build_dialogue_suggestion_llm_messages(
+    payload: dict[str, Any],
+    *,
+    retry_on_empty: bool = False,
+) -> list[dict[str, str]]:
+    input_block = dict(payload.get("input", {}) or {})
+    session_mode = str(payload.get("mode", "")).strip() or "observe"
+    participants = [str(item).strip() for item in input_block.get("participants", []) if str(item).strip()]
+    persona_contexts = payload.get("persona_contexts", [])
+    user_persona = dict(payload.get("user_persona", {}) or {})
+    relation_excerpt = str(payload.get("relation_context", {}).get("relations_excerpt", "")).strip()
+    history = payload.get("history", [])
+    instructions = dict(payload.get("instructions", {}) or {})
+    host_action = dict(payload.get("host_action", {}) or {})
+
+    system_parts = [
+        str(payload.get("host_prompt_brief", "")).strip(),
+        "你不是在解释剧情，也不是在做回复分析；你要直接代写一条用户下一句要发出去的话。",
+        str(instructions.get("generation_goal", "")).strip(),
+        str(instructions.get("mode_rule", "")).strip(),
+        str(instructions.get("speaker_rule", "")).strip(),
+        str(instructions.get("response_style", "")).strip(),
+        str(host_action.get("output_rule", "")).strip(),
+        "必须优先参考 user_persona：这代表当前应该由“你”如何说话。",
+        "如果 mode=insert，就按 self-insert 的身份、称呼和 interaction_style 来说。",
+        "如果 mode=act，就按 controlled character 的 persona profile、speech_style、temperament 和典型说话习惯来写。",
+        "如果 mode=observe，就把这句话写成推动剧情的场景提示：让局势往前走，而不是复述、总结或劝说。",
+        "只输出一句最终可发送的成品台词，不要解释上下文，不要总结历史，不要提供建议理由，不要写“作为/当前场景/我们可以/你可以/建议/回复：”这类分析话术。",
+        "不要分段，不要项目符号，不要加引号，不要加说话人标签。",
+    ]
+    if retry_on_empty:
+        system_parts.append(
+            "上一次你的输出不是可直接发送的台词。重来：只给一句短而自然的话，像聊天框里马上要发出去的内容。"
+        )
+    system_prompt = "\n".join(part for part in system_parts if part)
+
+    user_payload = {
+        "mode": session_mode,
+        "speaker": str(input_block.get("speaker", "")).strip(),
+        "seed_text": str(input_block.get("message", "")).strip(),
+        "user_persona": user_persona,
+        "participants": participants,
+        "persona_contexts": persona_contexts,
+        "history": history,
+        "relation_excerpt": relation_excerpt,
+        "response_shape": host_action.get("expected_output", {"suggestion": "一句可直接发送的话"}),
+        "good_examples": {
+            "act_or_insert": [
+                "抱歉，我刚才那句说重了。",
+                "你先别气，我不是在呛你。",
+                "那我换个说法，你别误会。",
+            ],
+            "observe": [
+                "门外忽然传来两下敲门声，屋里一下静了。",
+                "江澄先看见了他袖口上的血，话到嘴边忽然顿住。",
+                "魏无羡低头笑了一下，却没立刻接这句话。",
+            ],
+        },
+        "bad_examples": [
+            "我们作为“你”是误入此间的来客……",
+            "当前场景是对方在生气，我们可以先安抚……",
+            "建议回复：先道歉，再解释。",
+            "你们继续聊下去吧。",
+        ],
+        "retry_on_empty": retry_on_empty,
+    }
+    user_prompt = json.dumps(user_payload, ensure_ascii=False, indent=2)
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
 def parse_dialogue_responses(content: str, allowed_speakers: list[str]) -> list[dict[str, str]]:
     text = str(content or "").strip()
     if not text:
@@ -122,6 +195,81 @@ def parse_dialogue_responses(content: str, allowed_speakers: list[str]) -> list[
     return clean_responses
 
 
+def _looks_like_meta_suggestion(text: str) -> bool:
+    normalized = " ".join(str(text or "").split()).strip()
+    if not normalized:
+        return True
+    if "\n" in str(text or ""):
+        return True
+    if len(normalized) > 90:
+        return True
+
+    meta_tokens = (
+        "作为",
+        "当前场景",
+        "我们作为",
+        "我们可以",
+        "你可以",
+        "建议",
+        "回复：",
+        "回复:",
+        "历史显示",
+        "上下文",
+        "保持角色",
+        "角色一致",
+        "这句已经",
+        "直接送出",
+        "分析",
+        "解释",
+    )
+    lowered = normalized.lower()
+    if any(token in normalized for token in meta_tokens):
+        return True
+    if any(token in lowered for token in ("context", "suggestion", "reply:", "analysis")):
+        return True
+    return False
+
+
+def parse_dialogue_suggestion(content: str) -> str:
+    text = str(content or "").strip()
+    if not text:
+        raise ValueError("Model returned an empty suggestion.")
+    if text.startswith("```"):
+        text = text.strip("`")
+        if "\n" in text:
+            text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3].strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        text = str(parsed.get("suggestion", "")).strip()
+    elif isinstance(parsed, list) and parsed:
+        first = parsed[0]
+        if isinstance(first, dict):
+            text = str(first.get("suggestion", "") or first.get("message", "")).strip()
+        else:
+            text = str(first).strip()
+    else:
+        text = text.strip().strip('"').strip("'")
+    if "：" in text:
+        prefix, rest = text.split("：", 1)
+        if 0 < len(prefix.strip()) <= 16 and rest.strip():
+            text = rest.strip()
+    elif ":" in text:
+        prefix, rest = text.split(":", 1)
+        if 0 < len(prefix.strip()) <= 16 and rest.strip():
+            text = rest.strip()
+    text = " ".join(text.split()).strip()
+    if not text:
+        raise ValueError("Model reply did not contain a usable suggestion.")
+    if _looks_like_meta_suggestion(text):
+        raise ValueError("Model reply looked like explanation instead of a direct sendable line.")
+    return text
+
+
 def generate_dialogue_responses(
     *,
     payload: dict[str, Any],
@@ -153,3 +301,35 @@ def generate_dialogue_responses(
                 continue
             raise
     raise ValueError("模型没有返回可用的角色回复。") from last_error
+
+
+def generate_dialogue_suggestion(
+    *,
+    payload: dict[str, Any],
+    temperature: float,
+    max_tokens: int,
+    chat_completion: Callable[[list[dict[str, str]], float, int], dict[str, Any]],
+    build_messages: Callable[[dict[str, Any], bool], list[dict[str, str]]],
+    parse_suggestion: Callable[[str], str],
+) -> str:
+    attempts = (
+        build_messages(payload, False),
+        build_messages(payload, True),
+    )
+    last_error: Exception | None = None
+    for index, llm_messages in enumerate(attempts):
+        llm_result = chat_completion(llm_messages, temperature, max_tokens)
+        content = str(llm_result.get("content", "")).strip()
+        if not content:
+            last_error = ValueError("Model returned an empty suggestion.")
+            if index + 1 < len(attempts):
+                continue
+            break
+        try:
+            return parse_suggestion(content)
+        except ValueError as exc:
+            last_error = exc
+            if index + 1 < len(attempts):
+                continue
+            raise
+    raise ValueError("模型没有返回可用的续写建议。") from last_error

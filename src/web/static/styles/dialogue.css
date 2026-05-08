@@ -165,14 +165,74 @@
   overflow: visible;
 }
 
+.quick-reply-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 10px 12px;
+}
+
+.quick-reply-chip {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 28px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid rgba(188, 154, 135, 0.12);
+  background: rgba(255, 255, 255, 0.56);
+  color: rgba(145, 110, 94, 0.78);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  transition: transform 140ms ease, background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.quick-reply-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(188, 154, 135, 0.2);
+  background: rgba(255, 255, 255, 0.8);
+  color: rgba(134, 97, 80, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 6px 14px rgba(189, 145, 124, 0.08);
+}
+
+.quick-reply-chip:active {
+  transform: translateY(0);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.quick-reply-chip:focus-visible {
+  border-color: rgba(184, 132, 113, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 0 0 3px rgba(214, 180, 163, 0.16);
+}
+
 .composer-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  align-items: center;
+  align-items: end;
   padding: 8px 8px 8px 14px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.84);
+}
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 #dialogue-message {
@@ -185,6 +245,24 @@
   line-height: 1.6;
   min-width: 0;
   display: block;
+}
+
+.composer-icon-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(194, 157, 138, 0.34);
+  background: linear-gradient(180deg, rgba(255, 248, 241, 0.98) 0%, rgba(248, 236, 227, 0.96) 100%);
+  color: #a86954;
+  box-shadow: 0 8px 20px rgba(189, 145, 124, 0.15);
+  font-size: 18px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.composer-icon-button:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, rgba(255, 251, 246, 1) 0%, rgba(249, 238, 228, 1) 100%);
 }
 
 .send-button {
@@ -204,8 +282,10 @@
   background: linear-gradient(180deg, #ce9a86 0%, #ba7962 100%);
 }
 
+.composer-icon-button:disabled,
 .send-button:disabled,
-#dialogue-message:disabled {
+#dialogue-message:disabled,
+.quick-reply-chip:disabled {
   opacity: 0.62;
   cursor: not-allowed;
 }

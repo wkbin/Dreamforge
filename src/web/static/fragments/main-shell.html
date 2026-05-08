@@ -11,9 +11,22 @@
 
   <footer id="turn-stage" class="composer-shell hidden">
     <div class="composer-card">
+      <div id="observe-quick-replies" class="quick-reply-row hidden"></div>
       <div class="composer-main">
         <textarea id="dialogue-message" rows="1" placeholder="写一句你想让他们听见的话"></textarea>
-        <button id="prepare-turn-button" type="button" class="send-button" aria-label="送出">送出</button>
+        <div class="composer-actions">
+          <button
+            id="suggest-turn-button"
+            type="button"
+            class="composer-icon-button"
+            aria-label="帮我续一句"
+            title="帮我续一句"
+            onclick="handleSuggestTurn()"
+          >
+            ✨
+          </button>
+          <button id="prepare-turn-button" type="button" class="send-button" aria-label="送出">送出</button>
+        </div>
       </div>
     </div>
   </footer>

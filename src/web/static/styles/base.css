@@ -23,8 +23,9 @@
   --card-pad-y: 1.25rem;
   --card-pad-x: 1.35rem;
   --text-inset: 0.22rem;
-  --rail-height: calc(100vh - 9.6rem);
-  --dialogue-rail-height: calc(100vh - 9.6rem);
+  --viewport-height: 100dvh;
+  --rail-height: calc(var(--viewport-height) - 9.6rem);
+  --dialogue-rail-height: calc(var(--viewport-height) - 9.6rem);
 }
 
 * {
@@ -58,12 +59,18 @@ body {
   width: min(100%, 86rem);
   margin: 0 auto;
   padding: 1.4rem 1.4rem 1.2rem;
+  min-height: var(--viewport-height);
 }
 
 .experience-shell {
   display: grid;
   gap: 1rem;
   align-items: start;
+  min-height: calc(var(--viewport-height) - 7rem);
+}
+
+#main-shell-root {
+  min-width: 0;
 }
 
 button,
@@ -328,6 +335,7 @@ textarea {
 .experience-shell.dialogue-layout {
   grid-template-columns: 13.6rem minmax(0, 1fr);
   gap: 1rem;
+  align-items: stretch;
 }
 
 .experience-shell.dialogue-layout > .app-shell {
@@ -335,9 +343,11 @@ textarea {
   grid-row: 1;
 }
 
-.experience-shell.dialogue-layout > .main-shell {
+.experience-shell.dialogue-layout > #main-shell-root {
   grid-column: 2;
   grid-row: 1;
+  min-width: 0;
+  min-height: var(--dialogue-rail-height);
 }
 
 .experience-shell.dialogue-layout.sidebar-collapsed {
@@ -368,6 +378,11 @@ textarea {
   grid-row: 1;
 }
 
+.experience-shell.dialogue-layout.sidebar-collapsed > #main-shell-root {
+  grid-column: 1;
+  grid-row: 1;
+}
+
 .experience-shell.dialogue-layout .library-rail {
   min-height: 0;
   height: 100%;
@@ -379,15 +394,23 @@ textarea {
   display: none;
 }
 
-.experience-shell.dialogue-layout .main-shell {
-  min-height: 36rem;
+.experience-shell.dialogue-layout #main-shell-root > .main-shell {
+  min-height: var(--dialogue-rail-height);
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .experience-shell.dialogue-layout .chat-shell,
 .experience-shell.dialogue-layout .chat-detail,
-.experience-shell.dialogue-layout .chat-content,
+.experience-shell.dialogue-layout .chat-content {
+  min-height: 0;
+  height: 100%;
+}
+
 .experience-shell.dialogue-layout .transcript {
-  min-height: clamp(28rem, 68vh, 46rem);
+  min-height: 0;
+  height: 100%;
+  max-height: none;
 }
 
 .story-header {

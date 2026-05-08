@@ -56,3 +56,35 @@ def generate_dialogue_responses_for_run(
         ),
         parse_responses=parse_dialogue_responses,
     )
+
+
+def generate_dialogue_suggestion_for_run(
+    *,
+    run_dir: Path,
+    payload: dict[str, Any],
+    build_runtime_config_for_run: Callable[..., Any],
+    build_runtime_parts: Callable[[Any], Any],
+    generate_dialogue_suggestion: Callable[..., str],
+    build_dialogue_suggestion_llm_messages: Callable[[dict[str, Any], bool], list[dict[str, str]]],
+    parse_dialogue_suggestion: Callable[[str], str],
+) -> str:
+    config = build_runtime_config_for_run(run_dir=run_dir)
+    parts = build_runtime_parts(config)
+    if not hasattr(parts.llm, "chat_completion"):
+        raise ValueError("Configured model does not support chat generation.")
+
+    return generate_dialogue_suggestion(
+        payload=payload,
+        temperature=float(config.get("llm.temperature", 0.45) or 0.45),
+        max_tokens=int(config.get("llm.max_tokens", 180) or 180),
+        chat_completion=lambda messages, temperature, max_tokens: parts.llm.chat_completion(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ),
+        build_messages=lambda current_payload, retry_on_empty: build_dialogue_suggestion_llm_messages(
+            current_payload,
+            retry_on_empty,
+        ),
+        parse_suggestion=parse_dialogue_suggestion,
+    )

@@ -150,6 +150,9 @@ async function renderDialogueSession(session) {
   currentDialogueSession = session;
   sessionBooting = false;
   setComposerEnabled(true);
+  if (typeof renderObserveQuickReplies === "function") {
+    renderObserveQuickReplies(session);
+  }
   setSessionBadge("对话中");
   renderDialogueTranscript(session);
   await loadRecentSessions();

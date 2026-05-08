@@ -122,6 +122,41 @@ class DialogueService:
         self._write_json(self._session_file(run_id, session_id), session)
         return self._serialize_session(run_id, session)
 
+    def build_suggestion_payload(
+        self,
+        run_manifest: dict[str, Any],
+        *,
+        session_id: str,
+        seed_text: str = "",
+    ) -> dict[str, Any]:
+        run_id = str(run_manifest.get("run_id", "")).strip()
+        session = self._read_json(self._session_file(run_id, session_id))
+        payload = self._build_turn_payload(
+            run_manifest,
+            session,
+            turn_id=f"suggest-{uuid4().hex[:8]}",
+            message=seed_text,
+        )
+        mode = str(payload.get("mode", "observe")).strip() or "observe"
+        speaker = str(payload.get("input", {}).get("speaker", "")).strip()
+        participants = list(payload.get("input", {}).get("participants", []))
+        payload["kind"] = "zaomeng_dialogue_suggestion"
+        payload["user_persona"] = self._build_user_suggestion_persona(mode, session, payload.get("persona_contexts", []))
+        payload["instructions"] = {
+            "mode": mode,
+            "generation_goal": "Draft one short, natural, directly sendable next user line that fits the current scene, relationships, and persona voices.",
+            "mode_rule": self._suggestion_mode_rule(mode),
+            "speaker_rule": self._speaker_rule(mode, session),
+            "response_style": self._suggestion_style_rule(mode),
+        }
+        payload["host_action"] = {
+            "expected_output": {"suggestion": "一句可直接发送的话"},
+            "output_rule": "Keep it short, in-scene, directly sendable, and never explanatory.",
+        }
+        payload["host_prompt_brief"] = self._host_suggestion_prompt_brief(mode, speaker, participants)
+        payload["updated_at"] = _utc_now()
+        return payload
+
     def ingest_turn_responses(
         self,
         run_id: str,
@@ -292,6 +327,72 @@ class DialogueService:
         return "Reply as the cast addressing the self-insert user naturally inside the scene."
 
     @staticmethod
+    def _suggestion_mode_rule(mode: str) -> str:
+        if mode == "act":
+            return "Draft the user's next line as the controlled character, fully in character."
+        if mode == "insert":
+            return "Draft the user's next line as the self-insert identity inside the scene."
+        return "Draft the user's next line as a short scene-steering utterance that introduces movement, tension, reaction, interruption, or new information; not a character reply."
+
+    @staticmethod
+    def _suggestion_style_rule(mode: str) -> str:
+        if mode == "observe":
+            return "Prefer one short scene-driving prompt that pushes the plot forward immediately, such as a new beat, interruption, reveal, gesture, or emotional turn, with no explanation attached."
+        if mode == "act":
+            return "Prefer one concise in-character line that another participant can answer naturally, as final sendable wording."
+        return "Prefer one concise line that sounds like the self-insert user speaking naturally in the scene, as final sendable wording."
+
+    @staticmethod
+    def _build_user_suggestion_persona(
+        mode: str,
+        session: dict[str, Any],
+        persona_contexts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if mode == "act":
+            controlled = str(session.get("controlled_character", "")).strip()
+            matched = next(
+                (item for item in persona_contexts if str(item.get("name", "")).strip() == controlled),
+                {},
+            )
+            return {
+                "mode": "act",
+                "speaker": controlled,
+                "source": "controlled_character_persona",
+                "must_follow": "Write exactly as this controlled character would speak in the current scene.",
+                "profile": dict(matched.get("profile", {}) or {}),
+                "preview": dict(matched.get("preview", {}) or {}),
+            }
+        if mode == "insert":
+            card = dict(session.get("self_insert", {}) or {})
+            return {
+                "mode": "insert",
+                "speaker": str(card.get("display_name", "")).strip() or "你",
+                "source": "self_insert_profile",
+                "must_follow": "Write as the self-insert user, keeping their chosen identity and vibe consistent.",
+                "profile": {
+                    "display_name": str(card.get("display_name", "")).strip(),
+                    "scene_identity": str(card.get("scene_identity", "")).strip(),
+                    "interaction_style": str(card.get("interaction_style", "")).strip(),
+                },
+            }
+        return {
+            "mode": "observe",
+            "speaker": "User",
+            "source": "observer_hint",
+            "must_follow": "Write as a scene observer giving a short in-world nudge that actively moves the scene, rather than speaking as a cast member.",
+            "profile": {
+                "goal": "push_plot_forward",
+                "preferred_moves": [
+                    "introduce a new action",
+                    "add a small interruption",
+                    "surface a hidden tension",
+                    "shift the emotional temperature",
+                    "make someone notice something important",
+                ],
+            },
+        }
+
+    @staticmethod
     def _responder_hints(mode: str, participants: list[str], speaker: str) -> list[dict[str, str]]:
         hints: list[dict[str, str]] = []
         for name in participants:
@@ -313,6 +414,14 @@ class DialogueService:
         if mode == "insert":
             return f"The user enters the scene as {speaker}. Let the cast react in character."
         return f"The user is observing. Let {', '.join(participants)} continue the scene in character."
+
+    @staticmethod
+    def _host_suggestion_prompt_brief(mode: str, speaker: str, participants: list[str]) -> str:
+        if mode == "act":
+            return f"Help the user speak as {speaker} with one believable next line."
+        if mode == "insert":
+            return f"Help the user speak as {speaker} inside the current scene with one natural next line."
+        return f"Help the user guide {', '.join(participants)} with one short prompt that clearly pushes the scene into its next beat."
 
     @staticmethod
     def _load_text_excerpt(path_text: str, *, limit: int) -> str:

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.core.exceptions import LLMRequestError
+from src.web.chat.helpers import parse_dialogue_suggestion
 from src.web.workflow import WebRunService
 
 try:
@@ -773,6 +774,261 @@ class WebRunServiceTests(unittest.TestCase):
             repair_messages = fake_parts.llm.chat_completion.call_args_list[1].args[0]
             self.assertIn("REPAIR_TASK", repair_messages[1]["content"])
             self.assertIn("剧情碎句", repair_messages[1]["content"])
+
+    def test_suggest_dialogue_turn_does_not_mutate_session_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                service,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "开场。"}],
+            ):
+                session = service.create_dialogue_session(
+                    run_id,
+                    mode="observe",
+                    participants=["???", "???"],
+                    controlled_character="",
+                    self_profile={},
+                )
+
+            original_history = list(session["history"])
+
+            with patch.object(
+                service,
+                "_generate_dialogue_suggestion",
+                return_value="要不先让他们把刚才那句接下去？",
+            ):
+                result = service.suggest_dialogue_turn(
+                    run_id,
+                    session_id=session["session_id"],
+                    seed_text="要不先让",
+                )
+
+            self.assertEqual(result["suggestion"], "要不先让他们把刚才那句接下去？")
+            refreshed_session = service.get_dialogue_session(run_id, session["session_id"])
+            self.assertEqual(refreshed_session["history"], original_history)
+            self.assertEqual(refreshed_session["pending_turn_summary"], {})
+            self.assertEqual(refreshed_session["status"], "ready")
+
+    def test_parse_dialogue_suggestion_rejects_meta_explanation(self):
+        with self.assertRaisesRegex(ValueError, "explanation instead of a direct sendable line"):
+            parse_dialogue_suggestion(
+                "我们作为“你”是误入此间的来客，当前场景是对方在生气，我们可以先安抚，再解释。"
+            )
+
+    def test_generate_dialogue_suggestion_retries_after_meta_explanation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                service,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "开场。"}],
+            ):
+                session = service.create_dialogue_session(
+                    run_id,
+                    mode="insert",
+                    participants=["???", "???"],
+                    controlled_character="",
+                    self_profile={"display_name": "你", "scene_identity": "来客"},
+                )
+
+            with patch("src.web.service_facades.dialogue.build_runtime_parts") as build_parts:
+                fake_parts = Mock()
+                fake_parts.llm.chat_completion.side_effect = [
+                    {"content": "我们作为“你”是误入此间的来客，当前场景是对方在生气，我们可以先安抚，再解释。", "raw": {}},
+                    {"content": "别生气，我刚才那句不是在呛你。", "raw": {}},
+                ]
+                build_parts.return_value = fake_parts
+
+                result = service.suggest_dialogue_turn(
+                    run_id,
+                    session_id=session["session_id"],
+                    seed_text="我不是那个意思",
+                )
+
+            self.assertEqual(result["suggestion"], "别生气，我刚才那句不是在呛你。")
+            self.assertEqual(fake_parts.llm.chat_completion.call_count, 2)
+
+    def test_build_suggestion_payload_uses_self_insert_persona_in_insert_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n- speech_style: 各有口气\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+            manifest = service._require_manifest(run_id)
+            session = service.dialogue.create_session(
+                manifest,
+                mode="insert",
+                participants=["林黛玉", "贾宝玉"],
+                controlled_character="",
+                self_profile={
+                    "display_name": "阿眠",
+                    "scene_identity": "误入园中的来客",
+                    "interaction_style": "先软后稳",
+                },
+            )
+
+            payload = service.dialogue.build_suggestion_payload(
+                manifest,
+                session_id=session["session_id"],
+                seed_text="",
+            )
+
+            self.assertEqual(payload["user_persona"]["source"], "self_insert_profile")
+            self.assertEqual(payload["user_persona"]["speaker"], "阿眠")
+            self.assertEqual(payload["user_persona"]["profile"]["scene_identity"], "误入园中的来客")
+            self.assertEqual(payload["user_persona"]["profile"]["interaction_style"], "先软后稳")
+
+    def test_build_suggestion_payload_uses_controlled_character_persona_in_act_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            service.ingest_character_result(
+                run_id,
+                character="贾宝玉",
+                content_base64=base64.b64encode(
+                    "- name: 贾宝玉\n- novel_id: hongloumeng\n- core_identity: 贾府公子\n- speech_style: 软中带刺\n- temperament_type: 多情敏感\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            service.ingest_character_result(
+                run_id,
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    "- name: 林黛玉\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            manifest = service._require_manifest(run_id)
+            session = service.dialogue.create_session(
+                manifest,
+                mode="act",
+                participants=["贾宝玉", "林黛玉"],
+                controlled_character="贾宝玉",
+                self_profile={},
+            )
+
+            payload = service.dialogue.build_suggestion_payload(
+                manifest,
+                session_id=session["session_id"],
+                seed_text="",
+            )
+
+            self.assertEqual(payload["user_persona"]["source"], "controlled_character_persona")
+            self.assertEqual(payload["user_persona"]["speaker"], "贾宝玉")
+            self.assertEqual(payload["user_persona"]["profile"]["speech_style"], "软中带刺")
+            self.assertEqual(payload["user_persona"]["profile"]["temperament_type"], "多情敏感")
+
+    def test_build_suggestion_payload_uses_plot_push_observer_hint_in_observe_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+            manifest = service._require_manifest(run_id)
+            session = service.dialogue.create_session(
+                manifest,
+                mode="observe",
+                participants=["林黛玉", "贾宝玉"],
+                controlled_character="",
+                self_profile={},
+            )
+
+            payload = service.dialogue.build_suggestion_payload(
+                manifest,
+                session_id=session["session_id"],
+                seed_text="",
+            )
+
+            self.assertEqual(payload["user_persona"]["source"], "observer_hint")
+            self.assertEqual(payload["user_persona"]["profile"]["goal"], "push_plot_forward")
+            self.assertIn("introduce a new action", payload["user_persona"]["profile"]["preferred_moves"])
+            self.assertIn("pushes the plot forward", payload["instructions"]["response_style"])
 
 
 @unittest.skipIf(TestClient is None or create_app is None, "fastapi test dependencies unavailable")
@@ -1861,6 +2117,77 @@ class WebAppRouteTests(unittest.TestCase):
             payload = reply_response.json()
             self.assertEqual(payload["status"], "ready")
             self.assertEqual(payload["transcript"][-1]["speaker"], "林黛玉")
+
+    def test_dialogue_suggest_route_returns_suggestion_without_mutating_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            app = create_app(service)
+            client = TestClient(app)
+            client.put(
+                "/api/web/settings/model",
+                json={
+                    "provider": "openai-compatible",
+                    "model": "deepseek-chat",
+                    "base_url": "https://example.com/v1",
+                    "api_key": "sk-test",
+                },
+            )
+            create_response = client.post(
+                "/api/web/runs",
+                json={
+                    "novel_name": "hongloumeng.txt",
+                    "novel_content_base64": base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                    "characters": ["林黛玉", "贾宝玉"],
+                },
+            )
+            run = create_response.json()
+            for name in ("林黛玉", "贾宝玉"):
+                client.post(
+                    f"/api/web/runs/{run['run_id']}/ingest/character",
+                    json={
+                        "character": name,
+                        "content_base64": base64.b64encode(
+                            f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                        ).decode("ascii"),
+                    },
+                )
+
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "开场。"}],
+            ):
+                session_response = client.post(
+                    f"/api/web/runs/{run['run_id']}/dialogue/sessions",
+                    json={
+                        "mode": "observe",
+                        "participants": ["???", "???"],
+                        "controlled_character": "",
+                        "self_profile": {},
+                    },
+                )
+            session = session_response.json()
+            initial_history = list(session["history"])
+
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_suggestion",
+                return_value="要不先让他们把刚才那句接下去？",
+            ):
+                suggest_response = client.post(
+                    f"/api/web/runs/{run['run_id']}/dialogue/sessions/{session['session_id']}/suggest",
+                    json={"seed_text": "要不先让"},
+                )
+
+            self.assertEqual(suggest_response.status_code, 200)
+            self.assertEqual(suggest_response.json()["suggestion"], "要不先让他们把刚才那句接下去？")
+
+            refreshed_session = client.get(
+                f"/api/web/runs/{run['run_id']}/dialogue/sessions/{session['session_id']}"
+            ).json()
+            self.assertEqual(refreshed_session["history"], initial_history)
+            self.assertEqual(refreshed_session["pending_turn_summary"], {})
+            self.assertEqual(refreshed_session["status"], "ready")
 
 
     def test_dialogue_reply_route_returns_friendly_model_subscription_error(self):

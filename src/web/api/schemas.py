@@ -85,6 +85,10 @@ class PrepareDialogueTurnRequest(BaseModel):
     message: str = Field(..., min_length=1)
 
 
+class SuggestDialogueTurnRequest(BaseModel):
+    seed_text: str = Field(default="")
+
+
 class DialogueResponseItem(BaseModel):
     speaker: str = Field(..., min_length=1)
     message: str = Field(..., min_length=1)

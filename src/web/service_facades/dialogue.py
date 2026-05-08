@@ -5,13 +5,18 @@ from typing import Any
 from src.core.runtime_factory import build_runtime_parts
 from src.web.chat import (
     build_dialogue_llm_messages,
+    build_dialogue_suggestion_llm_messages,
     build_dialogue_opening_message,
     create_dialogue_session_payload,
     friendly_dialogue_llm_error,
+    generate_dialogue_suggestion,
     generate_dialogue_responses,
     generate_dialogue_responses_for_run,
+    generate_dialogue_suggestion_for_run,
+    parse_dialogue_suggestion,
     parse_dialogue_responses,
     reply_dialogue_turn_payload,
+    suggest_dialogue_turn_payload,
 )
 
 
@@ -31,7 +36,7 @@ class DialogueServiceMixin:
     ) -> dict[str, Any]:
         manifest = self._require_manifest(run_id)
         return create_dialogue_session_payload(
-            run_id,
+            run_id=run_id,
             manifest=manifest,
             dialogue=self.dialogue,
             mode=mode,
@@ -69,6 +74,18 @@ class DialogueServiceMixin:
             friendly_dialogue_llm_error=friendly_dialogue_llm_error,
         )
 
+    def suggest_dialogue_turn(self, run_id: str, *, session_id: str, seed_text: str = "") -> dict[str, str]:
+        manifest = self._require_manifest(run_id)
+        return suggest_dialogue_turn_payload(
+            run_id=run_id,
+            session_id=session_id,
+            seed_text=seed_text,
+            manifest=manifest,
+            dialogue=self.dialogue,
+            generate_dialogue_suggestion=self._generate_dialogue_suggestion,
+            friendly_dialogue_llm_error=friendly_dialogue_llm_error,
+        )
+
     def ingest_dialogue_turn(
         self,
         run_id: str,
@@ -93,10 +110,36 @@ class DialogueServiceMixin:
             parse_dialogue_responses=self._parse_dialogue_responses,
         )
 
+    def _generate_dialogue_suggestion(self, run_id: str, payload: dict[str, Any]) -> str:
+        return generate_dialogue_suggestion_for_run(
+            run_dir=self.runs_root / run_id,
+            payload=payload,
+            build_runtime_config_for_run=self._build_runtime_config_for_run,
+            build_runtime_parts=build_runtime_parts,
+            generate_dialogue_suggestion=generate_dialogue_suggestion,
+            build_dialogue_suggestion_llm_messages=lambda current_payload, retry_on_empty: self._build_dialogue_suggestion_llm_messages(
+                current_payload,
+                retry_on_empty=retry_on_empty,
+            ),
+            parse_dialogue_suggestion=self._parse_dialogue_suggestion,
+        )
+
     @staticmethod
     def _build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool = False) -> list[dict[str, str]]:
         return build_dialogue_llm_messages(payload, retry_on_empty=retry_on_empty)
 
     @staticmethod
+    def _build_dialogue_suggestion_llm_messages(
+        payload: dict[str, Any],
+        *,
+        retry_on_empty: bool = False,
+    ) -> list[dict[str, str]]:
+        return build_dialogue_suggestion_llm_messages(payload, retry_on_empty=retry_on_empty)
+
+    @staticmethod
     def _parse_dialogue_responses(content: str, allowed_speakers: list[str]) -> list[dict[str, str]]:
         return parse_dialogue_responses(content, allowed_speakers)
+
+    @staticmethod
+    def _parse_dialogue_suggestion(content: str) -> str:
+        return parse_dialogue_suggestion(content)

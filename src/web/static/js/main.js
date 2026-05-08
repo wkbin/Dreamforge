@@ -337,30 +337,95 @@ async function openRelationDetails() {
 
 const DIALOGUE_PLACEHOLDER_DEFAULT = "写一句你想让他们听见的话";
 const DIALOGUE_PLACEHOLDER_WAITING = "他们正在接住你的话。";
+const DIALOGUE_SUGGESTION_WAITING = "正在生成中...";
+const DIALOGUE_SUGGESTION_BUSY_LABEL = "…";
+const OBSERVE_QUICK_REPLIES = [
+  { label: "……", value: "……" },
+  { label: "继续聊", value: "继续聊。" },
+  { label: "别停", value: "别停，继续往下说。" },
+  { label: "有人打断", value: "门外忽然传来一点动静，屋里的人都顿了一下。" },
+  { label: "再逼近点", value: "这句话落下去以后，气氛反而更近了一步。" },
+];
+
+function setQuickRepliesEnabled(enabled) {
+  document.querySelectorAll("#observe-quick-replies .quick-reply-chip").forEach((node) => {
+    node.disabled = !enabled;
+  });
+}
 
 function setComposerWaiting(waiting, message = "") {
   const area = el("dialogue-message");
   const sendButton = el("prepare-turn-button");
+  const suggestButton = el("suggest-turn-button");
   if (!area) return;
   if (waiting) {
     area.value = message || DIALOGUE_PLACEHOLDER_WAITING;
     area.disabled = true;
     if (sendButton) sendButton.disabled = true;
+    if (suggestButton) suggestButton.disabled = true;
   } else {
     area.disabled = false;
     if (sendButton) sendButton.disabled = false;
+    if (suggestButton) suggestButton.disabled = false;
     area.value = message || "";
     area.placeholder = DIALOGUE_PLACEHOLDER_DEFAULT;
   }
+  setQuickRepliesEnabled(!waiting);
   resizeComposer();
 }
 
-async function handleSendTurn() {
+function setSuggestingState(waiting) {
+  const area = el("dialogue-message");
+  const sendButton = el("prepare-turn-button");
+  const suggestButton = el("suggest-turn-button");
+  if (area) area.disabled = waiting;
+  if (sendButton) sendButton.disabled = waiting;
+  if (suggestButton) {
+    suggestButton.disabled = waiting;
+    suggestButton.textContent = waiting ? DIALOGUE_SUGGESTION_BUSY_LABEL : "✨";
+    suggestButton.setAttribute("aria-busy", waiting ? "true" : "false");
+  }
+  setQuickRepliesEnabled(!waiting);
+}
+
+function renderObserveQuickReplies(session = currentDialogueSession) {
+  const root = el("observe-quick-replies");
+  if (!root) return;
+  const mode = session?.mode || session?.session_card?.mode || "";
+  if (mode !== "observe") {
+    root.innerHTML = "";
+    root.classList.add("hidden");
+    return;
+  }
+
+  root.innerHTML = "";
+  OBSERVE_QUICK_REPLIES.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "quick-reply-chip";
+    button.textContent = item.label;
+    button.setAttribute("data-value", item.value);
+    button.addEventListener("click", () => {
+      applyQuickReply(item.value);
+    });
+    root.appendChild(button);
+  });
+  root.classList.remove("hidden");
+}
+
+async function applyQuickReply(value) {
+  const message = String(value || "").trim();
+  const area = el("dialogue-message");
+  if (!message || !area || area.disabled) return;
+  await handleSendTurn(message);
+}
+
+async function handleSendTurn(messageOverride = "") {
   if (!currentRunId || !currentDialogueSessionId) {
     setComposerWaiting(false, "先进入这一幕，再把话递出去。");
     return;
   }
-  const message = trimmedValue("dialogue-message", "");
+  const message = String(messageOverride || "").trim() || trimmedValue("dialogue-message", "");
   if (!message) {
     setComposerWaiting(false, "先写一句你想让他们听见的话。");
     return;
@@ -399,6 +464,49 @@ async function handleSendTurn() {
   }
 }
 
+async function handleSuggestTurn() {
+  console.log("[dialogue suggest] click", {
+    runId: currentRunId,
+    sessionId: currentDialogueSessionId,
+  });
+  if (!currentRunId || !currentDialogueSessionId) {
+    return;
+  }
+
+  const area = el("dialogue-message");
+  if (!area) return;
+
+  const draftText = String(area.value || "");
+  const seedText = draftText.trim();
+  area.value = DIALOGUE_SUGGESTION_WAITING;
+  resizeComposer();
+  setSuggestingState(true);
+
+  try {
+    console.log("[dialogue suggest] request", { seedText });
+    const payload = await apiJson(
+      `/api/web/runs/${currentRunId}/dialogue/sessions/${currentDialogueSessionId}/suggest`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seed_text: seedText }),
+      },
+      "续写建议生成失败。"
+    );
+    console.log("[dialogue suggest] success", payload);
+    area.value = payload.suggestion || "";
+    area.focus();
+    area.setSelectionRange(area.value.length, area.value.length);
+    resizeComposer();
+  } catch (error) {
+    console.log("[dialogue suggest] error", error);
+    area.value = draftText;
+    resizeComposer();
+  } finally {
+    setSuggestingState(false);
+  }
+}
+
 function bindEvents() {
   bind("open-bookshelf-button", "click", showBookshelfHome);
   bind("open-settings-button", "click", openSettingsModal);
@@ -418,6 +526,9 @@ function bindEvents() {
   bind("open-persona-review-button", "click", openPersonaReview);
   bind("open-relation-details-button", "click", openRelationDetails);
   window.addEventListener("resize", () => {
+    if (typeof syncViewportHeightVar === "function") {
+      syncViewportHeightVar();
+    }
     if (typeof applySessionListViewportLock === "function") {
       applySessionListViewportLock();
     }
@@ -451,6 +562,7 @@ function bindEvents() {
   bind("redistill-add-button", "click", handleRedistillAdd);
   bind("redistill-refresh-button", "click", handleRedistillRefresh);
   bind("dialogue-session-form", "submit", handleDialogueSessionSubmit);
+  bind("suggest-turn-button", "click", handleSuggestTurn);
   bind("prepare-turn-button", "click", handleSendTurn);
 
   bind("dialogue-mode", "change", syncModeFields);
@@ -492,6 +604,9 @@ function bindEvents() {
 }
 
 async function boot() {
+  if (typeof syncViewportHeightVar === "function") {
+    syncViewportHeightVar();
+  }
   ensureConnectionDetailsVisible();
   syncModeFields();
   syncChoiceGroup("dialogue-mode-options", "dialogue-mode");
@@ -508,4 +623,7 @@ async function boot() {
 }
 
 bindEvents();
+window.handleSuggestTurn = handleSuggestTurn;
+window.applyQuickReply = applyQuickReply;
+console.log("[zaomeng web] main.js loaded", window.__ZAOMENG_WEB_UI_VERSION__ || "unknown");
 boot();

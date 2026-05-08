@@ -147,6 +147,7 @@ function resetDialogueView() {
   setSessionBadge("未启幕");
   if (el("dialogue-transcript")) el("dialogue-transcript").innerHTML = "";
   if (el("dialogue-message")) el("dialogue-message").value = "";
+  if (typeof renderObserveQuickReplies === "function") renderObserveQuickReplies(null);
   resizeComposer();
   setComposerEnabled(false);
 }
