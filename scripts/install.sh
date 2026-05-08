@@ -7,6 +7,13 @@ INSTALL_ROOT="${ZAOMENG_INSTALL_DIR:-$HOME/.local/share/zaomeng}"
 BIN_DIR="${ZAOMENG_BIN_DIR:-$HOME/.local/bin}"
 PYTHON_BIN="${ZAOMENG_PYTHON:-}"
 RUNTIME_REQUIREMENTS_FILE="${ZAOMENG_REQUIREMENTS_FILE:-requirements.runtime.txt}"
+TMP_DIR=""
+
+cleanup() {
+  if [ -n "${TMP_DIR:-}" ] && [ -d "${TMP_DIR:-}" ]; then
+    rm -rf "$TMP_DIR"
+  fi
+}
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -76,9 +83,11 @@ fetch_archive() {
   local output="$2"
   local fetcher="$3"
   if [ "$fetcher" = "curl" ]; then
-    curl -fsSL "$url" -o "$output"
+    curl --fail --silent --show-error --location \
+      --retry 3 --retry-delay 2 --retry-all-errors \
+      "$url" -o "$output"
   else
-    wget -qO "$output" "$url"
+    wget --tries=3 --waitretry=2 -O "$output" "$url"
   fi
 }
 
@@ -92,13 +101,12 @@ main() {
   local fetcher
   fetcher="$(choose_fetch)"
 
-  local tmp_dir
-  tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' EXIT
+  TMP_DIR="$(mktemp -d)"
+  trap cleanup EXIT
 
   local archive_url="https://github.com/${REPO_SLUG}/archive/${REPO_REF}.tar.gz"
-  local archive_path="${tmp_dir}/zaomeng.tar.gz"
-  local extract_root="${tmp_dir}/extract"
+  local archive_path="${TMP_DIR}/zaomeng.tar.gz"
+  local extract_root="${TMP_DIR}/extract"
   local venv_dir="${INSTALL_ROOT}/.venv"
   local launcher_path="${BIN_DIR}/zaomeng"
   local requirements_path="${INSTALL_ROOT}/${RUNTIME_REQUIREMENTS_FILE}"
@@ -109,7 +117,10 @@ main() {
   mkdir -p "$extract_root" "$BIN_DIR" "$(dirname "$INSTALL_ROOT")"
 
   echo "Downloading ${archive_url}"
-  fetch_archive "$archive_url" "$archive_path" "$fetcher"
+  if ! fetch_archive "$archive_url" "$archive_path" "$fetcher"; then
+    echo "Failed to download ${archive_url}. Please check your network connection and try again." >&2
+    exit 1
+  fi
 
   rm -rf "$INSTALL_ROOT"
   tar -xzf "$archive_path" -C "$extract_root"
