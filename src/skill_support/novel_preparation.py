@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 from src.utils.text_parser import load_novel_text, split_sentences
+
+MIXED_EXCERPT_MIN_CHARS = 3_000
+MIXED_EXCERPT_MIN_SENTENCES = 40
 
 
 def prepare_novel_excerpt(
@@ -39,6 +43,7 @@ def build_excerpt_payload_from_text(
             "matched_characters": [],
             "missing_characters": _normalize_characters(characters),
             "excerpt_strategy": "empty",
+            "excerpt_stages": _empty_stage_blocks(),
         }
 
     sentences = split_sentences(clean)
@@ -53,13 +58,16 @@ def build_excerpt_payload_from_text(
         if payload["excerpt"]:
             return payload
 
-    return {
-        "excerpt": _leading_excerpt(sentences, max_sentences=max_sentences, max_chars=max_chars),
-        "requested_characters": requested,
-        "matched_characters": [],
-        "missing_characters": requested,
-        "excerpt_strategy": "leading_sentences",
-    }
+    selected_indices = _select_leading_indices(sentences, max_sentences=max_sentences, max_chars=max_chars)
+    return _build_excerpt_result(
+        sentences,
+        selected_indices,
+        requested_characters=requested,
+        matched_characters=[],
+        missing_characters=requested,
+        excerpt_strategy="leading_sentences",
+        max_chars=max_chars,
+    )
 
 
 def load_prepared_novel_excerpt(
@@ -101,6 +109,7 @@ def build_excerpt_payload(
         "missing_characters": list(excerpt_payload["missing_characters"]),
         "excerpt_strategy": str(excerpt_payload["excerpt_strategy"]),
         "excerpt": str(excerpt_payload["excerpt"]),
+        "excerpt_stages": dict(excerpt_payload["excerpt_stages"]),
     }
 
 
@@ -117,22 +126,29 @@ def _normalize_characters(characters: list[str] | None) -> list[str]:
 
 
 def _leading_excerpt(sentences: list[str], *, max_sentences: int, max_chars: int) -> str:
+    selected_indices = _select_leading_indices(sentences, max_sentences=max_sentences, max_chars=max_chars)
+    return _render_excerpt_from_indices(sentences, selected_indices, max_chars=max_chars)
+
+
+def _select_leading_indices(sentences: list[str], *, max_sentences: int, max_chars: int) -> list[int]:
     selected: list[str] = []
+    selected_indices: list[int] = []
     total_chars = 0
-    for sentence in sentences:
+    for idx, sentence in enumerate(sentences):
         if len(selected) >= max_sentences:
             break
         projected = total_chars + len(sentence) + (1 if selected else 0)
         if selected and projected > max_chars:
             break
         if not selected and len(sentence) > max_chars:
-            return sentence[:max_chars].strip()
+            return [idx]
         selected.append(sentence)
+        selected_indices.append(idx)
         total_chars = projected
 
-    if selected:
-        return "\n".join(selected).strip()
-    return "".join(sentences)[:max_chars].strip()
+    if selected_indices:
+        return selected_indices
+    return [0] if sentences else []
 
 
 def _character_focused_excerpt(
@@ -143,16 +159,11 @@ def _character_focused_excerpt(
     max_chars: int,
 ) -> dict[str, Any]:
     character_hits: dict[str, list[int]] = {name: [] for name in characters}
-    all_hit_indices: list[int] = []
-    seen_hits: set[int] = set()
 
     for idx, sentence in enumerate(sentences):
         for name in characters:
             if name and name in sentence:
                 character_hits[name].append(idx)
-                if idx not in seen_hits:
-                    seen_hits.add(idx)
-                    all_hit_indices.append(idx)
 
     matched = [name for name, hits in character_hits.items() if hits]
     missing = [name for name in characters if not character_hits[name]]
@@ -163,26 +174,12 @@ def _character_focused_excerpt(
             "matched_characters": [],
             "missing_characters": missing,
             "excerpt_strategy": "leading_sentences",
+            "excerpt_stages": _empty_stage_blocks(),
         }
 
-    mandatory_indices: list[int] = []
-    for name in characters:
-        hits = character_hits.get(name, [])
-        if not hits:
-            continue
-        mandatory_indices.extend(_window_indices(hits[0], len(sentences)))
-
-    candidate_indices: list[int] = []
-    seen_candidates: set[int] = set()
-    for idx in mandatory_indices:
-        if idx not in seen_candidates:
-            seen_candidates.add(idx)
-            candidate_indices.append(idx)
-    for hit_idx in all_hit_indices:
-        for idx in _window_indices(hit_idx, len(sentences)):
-            if idx not in seen_candidates:
-                seen_candidates.add(idx)
-                candidate_indices.append(idx)
+    center_budget = max(1, min(max_sentences, max_chars // 48))
+    representative_hits = _build_representative_hit_plan(character_hits, matched, center_budget=center_budget)
+    candidate_indices = _candidate_indices_from_centers(representative_hits, total_sentences=len(sentences))
 
     selected_indices: list[int] = []
     used_indices: set[int] = set()
@@ -204,15 +201,315 @@ def _character_focused_excerpt(
         total_chars = projected
 
     selected_indices.sort()
-    selected_sentences = [sentences[idx][:max_chars].strip() if i == 0 and len(sentences[idx]) > max_chars else sentences[idx] for i, idx in enumerate(selected_indices)]
-    excerpt = "\n".join(item for item in selected_sentences if item.strip()).strip()
+    augmented = False
+    if _needs_character_excerpt_augmentation(
+        sentences,
+        selected_indices,
+        max_sentences=max_sentences,
+        max_chars=max_chars,
+    ):
+        selected_indices = _augment_character_excerpt_indices(
+            sentences,
+            selected_indices,
+            character_hits=character_hits,
+            matched_characters=matched,
+            max_sentences=max_sentences,
+            max_chars=max_chars,
+        )
+        augmented = True
+    return _build_excerpt_result(
+        sentences,
+        selected_indices,
+        requested_characters=characters,
+        matched_characters=matched,
+        missing_characters=missing,
+        excerpt_strategy="character_windows_mixed" if augmented else "character_windows",
+        max_chars=max_chars,
+    )
+
+
+def _needs_character_excerpt_augmentation(
+    sentences: list[str],
+    selected_indices: list[int],
+    *,
+    max_sentences: int,
+    max_chars: int,
+) -> bool:
+    if not selected_indices:
+        return False
+    target_chars = min(max_chars, MIXED_EXCERPT_MIN_CHARS)
+    target_sentences = min(max_sentences, MIXED_EXCERPT_MIN_SENTENCES)
+    excerpt = _render_excerpt_from_indices(sentences, selected_indices, max_chars=max_chars)
+    current_sentences = len([item for item in split_sentences(excerpt) if item.strip()])
+    return len(excerpt) < target_chars or current_sentences < target_sentences
+
+
+def _augment_character_excerpt_indices(
+    sentences: list[str],
+    selected_indices: list[int],
+    *,
+    character_hits: dict[str, list[int]],
+    matched_characters: list[str],
+    max_sentences: int,
+    max_chars: int,
+) -> list[int]:
+    used_indices = {idx for idx in selected_indices if 0 <= idx < len(sentences)}
+    ordered = sorted(used_indices)
+
+    def current_chars() -> int:
+        return len(_render_excerpt_from_indices(sentences, ordered, max_chars=max_chars))
+
+    def enough() -> bool:
+        target_chars = min(max_chars, MIXED_EXCERPT_MIN_CHARS)
+        target_sentences = min(max_sentences, MIXED_EXCERPT_MIN_SENTENCES)
+        return len(ordered) >= target_sentences and current_chars() >= target_chars
+
+    def try_add(index: int) -> None:
+        nonlocal ordered
+        if index in used_indices or not (0 <= index < len(sentences)):
+            return
+        if len(ordered) >= max_sentences:
+            return
+        sentence = sentences[index].strip()
+        if not sentence:
+            return
+        projected_chars = current_chars() + len(sentence) + (1 if ordered else 0)
+        if ordered and projected_chars > max_chars:
+            return
+        used_indices.add(index)
+        ordered = sorted(used_indices)
+
+    def add_candidates(indices: list[int], *, radius: int = 0) -> None:
+        for center in indices:
+            for idx in _window_indices(center, len(sentences), radius=radius):
+                try_add(idx)
+                if enough():
+                    return
+
+    dense_centers = _build_dense_hit_plan(character_hits, matched_characters, sample_cap=8)
+    add_candidates(dense_centers, radius=1)
+    if enough():
+        return ordered
+
+    add_candidates(_representative_timeline_indices(sentences), radius=1)
+    if enough():
+        return ordered
+
+    add_candidates(_dialogue_candidate_indices(sentences, matched_characters), radius=0)
+    if enough():
+        return ordered
+
+    add_candidates(_thought_or_evaluation_indices(sentences, matched_characters), radius=0)
+    return ordered
+
+
+def _build_dense_hit_plan(
+    character_hits: dict[str, list[int]],
+    matched_characters: list[str],
+    *,
+    sample_cap: int,
+) -> list[int]:
+    ordered: list[int] = []
+    seen: set[int] = set()
+    for name in matched_characters:
+        for idx in _spread_sample_indices(character_hits.get(name, []), sample_cap=sample_cap):
+            if idx in seen:
+                continue
+            seen.add(idx)
+            ordered.append(idx)
+    return ordered
+
+
+def _representative_timeline_indices(sentences: list[str]) -> list[int]:
+    if not sentences:
+        return []
+    total = len(sentences)
+    points = [0, total // 2, total - 1]
+    ordered: list[int] = []
+    seen: set[int] = set()
+    for idx in points:
+        if idx in seen:
+            continue
+        seen.add(idx)
+        ordered.append(idx)
+    return ordered
+
+
+def _dialogue_candidate_indices(sentences: list[str], characters: list[str]) -> list[int]:
+    primary: list[int] = []
+    secondary: list[int] = []
+    for idx, sentence in enumerate(sentences):
+        text = str(sentence or "").strip()
+        if not text or not _looks_like_dialogue_sentence(text):
+            continue
+        if any(name and name in text for name in characters):
+            primary.append(idx)
+        else:
+            secondary.append(idx)
+    return primary + secondary
+
+
+def _thought_or_evaluation_indices(sentences: list[str], characters: list[str]) -> list[int]:
+    primary: list[int] = []
+    secondary: list[int] = []
+    for idx, sentence in enumerate(sentences):
+        text = str(sentence or "").strip()
+        if not text or not _looks_like_thought_or_evaluation_sentence(text):
+            continue
+        if any(name and name in text for name in characters):
+            primary.append(idx)
+        else:
+            secondary.append(idx)
+    return primary + secondary
+
+
+def _looks_like_dialogue_sentence(text: str) -> bool:
+    sample = str(text or "").strip()
+    if not sample:
+        return False
+    if any(token in sample for token in ('"', "“", "”", "「", "」")):
+        return True
+    return bool(re.search(r"(说道|笑道|问道|答道|道：|道:|喊道|喝道|骂道|低声道|轻声道)", sample))
+
+
+def _looks_like_thought_or_evaluation_sentence(text: str) -> bool:
+    sample = str(text or "").strip()
+    if not sample:
+        return False
+    return bool(
+        re.search(
+            r"(心想|心道|心里|想着|只觉|觉得|不禁|暗想|思忖|寻思|素来|向来|一向|生性|性子|为人|看似|其实|原是|本就)",
+            sample,
+        )
+    )
+
+
+def _build_excerpt_result(
+    sentences: list[str],
+    selected_indices: list[int],
+    *,
+    requested_characters: list[str],
+    matched_characters: list[str],
+    missing_characters: list[str],
+    excerpt_strategy: str,
+    max_chars: int | None = None,
+) -> dict[str, Any]:
+    excerpt = _render_excerpt_from_indices(sentences, selected_indices, max_chars=max_chars)
     return {
         "excerpt": excerpt,
-        "requested_characters": characters,
-        "matched_characters": matched,
-        "missing_characters": missing,
-        "excerpt_strategy": "character_windows",
+        "requested_characters": requested_characters,
+        "matched_characters": matched_characters,
+        "missing_characters": missing_characters,
+        "excerpt_strategy": excerpt_strategy,
+        "excerpt_stages": _build_excerpt_stages(sentences, selected_indices),
     }
+
+
+def _render_excerpt_from_indices(sentences: list[str], selected_indices: list[int], *, max_chars: int | None = None) -> str:
+    selected_sentences = [
+        sentences[idx][:max_chars].strip() if i == 0 and max_chars and len(sentences[idx]) > max_chars else sentences[idx]
+        for i, idx in enumerate(selected_indices)
+        if 0 <= idx < len(sentences)
+    ]
+    return "\n".join(item for item in selected_sentences if item.strip()).strip()
+
+
+def _build_excerpt_stages(sentences: list[str], selected_indices: list[int]) -> dict[str, str]:
+    if not selected_indices:
+        return _empty_stage_blocks()
+    ordered = sorted(idx for idx in selected_indices if 0 <= idx < len(sentences))
+    minimum = ordered[0]
+    maximum = ordered[-1]
+    span = max(1, maximum - minimum)
+    buckets: dict[str, list[str]] = {"start": [], "mid": [], "end": []}
+    for idx in ordered:
+        ratio = (idx - minimum) / span
+        if ratio <= 0.34:
+            stage = "start"
+        elif ratio >= 0.67:
+            stage = "end"
+        else:
+            stage = "mid"
+        sentence = sentences[idx].strip()
+        if sentence and sentence not in buckets[stage]:
+            buckets[stage].append(sentence)
+    return {
+        "start": "\n".join(buckets["start"]).strip(),
+        "mid": "\n".join(buckets["mid"]).strip(),
+        "end": "\n".join(buckets["end"]).strip(),
+    }
+
+
+def _empty_stage_blocks() -> dict[str, str]:
+    return {"start": "", "mid": "", "end": ""}
+
+
+def _build_representative_hit_plan(
+    character_hits: dict[str, list[int]],
+    matched_characters: list[str],
+    *,
+    center_budget: int,
+) -> list[int]:
+    per_character = {name: _spread_sample_indices(character_hits.get(name, []), sample_cap=3) for name in matched_characters}
+    ordered_centers: list[int] = []
+    seen: set[int] = set()
+
+    max_slots = max((len(indices) for indices in per_character.values()), default=0)
+    for slot in range(max_slots):
+        for name in matched_characters:
+            indices = per_character.get(name, [])
+            if slot >= len(indices):
+                continue
+            idx = indices[slot]
+            if idx in seen:
+                continue
+            seen.add(idx)
+            ordered_centers.append(idx)
+            if len(ordered_centers) >= center_budget:
+                return ordered_centers
+
+    return ordered_centers
+
+
+def _spread_sample_indices(indices: list[int], *, sample_cap: int) -> list[int]:
+    unique = sorted(set(indices))
+    if len(unique) <= sample_cap:
+        return unique
+    if sample_cap <= 1:
+        return [unique[0]]
+
+    samples: list[int] = []
+    total = len(unique) - 1
+    for slot in range(sample_cap):
+        position = round((total * slot) / (sample_cap - 1))
+        candidate = unique[position]
+        if candidate not in samples:
+            samples.append(candidate)
+    return samples
+
+
+def _candidate_indices_from_centers(centers: list[int], *, total_sentences: int) -> list[int]:
+    ordered: list[int] = []
+    seen: set[int] = set()
+    max_radius = _context_radius_for_centers(centers, total_sentences=total_sentences)
+    for radius in range(0, max_radius + 1):
+        for center in centers:
+            for idx in _window_indices(center, total_sentences, radius=radius):
+                if idx in seen:
+                    continue
+                seen.add(idx)
+                ordered.append(idx)
+    return ordered
+
+
+def _context_radius_for_centers(centers: list[int], *, total_sentences: int) -> int:
+    if not centers or total_sentences <= 0:
+        return 1
+    if len(centers) == 1:
+        return 3
+    if len(centers) <= 3:
+        return 2
+    return 1
 
 
 def _window_indices(center: int, total: int, radius: int = 1) -> list[int]:

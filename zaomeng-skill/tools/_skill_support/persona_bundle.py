@@ -255,6 +255,11 @@ def join_metric_map(items: Dict[str, Any]) -> str:
     return "；".join(ordered)
 
 
+def render_metric_map_or_insufficient(items: Dict[str, Any]) -> str:
+    rendered = join_metric_map(items)
+    return rendered or "证据不足"
+
+
 def _parse_markdown_kv(text: str) -> dict[str, str]:
     parsed: dict[str, str] = {}
     for raw_line in str(text or "").splitlines():
@@ -684,7 +689,7 @@ def render_profile_md(profile: Dict[str, Any]) -> str:
         f"- hidden_desire: {profile.get('hidden_desire', '')}\n"
         f"- core_traits: {join_items(profile.get('core_traits', []))}\n"
         f"- temperament_type: {profile.get('temperament_type', '')}\n"
-        f"- values: {join_metric_map(profile.get('values', {}))}\n"
+        f"- values: {render_metric_map_or_insufficient(profile.get('values', {}))}\n"
         f"- worldview: {profile.get('worldview', '')}\n"
         f"- belief_anchor: {profile.get('belief_anchor', '')}\n"
         f"- moral_bottom_line: {profile.get('moral_bottom_line', '')}\n"
@@ -735,9 +740,9 @@ def render_profile_md(profile: Dict[str, Any]) -> str:
         f"- strengths: {join_items(profile.get('strengths', []))}\n"
         f"- weaknesses: {join_items(profile.get('weaknesses', []))}\n\n"
         "## Arc\n"
-        f"- arc_start: {join_metric_map(arc.get('start', {}))}\n"
-        f"- arc_mid: {join_metric_map(arc.get('mid', {}))}\n"
-        f"- arc_end: {join_metric_map(arc.get('end', {}))}\n"
+        f"- arc_start: {render_metric_map_or_insufficient(arc.get('start', {}))}\n"
+        f"- arc_mid: {render_metric_map_or_insufficient(arc.get('mid', {}))}\n"
+        f"- arc_end: {render_metric_map_or_insufficient(arc.get('end', {}))}\n"
         f"- arc_type: {profile.get('arc_type', '')}\n"
         f"- arc_blocker: {profile.get('arc_blocker', '')}\n"
         f"- arc_summary: {profile.get('arc_summary', '')}\n"

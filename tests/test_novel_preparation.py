@@ -69,9 +69,79 @@ class NovelPreparationTests(unittest.TestCase):
                 max_sentences=4,
                 max_chars=200,
             )
-            self.assertEqual(payload["excerpt_strategy"], "character_windows")
+            self.assertTrue(str(payload["excerpt_strategy"]).startswith("character_windows"))
             self.assertEqual(payload["matched_characters"], ["齐夏"])
             self.assertEqual(payload["missing_characters"], ["肖冉"])
+
+    def test_prepare_novel_excerpt_spreads_single_character_evidence_across_timeline(self):
+        text = (
+            "贾宝玉初入大观园。"
+            "旁人都在说笑。"
+            "贾宝玉只顾看花。"
+            "中段贾宝玉为黛玉伤神。"
+            "又隔了许多回。"
+            "后来贾宝玉渐生倦意。"
+            "结尾前贾宝玉看破繁华。"
+        )
+        excerpt = prepare_novel_excerpt(
+            text,
+            characters=["贾宝玉"],
+            max_sentences=7,
+            max_chars=300,
+        )
+
+        self.assertIn("贾宝玉初入大观园", excerpt)
+        self.assertIn("中段贾宝玉为黛玉伤神", excerpt)
+        self.assertIn("结尾前贾宝玉看破繁华", excerpt)
+
+    def test_build_excerpt_payload_emits_stage_blocks_for_character_timeline(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            novel_path = Path(tmpdir) / "novel.txt"
+            novel_path.write_text(
+                "贾宝玉初入大观园。"
+                "旁人都在说笑。"
+                "中段贾宝玉为黛玉伤神。"
+                "又隔了许多回。"
+                "结尾前贾宝玉看破繁华。",
+                encoding="utf-8",
+            )
+            payload = build_excerpt_payload(
+                novel_path,
+                characters=["贾宝玉"],
+                max_sentences=6,
+                max_chars=300,
+            )
+
+        self.assertIn("贾宝玉初入大观园", payload["excerpt_stages"]["start"])
+        self.assertIn("中段贾宝玉为黛玉伤神", payload["excerpt_stages"]["mid"])
+        self.assertIn("结尾前贾宝玉看破繁华", payload["excerpt_stages"]["end"])
+
+    def test_prepare_novel_excerpt_uses_mixed_character_strategy_when_window_is_too_thin(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            novel_path = Path(tmpdir) / "novel.txt"
+            novel_path.write_text(
+                (
+                    "前段旁白交代旧事。"
+                    "魏无羡笑道：“先别慌。”"
+                    "蓝忘机没有接话。"
+                    "中段众人各怀心事。"
+                    "江澄心想此事绝不简单。"
+                    "旁人都说魏无羡素来最会惹事。"
+                    "结尾余波未散。"
+                ),
+                encoding="utf-8",
+            )
+            payload = build_excerpt_payload(
+                novel_path,
+                characters=["魏无羡"],
+                max_sentences=20,
+                max_chars=5000,
+            )
+
+        self.assertEqual(payload["excerpt_strategy"], "character_windows_mixed")
+        self.assertIn("魏无羡笑道", payload["excerpt"])
+        self.assertIn("江澄心想此事绝不简单", payload["excerpt"])
+        self.assertIn("结尾余波未散", payload["excerpt"])
 
 
 if __name__ == "__main__":
