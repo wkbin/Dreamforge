@@ -13,6 +13,7 @@
     grid-template-columns: 1fr;
     gap: 1rem;
     min-height: auto;
+    height: auto;
   }
 
   .experience-shell.dialogue-layout .app-shell {
@@ -28,6 +29,8 @@
     grid-column: 1;
     grid-row: auto;
     min-height: auto;
+    height: auto;
+    max-height: none;
   }
 
   .experience-shell.dialogue-layout #main-shell-root > .main-shell {
@@ -76,8 +79,8 @@
 
   .transcript {
     padding: 24px 16px 20px;
-    max-height: none;
-    min-height: 320px;
+    max-height: min(56vh, 32rem);
+    min-height: 18rem;
   }
 
   .chat-detail {

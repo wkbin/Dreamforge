@@ -353,6 +353,17 @@ function setQuickRepliesEnabled(enabled) {
   });
 }
 
+function syncSuggestButtonVisibility(session = currentDialogueSession) {
+  const suggestButton = el("suggest-turn-button");
+  if (!suggestButton) return;
+  const mode = session?.mode || session?.session_card?.mode || "";
+  const hidden = mode === "observe";
+  suggestButton.classList.toggle("hidden", hidden);
+  if (hidden) {
+    suggestButton.disabled = true;
+  }
+}
+
 function setComposerWaiting(waiting, message = "") {
   const area = el("dialogue-message");
   const sendButton = el("prepare-turn-button");
@@ -625,5 +636,7 @@ async function boot() {
 bindEvents();
 window.handleSuggestTurn = handleSuggestTurn;
 window.applyQuickReply = applyQuickReply;
+window.syncSuggestButtonVisibility = syncSuggestButtonVisibility;
+syncSuggestButtonVisibility(null);
 console.log("[zaomeng web] main.js loaded", window.__ZAOMENG_WEB_UI_VERSION__ || "unknown");
 boot();

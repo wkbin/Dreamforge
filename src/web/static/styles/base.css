@@ -56,10 +56,17 @@ body {
 }
 
 .page-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 1rem;
   width: min(100%, 86rem);
   margin: 0 auto;
   padding: 1.4rem 1.4rem 1.2rem;
   min-height: var(--viewport-height);
+}
+
+#workspace-root {
+  min-height: 0;
 }
 
 .experience-shell {
@@ -71,6 +78,7 @@ body {
 
 #main-shell-root {
   min-width: 0;
+  min-height: 0;
 }
 
 button,
@@ -139,6 +147,8 @@ textarea {
   background: var(--paper);
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .rail-card {
@@ -335,7 +345,9 @@ textarea {
 .experience-shell.dialogue-layout {
   grid-template-columns: 13.6rem minmax(0, 1fr);
   gap: 1rem;
-  align-items: stretch;
+  align-items: start;
+  min-height: 0;
+  height: auto;
 }
 
 .experience-shell.dialogue-layout > .app-shell {
@@ -347,7 +359,10 @@ textarea {
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
-  min-height: var(--dialogue-rail-height);
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  align-self: start;
 }
 
 .experience-shell.dialogue-layout.sidebar-collapsed {
@@ -358,10 +373,15 @@ textarea {
   grid-template-columns: 1fr;
   width: 13.6rem;
   min-width: 13.6rem;
-  min-height: var(--dialogue-rail-height);
-  max-height: var(--dialogue-rail-height);
-  height: var(--dialogue-rail-height);
+  min-height: 0;
+  max-height: none;
+  height: auto;
   align-self: start;
+}
+
+.page-shell:has(.experience-shell.dialogue-layout) {
+  min-height: var(--viewport-height);
+  padding-bottom: 0.75rem;
 }
 
 .experience-shell.dialogue-layout.sidebar-collapsed .app-shell {
@@ -385,9 +405,10 @@ textarea {
 
 .experience-shell.dialogue-layout .library-rail {
   min-height: 0;
-  height: 100%;
-  max-height: 100%;
-  overflow: hidden;
+  height: auto;
+  max-height: none;
+  grid-template-rows: auto auto;
+  overflow: visible;
 }
 
 .experience-shell.dialogue-layout .studio-grid {
@@ -395,22 +416,42 @@ textarea {
 }
 
 .experience-shell.dialogue-layout #main-shell-root > .main-shell {
-  min-height: var(--dialogue-rail-height);
-  height: 100%;
-  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  grid-template-rows: auto auto;
+  overflow: visible;
+  align-content: start;
+}
+
+.experience-shell.dialogue-layout .rail-sessions {
+  max-height: none;
+  align-self: start;
 }
 
 .experience-shell.dialogue-layout .chat-shell,
 .experience-shell.dialogue-layout .chat-detail,
 .experience-shell.dialogue-layout .chat-content {
   min-height: 0;
-  height: 100%;
+  height: auto;
+}
+
+.experience-shell.dialogue-layout .chat-shell,
+.experience-shell.dialogue-layout .composer-shell {
+  align-self: start;
+}
+
+.experience-shell.dialogue-layout .chat-shell,
+.experience-shell.dialogue-layout .chat-detail {
+  display: block;
+  overflow: visible;
 }
 
 .experience-shell.dialogue-layout .transcript {
   min-height: 0;
-  height: 100%;
-  max-height: none;
+  height: auto;
+  max-height: min(62vh, 46rem);
+  align-content: start;
 }
 
 .story-header {

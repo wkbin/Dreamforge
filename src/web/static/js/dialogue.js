@@ -26,7 +26,7 @@ function applySessionListViewportLock() {
   root.style.overflowY = "auto";
   root.style.overflowX = "hidden";
   root.style.maxHeight = `${available}px`;
-  root.style.height = `${available}px`;
+  root.style.height = "auto";
 }
 
 function appendStyledMessageContent(target, message) {
@@ -150,6 +150,9 @@ async function renderDialogueSession(session) {
   currentDialogueSession = session;
   sessionBooting = false;
   setComposerEnabled(true);
+  if (typeof syncSuggestButtonVisibility === "function") {
+    syncSuggestButtonVisibility(session);
+  }
   if (typeof renderObserveQuickReplies === "function") {
     renderObserveQuickReplies(session);
   }
