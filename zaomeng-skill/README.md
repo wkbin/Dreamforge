@@ -16,7 +16,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 名称 | `zaomeng-skill` |
-| 版本 | `4.1.4` |
+| 版本 | `4.1.5` |
 | 模式 | LLM-first |
 | 适用宿主 | OpenClaw、ClawHub、Hermes、其他 host-managed agent |
 | 核心能力 | 人物蒸馏、关系抽取、关系图谱、宿主驱动角色对话 |
