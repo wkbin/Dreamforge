@@ -16,16 +16,10 @@
 | 项目 | 内容 |
 | --- | --- |
 | 名称 | `zaomeng-skill` |
-| 版本 | `4.1.5` |
 | 模式 | LLM-first |
 | 适用宿主 | OpenClaw、ClawHub、Hermes、其他 host-managed agent |
 | 核心能力 | 人物蒸馏、关系抽取、关系图谱、宿主驱动角色对话 |
 | 许可证 | `MIT-0` |
-
-## 版本说明
-
-- `4.1.5`：同步当前 skill 包版本元数据与中英文文档，补齐发布说明，确保打包与示例版本号一致。
-- `4.1.4`：整理 skill 打包产物，确保从 `zaomeng-skill/` 目录生成的 `zaomeng-<version>.skill.zip` 不混入缓存目录，同时收紧 stdout 输出格式，降低 Windows CI 与编码环境下的打包风险。
 
 ## 它能做什么
 

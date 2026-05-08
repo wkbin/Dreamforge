@@ -24,6 +24,7 @@ class PackagingDocsTests(unittest.TestCase):
         self.assertNotIn("examples/chat_session_summary.example.json", manifest_text)
         self.assertIn('"name": "zaomeng-skill"', metadata_text)
         self.assertIn('"version": "', metadata_text)
+        self.assertIn('"semver": "', metadata_text)
 
     def test_install_docs_describe_prompt_first_install(self):
         install_text = Path("zaomeng-skill/INSTALL.md").read_text(encoding="utf-8")
@@ -173,10 +174,11 @@ class PackagingDocsTests(unittest.TestCase):
         prompts_payload = json.loads((skill_dir / "examples" / "test-prompts.json").read_text(encoding="utf-8"))
 
         self.assertEqual(metadata["version"], version)
-        self.assertIn(f"`{version}`", skill_text)
-        self.assertIn(f"`{version}`", readme_text)
-        self.assertIn(f"`{version}`", readme_en_text)
-        self.assertIsNotNone(re.search(rf"^- Version:\s*{re.escape(version)}\s*$", publish_text, re.MULTILINE))
+        self.assertEqual(metadata["semver"], version)
+        self.assertNotIn(f"| 版本 | `{version}` |", skill_text)
+        self.assertNotIn(f"| 版本 | `{version}` |", readme_text)
+        self.assertNotIn(f"| Version | `{version}` |", readme_en_text)
+        self.assertIsNone(re.search(rf"^- Version:\s*{re.escape(version)}\s*$", publish_text, re.MULTILINE))
         self.assertEqual(prompts_payload["version"], version)
 
 

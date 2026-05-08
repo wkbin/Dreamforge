@@ -16,16 +16,10 @@ This skill runs inside a host-managed environment. The host performs the actual 
 | Item | Value |
 | --- | --- |
 | Name | `zaomeng-skill` |
-| Version | `4.1.5` |
 | Mode | LLM-first |
 | Host Targets | OpenClaw, ClawHub, Hermes, other host-managed agents |
 | Core Capabilities | character distillation, relation extraction, graph export, host-driven dialogue |
 | License | `MIT-0` |
-
-## Version Notes
-
-- `4.1.5`: sync the packaged skill version metadata with the Chinese and English docs, and align the publish notes with the actual bundle version.
-- `4.1.4`: tighten skill packaging output so `zaomeng-<version>.skill.zip` stays free of cache directories, and reduce stdout / encoding issues during Windows CI packaging.
 
 ## What It Does
 

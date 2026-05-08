@@ -1,6 +1,8 @@
 {
   "name": "zaomeng-skill",
   "display_name": "造梦技能",
+  "assetType": "skill",
+  "semver": "4.1.5",
   "version": "4.1.5",
   "description": "面向中文小说人物蒸馏、关系抽取、关系图谱与角色对话的 ClawHub skill。",
   "license": "MIT-0",
