@@ -1,0 +1,101 @@
+@media (max-width: 1180px) {
+  .page-shell {
+    width: 100%;
+    padding: 1rem 1rem 0.9rem;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .experience-shell.dialogue-layout {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .experience-shell.dialogue-layout .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .library-rail {
+    grid-template-rows: auto;
+    width: 100%;
+    height: auto;
+    max-height: none;
+  }
+
+  .app-shell.sidebar-collapsed .library-rail {
+    display: none;
+  }
+
+  .studio-grid,
+  .mini-grid,
+  .choice-deck,
+  .info-row {
+    grid-template-columns: 1fr;
+  }
+
+  #step-model,
+  #step-distill,
+  #step-progress,
+  #step-chat-setup {
+    grid-column: auto;
+    min-height: auto;
+  }
+
+  .story-header,
+  .section-head,
+  .card-head,
+  .panel-head {
+    flex-direction: column;
+  }
+
+  .story-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .transcript {
+    padding: 24px 16px 20px;
+    max-height: none;
+    min-height: 320px;
+  }
+
+  .chat-detail {
+    min-height: 20rem;
+  }
+
+  .message-inline {
+    max-width: 100%;
+  }
+
+  .composer-card {
+    width: 100%;
+  }
+
+  .composer-main {
+    grid-template-columns: 1fr;
+    border-radius: 28px;
+  }
+
+  .send-button {
+    width: 100%;
+  }
+
+  .field-card,
+  .upload-card,
+  #create-run-form,
+  #dialogue-session-form,
+  #model-settings-form,
+  .choice-deck,
+  .info-row,
+  .chat-shell,
+  .story-header,
+  .studio-grid,
+  .composer-shell,
+  .main-shell {
+    max-width: 100%;
+    width: 100%;
+  }
+}

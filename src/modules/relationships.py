@@ -205,6 +205,7 @@ class RelationshipExtractor:
                 "ambiguity": max(0, 7 - abs(affection - trust) - min(2, interaction_bonus)),
                 "conflict_point": self._mode_text(bucket["conflict_points"], default="立场差异"),
                 "typical_interaction": self._mode_text(bucket["interactions"], default="试探 -> 回应 -> 暂时收束"),
+                "evidence_lines": self._dedupe_texts(bucket["interactions"], 3),
                 "relation_change": self._infer_relation_change(trust, affection, conflict_penalty, interaction_bonus),
                 "hidden_attitude": self._infer_hidden_attitude(
                     trust,
@@ -810,6 +811,20 @@ class RelationshipExtractor:
         if not counter:
             return default
         return sorted(counter.items(), key=lambda item: item[1], reverse=True)[0][0]
+
+    @staticmethod
+    def _dedupe_texts(values: List[str], limit: int = 3) -> List[str]:
+        deduped: List[str] = []
+        seen = set()
+        for value in values:
+            text = str(value or "").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            deduped.append(text)
+            if len(deduped) >= limit:
+                break
+        return deduped
 
     @staticmethod
     def _infer_relation_change(trust: int, affection: int, conflict_penalty: int, interaction_bonus: int) -> str:

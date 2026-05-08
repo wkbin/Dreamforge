@@ -688,6 +688,36 @@ class RelationBehaviorTests(unittest.TestCase):
         self.assertTrue(profile["arc_summary"].strip())
         self.assertIn("\u5173\u7fbd", "".join(profile["life_experience"]))
 
+    def test_distiller_avoids_narrative_fragments_in_core_worldview_fields(self):
+        distiller = self.make_runtime_parts(Config())["distiller"]
+
+        with (
+            patch.object(distiller, "_infer_archetype", return_value="steady_supporter"),
+            patch.object(distiller, "_infer_worldview", return_value="人情比功名更重，真心不能拿来铺垫场面。"),
+            patch.object(distiller, "_infer_belief_anchor", return_value="真心不可轻负。"),
+            patch.object(distiller, "_infer_moral_bottom_line", return_value="决不会主动拿真情去换世俗体面。"),
+            patch.object(distiller, "_infer_restraint_threshold", return_value="平时压得住，唯独真心与自尊同时受损时会明显失控。"),
+        ):
+            profile = distiller._build_profile(
+                "\u8d3e\u5b9d\u7389",
+                {
+                    "descriptions": ["大家想着，宝玉却等不得了，也不等贾政的命，便说道：“旧诗有云："],
+                    "dialogues": [],
+                    "thoughts": [
+                        "转过大厅，宝玉心里还自狐疑，只听墙角边一阵呵呵大笑，回头只见薛蟠拍着手笑了出来，笑道：“要不说姨夫叫你，你那里出来的这么快！"
+                    ],
+                    "timeline": [],
+                },
+                arc_values=[],
+            )
+
+        self.assertEqual(profile["worldview"], "人情比功名更重，真心不能拿来铺垫场面。")
+        self.assertEqual(profile["belief_anchor"], "真心不可轻负。")
+        self.assertEqual(profile["moral_bottom_line"], "决不会主动拿真情去换世俗体面。")
+        self.assertEqual(profile["restraint_threshold"], "平时压得住，唯独真心与自尊同时受损时会明显失控。")
+        self.assertNotIn("旧诗有云", profile["worldview"])
+        self.assertNotIn("薛蟠", profile["restraint_threshold"])
+
     def test_distiller_loads_character_hints_from_novel_specific_rules_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

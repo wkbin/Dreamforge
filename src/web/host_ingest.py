@@ -14,8 +14,13 @@ HELPER_ROOT = _helper_root()
 if str(HELPER_ROOT) not in sys.path:
     sys.path.insert(0, str(HELPER_ROOT))
 
-from _skill_support.persona_bundle import load_profile_source, materialize_persona_bundle  # type: ignore  # noqa: E402
-from _skill_support.relation_graph_export import export_relation_graph  # type: ignore  # noqa: E402
+from _skill_support.persona_bundle import (  # type: ignore  # noqa: E402
+    load_existing_persona_bundle,
+    load_profile_source,
+    materialize_persona_bundle,
+    render_profile_md,
+)
+from _skill_support.relation_graph_export import export_relation_graph, _load_relations_payload  # type: ignore  # noqa: E402
 
 
 def decode_text_content(content_base64: str) -> str:
@@ -44,5 +49,21 @@ def materialize_profile_source(profile_source: str | Path, output_dir: str | Pat
     }
 
 
+def load_persona_bundle(persona_dir: str | Path) -> dict[str, Any]:
+    return load_existing_persona_bundle(persona_dir)
+
+
+def write_persona_profile(persona_dir: str | Path, profile: dict[str, Any]) -> Path:
+    target_dir = Path(persona_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    editable_profile = target_dir / "PROFILE.md"
+    editable_profile.write_text(render_profile_md(profile), encoding="utf-8")
+    return editable_profile
+
+
 def export_relations_source(relations_file: str | Path, *, novel_id: str | None = None, manifest_path: str | Path | None = None) -> dict[str, str]:
     return export_relation_graph(relations_file, novel_id=novel_id, manifest_path=manifest_path)
+
+
+def load_relations_source(relations_file: str | Path) -> dict[str, Any]:
+    return _load_relations_payload(Path(relations_file))

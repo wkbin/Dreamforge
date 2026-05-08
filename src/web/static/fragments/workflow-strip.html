@@ -1,0 +1,307 @@
+<section id="workflow-strip" class="studio-grid">
+  <section id="bookshelf-section" class="studio-card bookshelf-card hidden">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">书架</p>
+        <h3>已经醒来的故事</h3>
+      </div>
+      <div class="card-actions bookshelf-head-actions">
+        <button id="bookshelf-new-run-button" type="button" class="soft-button">蒸馏新小说</button>
+      </div>
+    </div>
+    <div id="bookshelf-empty" class="bookshelf-empty hidden">
+      <p class="card-copy">还没有放入新的故事。先挑一本书，把想遇见的人请出来。</p>
+    </div>
+    <div id="bookshelf-list" class="bookshelf-grid"></div>
+    <p id="bookshelf-status" class="card-note"></p>
+  </section>
+
+  <section id="step-model" class="studio-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">先让故事有声音</p>
+        <h3>为故事接通声源</h3>
+      </div>
+    </div>
+    <p class="card-copy">只需接通一次。</p>
+    <div id="model-summary" class="info-row hidden">
+      <article class="info-pill">
+        <span>当前声源</span>
+        <strong id="model-provider-view">-</strong>
+      </article>
+    </div>
+    <div class="card-actions">
+      <button id="open-settings-primary" type="button" class="primary-button">接通故事声源</button>
+    </div>
+  </section>
+
+  <section id="step-distill" class="studio-card hidden">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">挑一本书，写下想遇见的人</p>
+        <h3>先把人物从正文里请出来</h3>
+      </div>
+      <div class="card-actions bookshelf-head-actions">
+        <button id="back-from-distill-button" type="button" class="soft-button">返回书架</button>
+      </div>
+    </div>
+    <form id="create-run-form" class="stack-form">
+      <label class="upload-card" for="novel-file">
+        <input id="novel-file" class="native-hidden" type="file" accept=".txt,.md,.text,.epub" required />
+        <span class="upload-label">小说正文</span>
+        <strong id="novel-file-name">还没有放入书页</strong>
+        <em id="novel-file-hint">支持 txt / md / text / epub</em>
+      </label>
+
+      <label class="field-card">
+        <span>你想先遇见谁</span>
+        <input id="characters" type="text" placeholder="例如：林黛玉、贾宝玉、薛宝钗" required />
+        <small>多个名字可用逗号或顿号分开。</small>
+      </label>
+
+      <div class="mini-grid">
+        <label class="field-card compact-field-card">
+          <span>取样句数</span>
+          <input id="max-sentences" type="number" min="20" max="300" value="120" />
+        </label>
+        <label class="field-card compact-field-card">
+          <span>取样字数</span>
+          <input id="max-chars" type="number" min="2000" max="200000" value="50000" />
+        </label>
+      </div>
+      <p id="sampling-hint" class="card-note">选好正文后，这里会按体量自动给出建议。</p>
+      <p id="sampling-estimate" class="card-note">长篇会自动分批蒸馏，这里会显示预计轮次、调用次数和粗估耗时。</p>
+
+      <div class="card-actions">
+        <button id="submit-button" type="submit" class="primary-button">开始唤醒人物</button>
+      </div>
+    </form>
+    <p id="form-status" class="card-note"></p>
+  </section>
+
+  <section id="step-progress" class="studio-card hidden">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">书卷</p>
+        <h3 id="run-stage-title">人物与关系正在慢慢浮现</h3>
+      </div>
+      <div class="card-actions bookshelf-head-actions">
+        <button id="back-to-bookshelf-button" type="button" class="soft-button">返回书架</button>
+      </div>
+    </div>
+    <p id="progress-copy" class="card-copy">人物会依次显形。</p>
+    <section id="run-status-banner" class="run-status-banner hidden">
+      <div class="run-status-banner-head">
+        <span id="run-status-kicker" class="run-status-kicker">正在整理</span>
+        <span id="run-status-stage" class="run-status-stage">人物依次显形中</span>
+      </div>
+      <p id="run-status-description" class="run-status-description">这一卷还在慢慢成形，先看它往哪里走。</p>
+    </section>
+    <div class="info-row">
+      <article class="info-pill">
+        <span>书名</span>
+        <strong id="run-novel">-</strong>
+      </article>
+      <article class="info-pill">
+        <span>人物</span>
+        <strong id="run-characters">-</strong>
+      </article>
+      <article class="info-pill">
+        <span>进度</span>
+        <strong id="run-summary">-</strong>
+      </article>
+    </div>
+
+    <section id="quality-section" class="detail-section hidden">
+      <div class="detail-section-head">
+        <div>
+          <p class="eyebrow">这一轮看到了什么</p>
+          <h4>蒸馏线索</h4>
+        </div>
+      </div>
+      <div class="quality-grid">
+        <article class="quality-card">
+          <span class="quality-label">已命中人物</span>
+          <div id="quality-matched" class="bookshelf-links hidden"></div>
+          <p id="quality-matched-empty" class="card-note hidden">这一轮还没从正文里稳定捞到目标人物。</p>
+        </article>
+        <article class="quality-card">
+          <span class="quality-label">暂时缺证据</span>
+          <div id="quality-missing" class="bookshelf-links hidden"></div>
+          <p id="quality-missing-empty" class="card-note hidden">目前没有缺席的人物。</p>
+        </article>
+        <article class="quality-card">
+          <span class="quality-label">用到的阶段</span>
+          <div id="quality-stages" class="bookshelf-links hidden"></div>
+          <p id="quality-stages-empty" class="card-note hidden">这一轮暂时还没拆出明确阶段。</p>
+        </article>
+        <article class="quality-card">
+          <span class="quality-label">自动收束</span>
+          <p id="quality-repairs" class="quality-copy">暂时没有发生自动收束。</p>
+        </article>
+        <article class="quality-card">
+          <span class="quality-label">实际分批</span>
+          <p id="quality-chunks" class="quality-copy">这轮暂时还没有分批记录。</p>
+        </article>
+      </div>
+    </section>
+
+    <div id="detail-primary-actions" class="card-actions">
+      <button id="detail-start-chat-button" type="button" class="primary-button">开始聊天</button>
+      <button id="detail-redistill-button" type="button" class="soft-button">继续蒸馏</button>
+      <button id="detail-stop-run-button" type="button" class="soft-button hidden">停止蒸馏</button>
+    </div>
+    <p id="detail-action-note" class="card-note hidden">这一卷还在整理中，先看进度继续往前走。</p>
+
+    <section class="detail-section">
+      <div class="detail-section-head">
+        <div>
+          <p class="eyebrow">入口</p>
+          <h4>这一卷可以从哪里继续</h4>
+        </div>
+        <button id="open-relation-details-button" type="button" class="soft-button hidden">关系明细</button>
+      </div>
+      <p class="detail-section-copy">先看关系与人物，再决定如何走进这一幕。</p>
+      <div id="graph-links" class="link-row hidden"></div>
+      <p id="graph-empty-note" class="card-note hidden">关系图还在整理中，稍后会出现在这里。</p>
+    </section>
+
+    <section class="detail-section">
+      <div class="detail-section-head">
+        <div>
+          <p class="eyebrow">人物档案</p>
+          <h4>已经落成的人物包</h4>
+        </div>
+        <button id="open-persona-review-button" type="button" class="soft-button hidden">校对人物</button>
+      </div>
+      <div id="bookshelf-character-links" class="bookshelf-links"></div>
+      <p id="character-empty-note" class="card-note hidden">人物档案还没有写完，等这一卷继续往下走。</p>
+    </section>
+
+    <section class="detail-section">
+      <div class="detail-section-head">
+        <div>
+          <p class="eyebrow">书页来源</p>
+          <h4>这本书最近用过的正文片段</h4>
+        </div>
+        <button id="source-history-toggle" type="button" class="soft-button hidden">展开全部</button>
+      </div>
+      <p id="source-history-note" class="detail-section-copy">当前整理会基于最近一次换入的书页继续往下走。</p>
+      <div id="source-history-list" class="source-history-list hidden"></div>
+      <p id="source-history-empty" class="card-note hidden">目前只有最初那一份正文。</p>
+    </section>
+
+    <div id="redistill-panel" class="refresh-card hidden">
+      <section class="detail-section redistill-summary-card">
+        <div class="detail-section-head">
+          <div>
+            <p class="eyebrow">这一轮会如何继续</p>
+            <h4 id="redistill-plan-title">沿用当前书段，继续整理人物</h4>
+          </div>
+        </div>
+        <p id="redistill-source-note" class="detail-section-copy">当前会沿用上一轮使用的正文片段。</p>
+        <div class="plan-split">
+          <div class="plan-group">
+            <span class="plan-label">会做增量更新</span>
+            <div id="redistill-existing-list" class="bookshelf-links hidden"></div>
+            <p id="redistill-existing-empty" class="card-note">这一轮暂时没有需要增量更新的角色。</p>
+          </div>
+          <div class="plan-group">
+            <span class="plan-label">会首次蒸馏</span>
+            <div id="redistill-new-list" class="bookshelf-links hidden"></div>
+            <p id="redistill-new-empty" class="card-note">这一轮暂时没有新角色。</p>
+          </div>
+        </div>
+      </section>
+      <label class="upload-card" for="redistill-novel-file">
+        <input id="redistill-novel-file" class="native-hidden" type="file" accept=".txt,.md,.text,.epub" />
+        <span class="upload-label">新的书页</span>
+        <strong id="redistill-file-name">沿用当前书段</strong>
+        <em id="redistill-file-hint">如果这是连载的新章节，就在这里换入新的正文片段</em>
+      </label>
+      <label class="field-card">
+        <span>继续把谁请进来</span>
+        <input id="redistill-characters" type="text" placeholder="例如：王熙凤、贾母" />
+        <small>已有角色会做增量更新，新角色会首次蒸馏。</small>
+      </label>
+      <div class="pill-row" id="redistill-character-pills"></div>
+      <div class="card-actions">
+        <button id="redistill-add-button" type="button" class="soft-button">只加新人物</button>
+        <button id="redistill-refresh-button" type="button" class="soft-button">沿用当前</button>
+        <button id="redistill-button" type="button" class="primary-button">继续整理</button>
+      </div>
+      <p id="redistill-status" class="card-note"></p>
+    </div>
+
+    <section class="detail-section detail-section-timeline">
+      <div class="detail-section-head">
+        <div>
+          <p class="eyebrow">流转</p>
+          <h4>这一卷最近的整理轨迹</h4>
+        </div>
+      </div>
+      <ol id="events" class="timeline"></ol>
+      <p id="timeline-empty-note" class="card-note hidden">还没有新的轨迹落在这里。</p>
+    </section>
+  </section>
+
+  <section id="step-chat-setup" class="studio-card hidden">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">为这场相遇定下入口</p>
+        <h3>选一个进入故事的方式</h3>
+      </div>
+      <div class="card-actions bookshelf-head-actions">
+        <button id="back-to-detail-button" type="button" class="soft-button">返回书卷</button>
+      </div>
+    </div>
+    <form id="dialogue-session-form" class="stack-form">
+      <input id="dialogue-mode" type="hidden" value="observe" />
+
+      <div class="choice-deck" id="dialogue-mode-options">
+        <button type="button" class="choice-card active" data-value="observe">
+          <strong>旁观此局</strong>
+          <span>只看人物自然开口。</span>
+        </button>
+        <button type="button" class="choice-card" data-value="act">
+          <strong>化身书中人</strong>
+          <span>代入角色，亲自接话。</span>
+        </button>
+        <button type="button" class="choice-card" data-value="insert">
+          <strong>以自己入场</strong>
+          <span>保留自己，走进故事。</span>
+        </button>
+      </div>
+
+      <label class="field-card">
+        <span>这一场里，你想和谁同席</span>
+        <div id="dialogue-character-pills" class="pill-row"></div>
+        <input id="dialogue-participants" type="text" placeholder="点选上方人物，或自行补充名字" />
+      </label>
+
+      <div class="mini-grid">
+        <label id="controlled-field" class="field-card hidden">
+          <span>此刻你是谁</span>
+          <input id="dialogue-controlled" type="text" placeholder="例如：贾宝玉" />
+        </label>
+        <label id="self-name-field" class="field-card hidden">
+          <span>他们会怎样称呼你</span>
+          <input id="dialogue-self-name" type="text" placeholder="例如：阿眠" />
+        </label>
+        <label id="self-identity-field" class="field-card hidden">
+          <span>你在故事中的身份</span>
+          <input id="dialogue-self-identity" type="text" placeholder="例如：误入园中的来客" />
+        </label>
+        <label id="self-style-field" class="field-card hidden">
+          <span>今夜的氛围</span>
+          <input id="dialogue-self-style" type="text" placeholder="例如：初见、夜谈、试探、久别重逢" />
+        </label>
+      </div>
+
+      <div class="card-actions">
+        <button type="submit" class="primary-button">进入这一幕</button>
+      </div>
+    </form>
+    <p id="dialogue-session-status" class="card-note"></p>
+  </section>
+</section>
