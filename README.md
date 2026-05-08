@@ -93,6 +93,8 @@ source ~/.zshrc
 安装完成后，`zaomeng` 默认直接启动 Web UI。你也可以使用：
 
 ```bash
+zaomeng uninstall
+zaomeng update
 zaomeng web --reload
 zaomeng bump-web-assets
 zaomeng install-skill --skills-dir <your-skills-root>

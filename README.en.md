@@ -93,6 +93,8 @@ The installer will:
 After installation, `zaomeng` starts the Web UI by default. You can also run:
 
 ```bash
+zaomeng uninstall
+zaomeng update
 zaomeng web --reload
 zaomeng bump-web-assets
 zaomeng install-skill --skills-dir <your-skills-root>
