@@ -215,16 +215,16 @@ class DistillationInferenceMixin:
         if configured:
             return configured
         if not lines:
-            return "\u5c11\u8a00\u7559\u5206\u5bf8"
+            return "少言留分寸"
         avg_len = sum(len(item) for item in lines) / max(1, len(lines))
-        exclaim_ratio = sum(1 for item in lines if any(token in item for token in ("!", "\uff01", "?", "\uff1f")))
+        exclaim_ratio = sum(1 for item in lines if any(token in item for token in ("!", "！", "?", "？")))
         if avg_len <= 12:
-            return "\u77ed\u53e5\u76f4\u7ed9"
+            return "短句直给"
         if exclaim_ratio >= max(1, len(lines) // 3):
-            return "\u60c5\u7eea\u5916\u9732"
+            return "情绪外露"
         if avg_len >= 26:
-            return "\u957f\u53e5\u94fa\u9648"
-        return "\u5206\u5bf8\u5e73\u7a33"
+            return "长句铺陈"
+        return "分寸平稳"
 
     def _infer_decision_rules(
         self,
@@ -235,11 +235,11 @@ class DistillationInferenceMixin:
     ) -> List[str]:
         corpus_lines = self._dedupe_texts(thoughts[:12] + dialogues[:12] + descriptions[:12], 30)
         signal_map = {
-            "\u5148\u8fa8\u865a\u5b9e": ("\u5148\u770b", "\u770b\u6e05", "\u8bd5\u63a2", "\u63a2\u660e", "\u771f\u5047", "\u865a\u5b9e"),
-            "\u5148\u5b88\u8fb9\u754c": ("\u4e0d\u53ef", "\u4e0d\u80fd", "\u4f11\u5f97", "\u8d8a\u7ebf", "\u5e95\u7ebf", "\u89c4\u77e9"),
-            "\u5148\u62a4\u81ea\u5df1\u4eba": ("\u4fdd\u62a4", "\u62a4\u4f4f", "\u62e6\u4f4f", "\u6321\u4f4f", "\u5b88\u4f4f", "\u81ea\u5df1\u4eba"),
-            "\u5148\u7a33\u5c40\u9762": ("\u7a33\u4f4f", "\u6536\u4f4f", "\u5b89\u987f", "\u63a5\u5e94", "\u540e\u624b", "\u540e\u8def"),
-            "\u5148\u7559\u8f6c\u5706": ("\u7f62\u4e86", "\u4e0d\u8fc7", "\u4f55\u5fc5", "\u4e14\u6162", "\u7b49\u7b49"),
+            "先辨虚实": ("先看", "看清", "试探", "探明", "真假", "虚实"),
+            "先守边界": ("不可", "不能", "休得", "越线", "底线", "规矩"),
+            "先护自己人": ("保护", "护住", "拦住", "挡住", "守住", "自己人"),
+            "先稳局面": ("稳住", "收住", "安顿", "接应", "后手", "后路"),
+            "先留转圆": ("罢了", "不过", "何必", "且慢", "等等"),
         }
         scored_rules: List[Tuple[int, str]] = []
         for label, markers in signal_map.items():
@@ -261,7 +261,7 @@ class DistillationInferenceMixin:
         if len(rules) < 2:
             rules.extend(archetype_rules[: 2 - len(rules)])
         if not rules:
-            rules.append("\u5148\u5206\u8f7b\u91cd")
+            rules.append("先分轻重")
         return self._dedupe_texts(rules, 8)
     def _infer_identity_anchor(
         self,
@@ -657,27 +657,27 @@ class DistillationInferenceMixin:
 
     @staticmethod
     def _infer_reward_logic(values: Dict[str, int], core_traits: List[str]) -> str:
-        if values.get("\u5fe0\u8bda", 5) >= 7:
-            return "\u8bb0\u6069\uff0c\u4e5f\u8bb0\u5931\u4fe1"
-        if values.get("\u6b63\u4e49", 5) >= 7:
-            return "\u5148\u770b\u662f\u975e\uff0c\u518d\u770b\u4eb2\u758f"
-        if values.get("\u81ea\u7531", 5) >= 7:
-            return "\u8bb0\u64cd\u63a7\uff0c\u4e5f\u8bb0\u7559\u4f59\u5730"
-        if "\u654f\u611f" in core_traits:
-            return "\u5bf9\u51b7\u70ed\u6001\u5ea6\u8bb0\u5f97\u5f88\u6df1"
-        return "\u770b\u8d8a\u6ca1\u8d8a\u7ebf\uff0c\u4e5f\u770b\u5173\u952e\u65f6\u523b\u7ad9\u6ca1\u7ad9\u4f4f"
+        if values.get("忠诚", 5) >= 7:
+            return "记恩，也记失信"
+        if values.get("正义", 5) >= 7:
+            return "先看是非，再看亲疏"
+        if values.get("自由", 5) >= 7:
+            return "记操控，也记留余地"
+        if "敏感" in core_traits:
+            return "对冷热态度记得很深"
+        return "看越没越线，也看关键时刻站没站住"
 
     @staticmethod
     def _infer_hidden_desire(values: Dict[str, int], soul_goal: str) -> str:
-        if values.get("\u8d23\u4efb", 5) >= 7:
-            return "\u60f3\u5b88\u4f4f\u80fd\u8ba9\u81ea\u5df1\u5b89\u5fc3\u7684\u4eba\u548c\u4f4d\u7f6e"
-        if values.get("\u81ea\u7531", 5) >= 7:
-            return "\u60f3\u4fdd\u4f4f\u4e0d\u88ab\u6446\u5e03\u7684\u6d3b\u6cd5"
-        if values.get("\u5fe0\u8bda", 5) >= 7:
-            return "\u60f3\u786e\u8ba4\u5173\u7cfb\u4e0d\u4f1a\u518d\u6563"
-        if values.get("\u6b63\u4e49", 5) >= 7:
-            return "\u60f3\u8ba9\u771f\u76f8\u522b\u88ab\u538b\u4f4f"
-        return soul_goal or "\u6709\u4e00\u5c42\u4e0d\u613f\u88ab\u4eba\u8f7b\u6613\u770b\u7a7f\u7684\u6267\u5ff5"
+        if values.get("责任", 5) >= 7:
+            return "想守住能让自己安心的人和位置"
+        if values.get("自由", 5) >= 7:
+            return "想保住不被摆布的活法"
+        if values.get("忠诚", 5) >= 7:
+            return "想确认关系不会再散"
+        if values.get("正义", 5) >= 7:
+            return "想让真相别被压住"
+        return soul_goal or "有一层不愿被人轻易看穿的执念"
     @staticmethod
     def _infer_inner_conflict(values: Dict[str, int], core_traits: List[str], decision_rules: List[str]) -> str:
         if values.get("勇气", 5) >= 7 and values.get("智慧", 5) >= 6:
@@ -711,13 +711,13 @@ class DistillationInferenceMixin:
 
     @staticmethod
     def _infer_private_self(speech_style: str, emotion_profile: Dict[str, Any], social_mode: str) -> str:
-        if "\u514b\u5236" in speech_style:
-            return "\u8868\u9762\u6536\u7d27\uff0c\u79c1\u4e0b\u8bb0\u5f97\u66f4\u6df1"
-        if "\u77ed\u53e5" in speech_style:
-            return "\u8868\u9762\u5229\u843d\uff0c\u72ec\u5904\u65f6\u4f1a\u53cd\u590d\u6382\u91cf"
-        if "\u59d4\u5c48" in str(emotion_profile.get("grievance_style", "")):
-            return "\u96be\u53d7\u591a\u534a\u7559\u5230\u65e0\u4eba\u5904\u6d88\u5316"
-        return f"\u8868\u91cc\u4e0d\u5b8c\u5168\u4e00\u81f4\uff0c\u66f4\u5728\u610f\uff1a{social_mode}"
+        if "克制" in speech_style:
+            return "表面收紧，私下记得更深"
+        if "短句" in speech_style:
+            return "表面利落，独处时会反复掂量"
+        if "委屈" in str(emotion_profile.get("grievance_style", "")):
+            return "难受多半留到无人处消化"
+        return f"表里不完全一致，更在意：{social_mode}"
 
     @staticmethod
     def _infer_story_role(
@@ -728,30 +728,30 @@ class DistillationInferenceMixin:
     ) -> str:
         presence = len(descriptions) + len(dialogues) + len(thoughts)
         if presence >= 40:
-            base = "\u6838\u5fc3\u63a8\u52a8\u8005"
+            base = "核心推动者"
         elif presence >= 24:
-            base = "\u4e3b\u8981\u652f\u70b9"
+            base = "主要支点"
         elif presence >= 12:
-            base = "\u91cd\u8981\u7275\u52a8\u8005"
+            base = "重要牵动者"
         else:
-            base = "\u8f85\u52a9\u63a8\u52a8\u8005"
-        if any("\u62a4" in rule or "\u540e\u624b" in rule for rule in decision_rules):
-            return f"{base}\uff0c\u517c\u987e\u6258\u5e95"
+            base = "辅助推动者"
+        if any("护" in rule or "后手" in rule for rule in decision_rules):
+            return f"{base}，兼顾托底"
         if len(dialogues) >= max(4, len(descriptions) // 2):
-            return f"{base}\uff0c\u66f4\u591a\u9760\u5bf9\u8bdd\u63a8\u52a8"
-        return f"{base}\uff0c\u4f1a\u6301\u7eed\u5f71\u54cd\u8d70\u5411"
+            return f"{base}，更多靠对话推动"
+        return f"{base}，会持续影响走向"
 
     @staticmethod
     def _infer_belief_anchor(values: Dict[str, int], worldview: str) -> str:
-        if values.get("\u5fe0\u8bda", 5) >= 7:
-            return "\u4fe1\u4e49\u4e0d\u80fd\u540e\u7f6e"
-        if values.get("\u6b63\u4e49", 5) >= 7:
-            return "\u662f\u975e\u5fc5\u987b\u7ad9\u7a33"
-        if values.get("\u8d23\u4efb", 5) >= 7:
-            return "\u8be5\u63a5\u7684\u62c5\u5b50\u8981\u63a5\u4f4f"
-        if values.get("\u81ea\u7531", 5) >= 7:
-            return "\u4e0d\u80fd\u6d3b\u6210\u522b\u4eba\u624b\u91cc\u7684\u68cb"
-        return worldview or "\u6709\u4e00\u5957\u4e0d\u8f7b\u6613\u6539\u53e3\u7684\u5185\u5728\u79e9\u5e8f"
+        if values.get("忠诚", 5) >= 7:
+            return "信义不能后置"
+        if values.get("正义", 5) >= 7:
+            return "是非必须站稳"
+        if values.get("责任", 5) >= 7:
+            return "该接的担子要接住"
+        if values.get("自由", 5) >= 7:
+            return "不能活成别人手里的棋"
+        return worldview or "有一套不轻易改口的内在秩序"
     def _infer_moral_bottom_line(
         self,
         values: Dict[str, int],
@@ -802,13 +802,13 @@ class DistillationInferenceMixin:
         configured = str(self.archetypes.get(archetype, {}).get("stress_response", "")).strip()
         if configured:
             return configured
-        if any("\u865a\u5b9e" in rule or "\u5148\u8fa8\u865a\u5b9e" in rule for rule in decision_rules):
-            return "\u9ad8\u538b\u4e0b\u4f1a\u5148\u62c6\u5c40\u627e\u7834\u53e3"
-        if "\u514b\u5236" in speech_style:
-            return "\u8d8a\u5230\u7edd\u5883\u8d8a\u538b\u4f4e\u60c5\u7eea"
+        if any("虚实" in rule or "先辨虚实" in rule for rule in decision_rules):
+            return "高压下会先拆局找破口"
+        if "克制" in speech_style:
+            return "越到绝境越压低情绪"
         if forbidden_behaviors:
-            return f"\u88ab\u903c\u6025\u65f6\u4f1a\u6536\u7d27\u8fb9\u754c\uff0c\u4f46\u4ecd\u5b88\u7740\u201c{forbidden_behaviors[0]}\u201d"
-        return str(emotion_profile.get("anger_style", "")).strip() or "\u538b\u529b\u4e0a\u6765\u4f1a\u5148\u7ef7\u7d27\u518d\u81ea\u4fdd"
+            return f"被逼急时会收紧边界，但仍守着“{forbidden_behaviors[0]}”"
+        return str(emotion_profile.get("anger_style", "")).strip() or "压力上来会先绷紧再自保"
 
     def _infer_others_impression(
         self,
@@ -822,12 +822,12 @@ class DistillationInferenceMixin:
         if configured:
             return configured
         if core_identity:
-            return f"\u5916\u4eba\u5148\u8bb0\u4f4f\uff1a{core_identity}"
-        if "\u514b\u5236" in speech_style:
-            return "\u7b2c\u4e00\u5370\u8c61\u591a\u534a\u662f\u4e0d\u597d\u63a5\u8fd1"
-        if "\u52c7\u6562" in core_traits:
-            return "\u7b2c\u4e00\u773c\u5bb9\u6613\u89c9\u5f97\u4ed6\u786c\u6c14\u6562\u9876"
-        return social_mode or "\u65c1\u4eba\u5148\u4ece\u6001\u5ea6\u548c\u8fb9\u754c\u611f\u8ba4\u8bc6\u4ed6"
+            return f"外人先记住：{core_identity}"
+        if "克制" in speech_style:
+            return "第一印象多半是不好接近"
+        if "勇敢" in core_traits:
+            return "第一眼容易觉得他硬气敢顶"
+        return social_mode or "旁人先从态度和边界感认识他"
 
     def _infer_restraint_threshold(
         self,
@@ -840,13 +840,13 @@ class DistillationInferenceMixin:
         configured = str(self.archetypes.get(archetype, {}).get("restraint_threshold", "")).strip()
         if configured:
             return configured
-        if values.get("\u8d23\u4efb", 5) >= 7 or "\u514b\u5236" in speech_style:
-            return "\u5e73\u65f6\u538b\u5f97\u4f4f\uff0c\u903c\u5230\u5e95\u7ebf\u624d\u4f1a\u5931\u63a7"
-        if values.get("\u81ea\u7531", 5) >= 7:
-            return "\u88ab\u5f7b\u5e95\u94b3\u6b7b\u65f6\u514b\u5236\u529b\u4f1a\u4e0b\u964d"
+        if values.get("责任", 5) >= 7 or "克制" in speech_style:
+            return "平时压得住，逼到底线才会失控"
+        if values.get("自由", 5) >= 7:
+            return "被彻底钳死时克制力会下降"
         if forbidden_behaviors:
-            return f"\u591a\u6570\u65f6\u5019\u4f1a\u514b\u5236\u81ea\u5df1\u4e0d\u8d8a\u8fc7\u201c{forbidden_behaviors[0]}\u201d"
-        return hidden_desire or "\u5e73\u65f6\u80fd\u538b\u4f4f\uff0c\u903c\u6025\u4e86\u624d\u4f1a\u7ffb\u9762"
+            return f"多数时候会克制自己不越过“{forbidden_behaviors[0]}”"
+        return hidden_desire or "平时能压住，逼急了才会翻面"
     @staticmethod
     def _infer_stance_stability(values: Dict[str, int], decision_rules: List[str]) -> str:
         ordered = sorted((int(score), key) for key, score in values.items())

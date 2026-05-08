@@ -24,9 +24,9 @@ MIXED_EXCERPT_MIN_SENTENCES = 40
 def _decode_score(text: str) -> tuple[int, int, int, int]:
     if not text:
         return (-10_000, 0, 0, 0)
-    replacement_count = text.count("\ufffd")
+    replacement_count = text.count("�")
     null_count = text.count("\x00")
-    cjk_count = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    cjk_count = sum(1 for ch in text if "一" <= ch <= "鿿")
     readable_count = sum(1 for ch in text if ch.isprintable() or ch in "\r\n\t")
     return (
         cjk_count * 4 + readable_count - replacement_count * 50 - null_count * 100,
@@ -49,7 +49,7 @@ def _decode_text_bytes(raw: bytes) -> str:
             decoded = raw.decode(preferred)
         except UnicodeDecodeError:
             continue
-        if "\ufffd" not in decoded and "\x00" not in decoded:
+        if "�" not in decoded and "\x00" not in decoded:
             return decoded
 
     last_error: UnicodeError | None = None

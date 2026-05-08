@@ -764,9 +764,9 @@ class InstallSkillTests(unittest.TestCase):
             novel_path = tmp_root / "hongloumeng.txt"
             novel_path.write_text(
                 (
-                    "\u6797\u9edb\u7389\u521d\u8fdb\u8d3e\u5e9c\uff0c\u89c1\u8d3e\u5b9d\u7389\u65f6\u5fc3\u751f\u611f\u5e94\u3002"
-                    "\u8d3e\u5b9d\u7389\u601c\u60dc\u6797\u9edb\u7389\u7684\u5b64\u51b7\u4e0e\u624d\u60c5\u3002"
-                    "\u859b\u5b9d\u9497\u5904\u4e8b\u7a33\u59a5\uff0c\u5e38\u5728\u793c\u6cd5\u4e0e\u60c5\u611f\u95f4\u8c03\u548c\u6c14\u6c1b\u3002"
+                    "林黛玉初进贾府，见贾宝玉时心生感应。"
+                    "贾宝玉怜惜林黛玉的孤冷与才情。"
+                    "薛宝钗处事稳妥，常在礼法与情感间调和气氛。"
                 ),
                 encoding="utf-8",
             )
@@ -779,7 +779,7 @@ class InstallSkillTests(unittest.TestCase):
                     "--novel",
                     str(novel_path),
                     "--characters",
-                    "\u6797\u9edb\u7389,\u8d3e\u5b9d\u7389",
+                    "林黛玉,贾宝玉",
                     "--max-sentences",
                     "4",
                     "--max-chars",
@@ -792,8 +792,8 @@ class InstallSkillTests(unittest.TestCase):
                 capture_output=True,
             )
             excerpt_payload = json.loads(excerpt_path.read_text(encoding="utf-8"))
-            self.assertIn("\u6797\u9edb\u7389", excerpt_payload["excerpt"])
-            self.assertEqual(excerpt_payload["matched_characters"], ["\u6797\u9edb\u7389", "\u8d3e\u5b9d\u7389"])
+            self.assertIn("林黛玉", excerpt_payload["excerpt"])
+            self.assertEqual(excerpt_payload["matched_characters"], ["林黛玉", "贾宝玉"])
 
             distill_payload_path = tmp_root / "distill_payload.json"
             subprocess.run(
@@ -805,7 +805,7 @@ class InstallSkillTests(unittest.TestCase):
                     "--novel",
                     str(novel_path),
                     "--characters",
-                    "\u6797\u9edb\u7389,\u8d3e\u5b9d\u7389",
+                    "林黛玉,贾宝玉",
                     "--output",
                     str(distill_payload_path),
                 ],
@@ -815,12 +815,12 @@ class InstallSkillTests(unittest.TestCase):
             )
             distill_payload = json.loads(distill_payload_path.read_text(encoding="utf-8"))
             self.assertEqual(distill_payload["mode"], "distill")
-            self.assertEqual(distill_payload["request"]["characters"], ["\u6797\u9edb\u7389", "\u8d3e\u5b9d\u7389"])
+            self.assertEqual(distill_payload["request"]["characters"], ["林黛玉", "贾宝玉"])
             self.assertIn("output_schema", distill_payload["references"])
-            self.assertIn("\u8d3e\u5b9d\u7389", distill_payload["request"]["excerpt"])
+            self.assertIn("贾宝玉", distill_payload["request"]["excerpt"])
             self.assertEqual(
                 distill_payload["request"]["excerpt_focus"]["matched_characters"],
-                ["\u6797\u9edb\u7389", "\u8d3e\u5b9d\u7389"],
+                ["林黛玉", "贾宝玉"],
             )
 
             relation_payload_path = tmp_root / "relation_payload.json"
@@ -841,47 +841,47 @@ class InstallSkillTests(unittest.TestCase):
             )
             relation_payload = json.loads(relation_payload_path.read_text(encoding="utf-8"))
             self.assertEqual(relation_payload["mode"], "relation")
-            self.assertIn("\u859b\u5b9d\u9497", relation_payload["request"]["excerpt"])
+            self.assertIn("薛宝钗", relation_payload["request"]["excerpt"])
 
             characters_root = tmp_root / "data" / "characters" / "hongloumeng"
             profiles = {
-                "\u6797\u9edb\u7389": (
+                "林黛玉": (
                     "# PROFILE\n"
                     "## Meta\n"
-                    "- name: \u6797\u9edb\u7389\n"
+                    "- name: 林黛玉\n"
                     "- novel_id: hongloumeng\n"
                     f"- source_path: {novel_path.as_posix()}\n"
                     "## Basic Positioning\n"
-                    "- core_identity: \u8d3e\u5e9c\u5bc4\u5c45\u95fa\u79c0\n"
-                    "- faction_position: \u8d3e\u5e9c\u5185\u7720\n"
-                    "- story_role: \u60c5\u611f\u4e2d\u5fc3\n"
-                    "- identity_anchor: \u4ee5\u771f\u5fc3\u7167\u4eba\uff0c\u4e5f\u6700\u6015\u771f\u5fc3\u88ab\u8f7b\u6162\n"
+                    "- core_identity: 贾府寄居闺秀\n"
+                    "- faction_position: 贾府内眠\n"
+                    "- story_role: 情感中心\n"
+                    "- identity_anchor: 以真心照人，也最怕真心被轻慢\n"
                     "## Root Layer\n"
-                    "- life_experience: \u5bc4\u4eba\u7bf1\u4e0b\uff1b\u654f\u611f\u591a\u601d\n"
+                    "- life_experience: 寄人篱下；敏感多思\n"
                     "## Inner Core\n"
-                    "- soul_goal: \u6c42\u5f97\u4e0d\u88ab\u8f9c\u8d1f\u7684\u771f\u60c5\n"
-                    "- core_traits: \u654f\u611f\uff1b\u806a\u6167\uff1b\u6e05\u50b2\n"
-                    "- worldview: \u4e16\u60c5\u70ed\u95f9\uff0c\u771f\u5fc3\u5374\u7a00\u8584\n"
-                    "- speech_style: \u8f7b\u58f0\u7ec6\u8bed\uff0c\u8bdd\u91cc\u85cf\u950b\n"
+                    "- soul_goal: 求得不被辜负的真情\n"
+                    "- core_traits: 敏感；聪慧；清傲\n"
+                    "- worldview: 世情热闹，真心却稀薄\n"
+                    "- speech_style: 轻声细语，话里藏锋\n"
                 ),
-                "\u8d3e\u5b9d\u7389": (
+                "贾宝玉": (
                     "# PROFILE\n"
                     "## Meta\n"
-                    "- name: \u8d3e\u5b9d\u7389\n"
+                    "- name: 贾宝玉\n"
                     "- novel_id: hongloumeng\n"
                     f"- source_path: {novel_path.as_posix()}\n"
                     "## Basic Positioning\n"
-                    "- core_identity: \u8d3e\u5e9c\u516c\u5b50\n"
-                    "- faction_position: \u8d3e\u5e9c\u5185\u7720\n"
-                    "- story_role: \u6838\u5fc3\u4e3b\u89d2\n"
-                    "- identity_anchor: \u770b\u91cd\u771f\u60c5\uff0c\u4e0d\u613f\u88ab\u4e16\u4fd7\u675f\u7f1a\n"
+                    "- core_identity: 贾府公子\n"
+                    "- faction_position: 贾府内眠\n"
+                    "- story_role: 核心主角\n"
+                    "- identity_anchor: 看重真情，不愿被世俗束缚\n"
                     "## Root Layer\n"
-                    "- life_experience: \u751f\u4e8e\u9531\u79c0\uff0c\u5374\u53cd\u611f\u79c1\u6b32\u4e0e\u793c\u6cd5\n"
+                    "- life_experience: 生于锱秀，却反感私欲与礼法\n"
                     "## Inner Core\n"
-                    "- soul_goal: \u7559\u4f4f\u8eab\u8fb9\u6700\u771f\u630a\u7684\u4eba\n"
-                    "- core_traits: \u70ed\u70c8\uff1b\u6000\u60b2\uff1b\u53cd\u53db\n"
-                    "- worldview: \u4eba\u60c5\u6bd4\u529f\u540d\u66f4\u91cd\u8981\n"
-                    "- speech_style: \u76f4\u63a5\u771f\u5207\uff0c\u5076\u5c14\u5e26\u5c11\u5e74\u6c14\n"
+                    "- soul_goal: 留住身边最真挊的人\n"
+                    "- core_traits: 热烈；怀悲；反叛\n"
+                    "- worldview: 人情比功名更重要\n"
+                    "- speech_style: 直接真切，偶尔带少年气\n"
                 ),
             }
 
@@ -917,13 +917,13 @@ class InstallSkillTests(unittest.TestCase):
                 (
                     "# RELATION_GRAPH\n\n"
                     "- novel_id: hongloumeng\n\n"
-                    "## \u6797\u9edb\u7389_\u8d3e\u5b9d\u7389\n"
+                    "## 林黛玉_贾宝玉\n"
                     "- trust: 9\n"
                     "- affection: 10\n"
                     "- hostility: 1\n"
                     "- confidence: 8\n"
-                    "- relation_change: \u5347\u6e29\n"
-                    "- typical_interaction: \u8bdd\u91cc\u6709\u8bd5\u63a2\uff0c\u4e5f\u6709\u4e92\u76f8\u601c\u60dc\n"
+                    "- relation_change: 升温\n"
+                    "- typical_interaction: 话里有试探，也有互相怜惜\n"
                 ),
                 encoding="utf-8",
             )
@@ -954,7 +954,7 @@ class InstallSkillTests(unittest.TestCase):
                     "--characters-root",
                     str(characters_root),
                     "--characters",
-                    "\u6797\u9edb\u7389,\u8d3e\u5b9d\u7389",
+                    "林黛玉,贾宝玉",
                     "--relations-file",
                     str(relations_file),
                     "--output",

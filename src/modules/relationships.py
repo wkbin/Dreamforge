@@ -752,7 +752,7 @@ class RelationshipExtractor:
 
     @staticmethod
     def _graph_id(name: str) -> str:
-        return re.sub(r"[^A-Za-z0-9_\u4e00-\u9fff]", "_", str(name))
+        return re.sub(r"[^A-Za-z0-9_一-鿿]", "_", str(name))
 
     @staticmethod
     def _render_relations_markdown(character_name: str, items: List[tuple[str, Dict[str, Any]]]) -> str:

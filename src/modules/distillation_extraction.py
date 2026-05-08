@@ -12,17 +12,17 @@ from src.utils.text_parser import split_sentences
 
 class DistillationExtractionMixin:
     def _extract_top_characters(self, text: str) -> List[str]:
-        name_pattern = re.compile(rf"([{self.common_surnames}][\u4e00-\u9fff]{{1,2}})")
+        name_pattern = re.compile(rf"([{self.common_surnames}][一-鿿]{{1,2}})")
         raw_names: List[str] = []
         for match in name_pattern.finditer(text):
             start = match.start()
-            if start > 0 and "\u4e00" <= text[start - 1] <= "\u9fff":
+            if start > 0 and "一" <= text[start - 1] <= "鿿":
                 continue
             raw_names.append(match.group(1))
 
         disallowed = set(
-            "\u4f60\u6211\u4ed6\u5979\u5b83\u4eec\u7684\u4e86\u5f97\u5730\u7740\u8fc7\u5417\u5462\u554a"
-            "\u5c31\u5728\u548c\u5e76\u4e0e\u628a\u88ab\u8ba9\u5411\u5bf9\u5c06\u53c8\u5f88\u90fd\u5e76\u4e14"
+            "你我他她它们的了得地着过吗呢啊"
+            "就在和并与把被让向对将又很都并且"
         )
         candidates = []
         for name in raw_names:
@@ -41,7 +41,7 @@ class DistillationExtractionMixin:
 
         if len(filtered) < 3:
             alias_candidates = re.findall(
-                r"[\u4e00-\u9fff]{2}(?:\u513f|\u54e5|\u59d0|\u59b9|\u516c|\u7237)?",
+                r"[一-鿿]{2}(?:儿|哥|姐|妹|公|爷)?",
                 text,
             )
             for alias, count in Counter(alias_candidates).most_common(10):
@@ -109,10 +109,10 @@ class DistillationExtractionMixin:
                 prev_sent = sentences[idx - 1] if idx > 0 else ""
                 next_sent = sentences[idx + 1] if idx + 1 < len(sentences) else ""
                 contains_name = self._text_mentions_any_alias(sentence, aliases)
-                pronoun_hit = any(token in sentence for token in ("\u4ed6", "\u5979")) and (
+                pronoun_hit = any(token in sentence for token in ("他", "她")) and (
                     self._text_mentions_any_alias(prev_sent, aliases) or self._text_mentions_any_alias(next_sent, aliases)
                 )
-                has_quote = "\u201c" in sentence or "\"" in sentence
+                has_quote = "“" in sentence or "\"" in sentence
                 speaker_hit = has_quote and self._is_likely_spoken_by(sentence, aliases, prev_sent, next_sent)
 
                 if not (contains_name or pronoun_hit or speaker_hit):
@@ -127,7 +127,7 @@ class DistillationExtractionMixin:
 
                 if any(
                     token in sentence
-                    for token in ("\u5fc3\u60f3", "\u60f3\u7740", "\u89c9\u5f97", "\u6697\u9053", "\u5fc3\u91cc")
+                    for token in ("心想", "想着", "觉得", "暗道", "心里")
                 ):
                     evidence["thoughts"].append(sentence)
                 else:
@@ -181,25 +181,25 @@ class DistillationExtractionMixin:
         text = str(sentence or "").strip()
         if not text:
             return False
-        lead_chars = "\"\u201c\u2018\uff08("
+        lead_chars = "\"“‘（("
         action_tokens = (
-            "\u5fc3\u60f3",
-            "\u60f3\u7740",
-            "\u89c9\u5f97",
-            "\u6697\u9053",
-            "\u5fc3\u91cc",
-            "\u8bf4\u9053",
-            "\u95ee\u9053",
-            "\u7b11\u9053",
-            "\u770b\u7740",
-            "\u76ef\u7740",
-            "\u671b\u7740",
-            "\u671d\u7740",
-            "\u5bf9\u7740",
-            "\u8d70\u5411",
-            "\u4f38\u624b",
-            "\u6294\u624b",
-            "\u5f00\u53e3",
+            "心想",
+            "想着",
+            "觉得",
+            "暗道",
+            "心里",
+            "说道",
+            "问道",
+            "笑道",
+            "看着",
+            "盯着",
+            "望着",
+            "朝着",
+            "对着",
+            "走向",
+            "伸手",
+            "抔手",
+            "开口",
         )
         for alias in aliases:
             if text.lstrip(lead_chars).startswith(alias):
