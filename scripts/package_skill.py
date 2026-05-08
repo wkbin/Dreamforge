@@ -65,7 +65,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--version",
-        help="Optional version override. Defaults to the version in zaomeng-skill/.metadata.json.",
+        help="Optional version override. Defaults to metadata.version in SKILL.md.",
     )
     parser.add_argument(
         "--package-name",

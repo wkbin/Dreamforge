@@ -5,13 +5,15 @@ import re
 import unittest
 from pathlib import Path
 
-from scripts.skill_metadata import read_skill_version
+from scripts.skill_metadata import read_skill_frontmatter, read_skill_version
 
 
 class PackagingDocsTests(unittest.TestCase):
     def test_manifest_describes_prompt_first_bundle(self):
         manifest_text = Path("zaomeng-skill/MANIFEST.md").read_text(encoding="utf-8")
         metadata_text = Path("zaomeng-skill/.metadata.json").read_text(encoding="utf-8")
+        skill_text = Path("zaomeng-skill/SKILL.md").read_text(encoding="utf-8")
+        frontmatter = read_skill_frontmatter(Path("zaomeng-skill"))
         self.assertIn("requirements.txt", manifest_text)
         self.assertIn("tools/init_host_run.py", manifest_text)
         self.assertIn("tools/prepare_novel_excerpt.py", manifest_text)
@@ -23,8 +25,15 @@ class PackagingDocsTests(unittest.TestCase):
         self.assertNotIn("runtime/src", manifest_text)
         self.assertNotIn("examples/chat_session_summary.example.json", manifest_text)
         self.assertIn('"name": "zaomeng-skill"', metadata_text)
+        self.assertIn('"displayName": "', metadata_text)
         self.assertIn('"version": "', metadata_text)
         self.assertIn('"semver": "', metadata_text)
+        self.assertEqual(frontmatter["name"], "zaomeng-skill")
+        self.assertIn("宿主需要基于小说内容生成结构化人物档案", frontmatter["description"])
+        self.assertEqual(frontmatter["license"], "MIT-0")
+        self.assertIn("本地 Python 运行环境", frontmatter["compatibility"])
+        self.assertIn("metadata:", skill_text)
+        self.assertRegex(skill_text, r"(?m)^  version:\s*[0-9]+\.[0-9]+\.[0-9]+\s*$")
 
     def test_install_docs_describe_prompt_first_install(self):
         install_text = Path("zaomeng-skill/INSTALL.md").read_text(encoding="utf-8")
@@ -167,6 +176,7 @@ class PackagingDocsTests(unittest.TestCase):
         skill_dir = Path("zaomeng-skill")
         version = read_skill_version(skill_dir)
         metadata = json.loads((skill_dir / ".metadata.json").read_text(encoding="utf-8"))
+        frontmatter = read_skill_frontmatter(skill_dir)
         skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
         readme_text = (skill_dir / "README.md").read_text(encoding="utf-8")
         readme_en_text = (skill_dir / "README_EN.md").read_text(encoding="utf-8")
@@ -175,6 +185,10 @@ class PackagingDocsTests(unittest.TestCase):
 
         self.assertEqual(metadata["version"], version)
         self.assertEqual(metadata["semver"], version)
+        self.assertEqual(frontmatter["metadata"]["version"], version)
+        self.assertRegex(skill_text, rf"(?m)^  version:\s*{re.escape(version)}\s*$")
+        self.assertEqual(metadata["readmeEn"], "README_EN.md")
+        self.assertEqual(metadata["hostMode"], "llm-first")
         self.assertNotIn(f"| 版本 | `{version}` |", skill_text)
         self.assertNotIn(f"| 版本 | `{version}` |", readme_text)
         self.assertNotIn(f"| Version | `{version}` |", readme_en_text)

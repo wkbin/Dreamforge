@@ -27,7 +27,17 @@ class SkillVersionSyncTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
-            (skill_dir / "SKILL.md").write_text("| 版本 | `1.0.0` |\n", encoding="utf-8")
+            (skill_dir / "SKILL.md").write_text(
+                "---\n"
+                "name: zaomeng-skill\n"
+                "description: test skill\n"
+                "license: MIT-0\n"
+                "metadata:\n"
+                "  version: 1.0.0\n"
+                "---\n"
+                "skill body\n",
+                encoding="utf-8",
+            )
             (skill_dir / "README.md").write_text("| 版本 | `1.0.0` |\n", encoding="utf-8")
             (skill_dir / "README_EN.md").write_text("| Version | `1.0.0` |\n", encoding="utf-8")
             (skill_dir / "PUBLISH.md").write_text("## 版本说明\n", encoding="utf-8")
@@ -51,11 +61,12 @@ class SkillVersionSyncTests(unittest.TestCase):
             )
 
             metadata = json.loads((skill_dir / ".metadata.json").read_text(encoding="utf-8"))
+            skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
             prompts_payload = json.loads((skill_dir / "examples" / "test-prompts.json").read_text(encoding="utf-8"))
 
             self.assertEqual(metadata["semver"], "9.9.9")
             self.assertEqual(metadata["version"], "9.9.9")
-            self.assertIn("`1.0.0`", (skill_dir / "SKILL.md").read_text(encoding="utf-8"))
+            self.assertIn("version: 9.9.9", skill_text)
             self.assertIn("`1.0.0`", (skill_dir / "README.md").read_text(encoding="utf-8"))
             self.assertIn("`1.0.0`", (skill_dir / "README_EN.md").read_text(encoding="utf-8"))
             self.assertNotIn("- Version: 9.9.9", (skill_dir / "PUBLISH.md").read_text(encoding="utf-8"))

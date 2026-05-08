@@ -1,6 +1,6 @@
 {
   "name": "zaomeng-skill",
-  "display_name": "造梦技能",
+  "displayName": "造梦技能",
   "assetType": "skill",
   "semver": "4.1.5",
   "version": "4.1.5",
@@ -8,9 +8,9 @@
   "license": "MIT-0",
   "entry": "SKILL.md",
   "readme": "README.md",
-  "readme_en": "README_EN.md",
+  "readmeEn": "README_EN.md",
   "requirements": "requirements.txt",
-  "host_mode": "llm-first",
+  "hostMode": "llm-first",
   "categories": [
     "writing",
     "roleplay",

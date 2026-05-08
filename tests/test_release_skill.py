@@ -25,7 +25,17 @@ class ReleaseSkillScriptTests(unittest.TestCase):
                 json.dumps({"name": "zaomeng-skill", "version": "7.7.7"}, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
-            (skill_dir / "SKILL.md").write_text("skill\n", encoding="utf-8")
+            (skill_dir / "SKILL.md").write_text(
+                "---\n"
+                "name: zaomeng-skill\n"
+                "description: test skill\n"
+                "license: MIT-0\n"
+                "metadata:\n"
+                "  version: 7.7.7\n"
+                "---\n"
+                "skill\n",
+                encoding="utf-8",
+            )
             (skill_dir / "README.md").write_text("readme\n", encoding="utf-8")
             (skill_dir / "README_EN.md").write_text("readme en\n", encoding="utf-8")
             (skill_dir / "PUBLISH.md").write_text("- Version: 7.7.7\n", encoding="utf-8")
