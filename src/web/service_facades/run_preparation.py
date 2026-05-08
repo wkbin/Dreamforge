@@ -185,7 +185,6 @@ class RunPreparationMixin:
         existing_requested = character_plan["existing_requested"]
         new_requested = character_plan["new_requested"]
         relation_characters = character_plan["relation_characters"]
-        redistill_summary = f"继续蒸馏：新增 {len(new_requested)} 人，增量 {len(existing_requested)} 人"
 
         source_update = prepare_restart_novel_source(
             runs_root=self.runs_root,
@@ -199,6 +198,16 @@ class RunPreparationMixin:
         using_new_source = bool(source_update["using_new_source"])
         novel_path = source_update["novel_path"]
         raw_bytes = source_update["raw_bytes"]
+        resume_completed_characters = existing_requested if not using_new_source else []
+        pending_characters = [name for name in locked_characters if name not in resume_completed_characters]
+        if using_new_source:
+            redistill_summary = f"继续蒸馏：新增 {len(new_requested)} 人，增量 {len(existing_requested)} 人"
+        elif pending_characters and resume_completed_characters:
+            redistill_summary = f"继续蒸馏：待完成 {len(pending_characters)} 人，已完成 {len(resume_completed_characters)} 人"
+        elif pending_characters:
+            redistill_summary = f"继续蒸馏：待完成 {len(pending_characters)} 人"
+        else:
+            redistill_summary = "继续蒸馏：人物档案已完成，准备继续关系图谱"
         novel_source_entry = None
         if using_new_source and raw_bytes is not None:
             novel_source_entry = self._build_novel_source_entry(
@@ -215,6 +224,8 @@ class RunPreparationMixin:
             using_new_source=using_new_source,
             new_requested=new_requested,
             existing_requested=existing_requested,
+            pending_characters=pending_characters,
+            resume_completed_characters=resume_completed_characters,
             relation_characters=relation_characters,
             redistill_summary=redistill_summary,
             novel_source_entry=novel_source_entry,

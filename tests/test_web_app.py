@@ -336,7 +336,7 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(refreshed["status"], "running")
             self.assertEqual(refreshed["locked_characters"], ["林黛玉", "王熙凤"])
             self.assertEqual(refreshed["progress"]["stage"], "characters_locked")
-            self.assertIn("新增 2 人", refreshed["redistill"]["summary"])
+            self.assertIn("待完成 2 人", refreshed["redistill"]["summary"])
             start_background_run.assert_called_once()
 
     def test_restart_run_distill_accepts_new_source_segment_for_incremental_update(self):
@@ -376,6 +376,43 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(refreshed["novel_sources"][-1]["kind"], "incremental_update")
             self.assertGreater(refreshed["novel_sources"][-1]["byte_size"], 0)
             self.assertGreater(refreshed["novel_sources"][-1]["char_count"], 0)
+            start_background_run.assert_called_once()
+
+    def test_restart_run_distill_preserves_completed_characters_when_reusing_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉先出场，后面宝钗还没来。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "薛宝钗"],
+            )
+            run_dir = Path(tmp) / "runs" / payload["run_id"]
+            persona_dir = run_dir / "artifacts" / "characters" / "hongloumeng" / "林黛玉"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "PROFILE.generated.md").write_text("- name: 林黛玉\n", encoding="utf-8")
+            service.refresh_run(payload["run_id"])
+
+            with patch.object(service, "_start_background_run") as start_background_run:
+                refreshed = service.restart_run_distill(
+                    payload["run_id"],
+                    characters=["林黛玉", "薛宝钗"],
+                    max_sentences=120,
+                    max_chars=50000,
+                )
+
+            self.assertFalse(refreshed["redistill"]["used_new_source"])
+            self.assertEqual(refreshed["redistill"]["resume_completed_characters"], ["林黛玉"])
+            self.assertEqual(refreshed["redistill"]["pending_characters"], ["薛宝钗"])
+            self.assertEqual(refreshed["progress"]["completed_characters"], ["林黛玉"])
+            self.assertEqual(refreshed["progress"]["completed_count"], 1)
+            self.assertEqual(refreshed["summary"]["characters_completed"], 1)
+            self.assertIn("待完成 1 人", refreshed["redistill"]["summary"])
             start_background_run.assert_called_once()
 
     def test_delete_run_group_removes_same_novel_runs_and_dialogue(self):
@@ -622,6 +659,86 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertIn("王熙凤", relation_messages[1]["content"])
             self.assertIn("贾宝玉", relation_messages[1]["content"])
             self.assertIn("林黛玉", relation_messages[1]["content"])
+
+    def test_automatic_pipeline_skips_completed_characters_on_same_source_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉先出场，后来薛宝钗也来了。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "薛宝钗"],
+            )
+            run_dir = Path(tmp) / "runs" / payload["run_id"]
+            manifest_path = run_dir / "run_manifest.json"
+            novel_path = run_dir / "input" / "hongloumeng.txt"
+            persona_dir = run_dir / "artifacts" / "characters" / "hongloumeng" / "林黛玉"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "PROFILE.generated.md").write_text(
+                "# PROFILE\n- name: 林黛玉\n- novel_id: hongloumeng\n- core_identity: 才女\n",
+                encoding="utf-8",
+            )
+            service.refresh_run(payload["run_id"])
+            with patch.object(service, "_start_background_run"):
+                restarted = service.restart_run_distill(
+                    payload["run_id"],
+                    characters=["林黛玉", "薛宝钗"],
+                    max_sentences=120,
+                    max_chars=50000,
+                )
+
+            class _FakePathProvider:
+                def __init__(self, base_dir: Path) -> None:
+                    self.base_dir = base_dir
+
+                def characters_root(self, novel_id: str) -> Path:
+                    path = self.base_dir / "artifacts" / "characters" / novel_id
+                    path.mkdir(parents=True, exist_ok=True)
+                    return path
+
+                def relations_file(self, novel_id: str) -> Path:
+                    path = self.base_dir / "artifacts" / "relations" / f"{novel_id}_relations.md"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    return path
+
+            fake_parts = Mock()
+            fake_parts.path_provider = _FakePathProvider(run_dir)
+
+            def fake_chat_completion(messages, **kwargs):
+                prompt = messages[1]["content"]
+                if "RELATION_GRAPH" in prompt:
+                    return {
+                        "content": "# RELATION_GRAPH\n\n## 林黛玉_薛宝钗\n- trust: 7\n- affection: 6\n- power_gap: 0\n- conflict_point: 心事不明说\n- typical_interaction: 试探与照看\n- hidden_attitude: \n- relation_change: 固化\n- appellation_to_target: 宝钗\n- confidence: 7\n"
+                    }
+                return {
+                    "content": "# PROFILE\n- name: 薛宝钗\n- novel_id: hongloumeng\n- core_identity: 端稳持重之人\n- soul_goal: 把局面稳住\n- speech_style: 温稳克制\n- cadence: 平整收束\n- signature_phrases: 先缓一缓；不妨再看\n- typical_lines: 先缓一缓；不妨再看\n- sentence_openers: 先；不妨\n- sentence_endings: 便好；也罢\n- worldview: 局势先稳，再谈情理。\n- belief_anchor: 分寸不能乱。\n- moral_bottom_line: 不把人逼到失面。\n- restraint_threshold: 平时极稳，被误伤真心时才会显出锋芒。\n- stress_response: 压力越大越会先稳语气，再调次序。\n"
+                }
+
+            fake_parts.llm.chat_completion = Mock(side_effect=fake_chat_completion)
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts):
+                result = service._run_automatic_pipeline(
+                    manifest_path=manifest_path,
+                    novel_path=novel_path,
+                    locked_characters=restarted["locked_characters"],
+                    relation_characters=restarted["redistill"]["relation_characters"],
+                    max_sentences=120,
+                    max_chars=50000,
+                )
+
+            self.assertTrue(result["success"])
+            self.assertFalse((run_dir / "payloads" / "distill_林黛玉.json").exists())
+            self.assertTrue((run_dir / "payloads" / "distill_薛宝钗.json").exists())
+            self.assertEqual(result["summary"]["characters_completed"], 2)
+            self.assertCountEqual(
+                [item["name"] for item in result["artifact_index"]["characters"]],
+                ["林黛玉", "薛宝钗"],
+            )
 
     def test_automatic_pipeline_uses_llm_generated_profiles_and_materializes_persona_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -41,6 +41,16 @@ class AutomaticPipelineMixin:
         novel_id = str(manifest.get("novel_id", "")).strip() or run_dir.name
         config = self._build_runtime_config_for_run(run_dir=run_dir)
         parts = self._build_runtime_parts(config)
+        redistill = dict(manifest.get("redistill", {}) or {})
+        used_new_source = bool(redistill.get("used_new_source", False))
+        resume_completed = [
+            str(item).strip()
+            for item in list(redistill.get("resume_completed_characters", []))
+            if str(item).strip()
+        ]
+        pending_characters = list(locked_characters)
+        if redistill and not used_new_source:
+            pending_characters = [name for name in locked_characters if name not in set(resume_completed)]
         graph_cast = self._normalize_characters(relation_characters or locked_characters)
         stopped_error_type = self.STOPPED_ERROR_TYPE
 
@@ -79,17 +89,17 @@ class AutomaticPipelineMixin:
             self._assert_run_not_stopped(manifest_path, message="这次蒸馏已停止。")
             on_distill("text_loaded", {"source_path": str(novel_path.resolve())})
             self._assert_run_not_stopped(manifest_path, message="这次蒸馏已停止。")
-            on_distill("characters_ready", {"total": len(locked_characters), "characters": locked_characters})
+            on_distill("characters_ready", {"total": len(pending_characters), "characters": pending_characters})
 
             distill_payload_paths: dict[str, str] = {}
-            character_dirs: dict[str, str] = {}
+            character_dirs: dict[str, str] = dict(manifest.get("artifacts", {}).get("character_dirs", {}) or {})
             distill_chunk_by_character: dict[str, Any] = {}
             quality_focus: dict[str, Any] = {}
             quality_matched: set[str] = set()
             quality_missing: set[str] = set()
             quality_stage_presence: set[str] = set()
             profile_repair_characters: list[str] = []
-            for character in locked_characters:
+            for character in pending_characters:
                 process_distill_character(
                     character=character,
                     locked_characters=locked_characters,

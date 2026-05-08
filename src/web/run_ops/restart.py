@@ -78,6 +78,8 @@ def apply_restart_manifest_state(
     using_new_source: bool,
     new_requested: list[str],
     existing_requested: list[str],
+    pending_characters: list[str],
+    resume_completed_characters: list[str],
     relation_characters: list[str],
     redistill_summary: str,
     novel_source_entry: dict[str, Any] | None,
@@ -90,9 +92,9 @@ def apply_restart_manifest_state(
             "stage": "characters_locked",
             "message": redistill_summary,
             "current_character": "",
-            "completed_characters": [],
+            "completed_characters": resume_completed_characters,
             "total_characters": len(locked_characters),
-            "completed_count": 0,
+            "completed_count": len(resume_completed_characters),
             "graph_status": "pending",
             "chunking": {},
         }
@@ -103,6 +105,8 @@ def apply_restart_manifest_state(
         "requested_characters": locked_characters,
         "new_characters": new_requested,
         "existing_characters": existing_requested,
+        "pending_characters": pending_characters,
+        "resume_completed_characters": resume_completed_characters,
         "relation_characters": relation_characters,
         "summary": redistill_summary,
         "used_new_source": using_new_source,
@@ -142,7 +146,7 @@ def apply_restart_manifest_state(
     manifest.setdefault("summary", {}).update(
         {
             "characters_total": len(locked_characters),
-            "characters_completed": 0,
+            "characters_completed": len(resume_completed_characters),
             "graph_status": "pending",
             "status_text": "waiting_for_payloads",
             "chunking": {},
