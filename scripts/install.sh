@@ -4,6 +4,7 @@ set -euo pipefail
 REPO_SLUG="${ZAOMENG_REPO_SLUG:-wkbin/zaomeng}"
 REPO_REF="${ZAOMENG_REF:-main}"
 INSTALL_ROOT="${ZAOMENG_INSTALL_DIR:-$HOME/.local/share/zaomeng}"
+STORAGE_ROOT="${ZAOMENG_STORAGE_DIR:-$HOME/.local/share/zaomeng-data}"
 BIN_DIR="${ZAOMENG_BIN_DIR:-$HOME/.local/bin}"
 PYTHON_BIN="${ZAOMENG_PYTHON:-}"
 RUNTIME_REQUIREMENTS_FILE="${ZAOMENG_REQUIREMENTS_FILE:-requirements.runtime.txt}"
@@ -110,11 +111,13 @@ main() {
   local venv_dir="${INSTALL_ROOT}/.venv"
   local launcher_path="${BIN_DIR}/zaomeng"
   local requirements_path="${INSTALL_ROOT}/${RUNTIME_REQUIREMENTS_FILE}"
+  local legacy_storage_root="${INSTALL_ROOT}/.zaomeng-web"
+  local storage_backup_path="${TMP_DIR}/zaomeng-storage-backup"
   local extracted_dir
   local rc_file
   rc_file="$(detect_rc_file)"
 
-  mkdir -p "$extract_root" "$BIN_DIR" "$(dirname "$INSTALL_ROOT")"
+  mkdir -p "$extract_root" "$BIN_DIR" "$(dirname "$INSTALL_ROOT")" "$(dirname "$STORAGE_ROOT")"
 
   echo "Downloading / 正在下载: ${archive_url}"
   if ! fetch_archive "$archive_url" "$archive_path" "$fetcher"; then
@@ -122,6 +125,9 @@ main() {
     exit 1
   fi
 
+  if [ -d "$legacy_storage_root" ] && [ ! -e "$STORAGE_ROOT" ]; then
+    mv "$legacy_storage_root" "$storage_backup_path"
+  fi
   rm -rf "$INSTALL_ROOT"
   tar -xzf "$archive_path" -C "$extract_root"
   extracted_dir="$(find "$extract_root" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
@@ -130,6 +136,10 @@ main() {
     exit 1
   fi
   mv "$extracted_dir" "$INSTALL_ROOT"
+  if [ -d "$storage_backup_path" ] && [ ! -e "$STORAGE_ROOT" ]; then
+    mv "$storage_backup_path" "$STORAGE_ROOT"
+  fi
+  mkdir -p "$STORAGE_ROOT"
 
   if [ ! -f "$requirements_path" ]; then
     echo "Missing runtime requirements file / 缺少运行时依赖文件: ${requirements_path}" >&2
@@ -146,6 +156,7 @@ main() {
 set -euo pipefail
 
 INSTALL_ROOT="${INSTALL_ROOT}"
+STORAGE_ROOT="${STORAGE_ROOT}"
 PYTHON_BIN="\${INSTALL_ROOT}/.venv/bin/python"
 INSTALL_PYTHON="${python_cmd}"
 REPO_SLUG="${REPO_SLUG}"
@@ -221,6 +232,7 @@ run_update() {
         ZAOMENG_REPO_SLUG="\${REPO_SLUG}" \
         ZAOMENG_REF="\${target_ref}" \
         ZAOMENG_INSTALL_DIR="\${INSTALL_ROOT}" \
+        ZAOMENG_STORAGE_DIR="\${STORAGE_ROOT}" \
         ZAOMENG_BIN_DIR="\${BIN_DIR}" \
         ZAOMENG_PYTHON="\${INSTALL_PYTHON}" \
         ZAOMENG_REQUIREMENTS_FILE="\${RUNTIME_REQUIREMENTS_FILE}" \
@@ -233,6 +245,7 @@ run_update() {
         ZAOMENG_REPO_SLUG="\${REPO_SLUG}" \
         ZAOMENG_REF="\${target_ref}" \
         ZAOMENG_INSTALL_DIR="\${INSTALL_ROOT}" \
+        ZAOMENG_STORAGE_DIR="\${STORAGE_ROOT}" \
         ZAOMENG_BIN_DIR="\${BIN_DIR}" \
         ZAOMENG_PYTHON="\${INSTALL_PYTHON}" \
         ZAOMENG_REQUIREMENTS_FILE="\${RUNTIME_REQUIREMENTS_FILE}" \
@@ -260,12 +273,14 @@ run_uninstall() {
   echo "Uninstalling zaomeng / 正在卸载 zaomeng"
   remove_path_line "\${RC_FILE}"
   rm -rf "\${INSTALL_ROOT}"
+  rm -rf "\${STORAGE_ROOT}"
   rm -f "\${BIN_DIR}/zaomeng"
   cat <<MSG
 zaomeng has been removed.
 zaomeng 已卸载完成。
 
 Removed install root / 已删除安装目录: \${INSTALL_ROOT}
+Removed data root / 已删除数据目录: \${STORAGE_ROOT}
 Removed launcher / 已删除启动命令: \${BIN_DIR}/zaomeng
 Updated shell rc / 已更新 shell 配置: \${RC_FILE}
 
@@ -275,7 +290,7 @@ MSG
 }
 
 if [ \$# -eq 0 ]; then
-  exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py"
+  exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\${STORAGE_ROOT}"
 fi
 
 case "\$1" in
@@ -289,7 +304,7 @@ case "\$1" in
     ;;
   web)
     shift
-    exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" "\$@"
+    exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\${STORAGE_ROOT}" "\$@"
     ;;
   bump-web-assets)
     shift
@@ -323,7 +338,7 @@ zaomeng commands / 可用命令:
 HELP
     ;;
   *)
-    exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" "\$@"
+    exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\${STORAGE_ROOT}" "\$@"
     ;;
 esac
 EOF
@@ -341,6 +356,7 @@ zaomeng is installed.
 zaomeng 已安装完成。
 
 Install root / 安装目录: ${INSTALL_ROOT}
+Data root / 数据目录:   ${STORAGE_ROOT}
 Launcher / 启动命令:     ${launcher_path}
 Requirements / 依赖文件: ${requirements_path}
 Shell rc / Shell 配置:  ${rc_file}

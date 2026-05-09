@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from src.core.runtime_factory import build_runtime_parts
@@ -175,7 +176,14 @@ class WebRunService(
 
     def __init__(self, storage_root: str | Path | None = None) -> None:
         self.project_root = _project_root()
-        self.storage_root = Path(storage_root) if storage_root else self.project_root / ".zaomeng-web"
+        env_storage_root = str(os.getenv("ZAOMENG_WEB_STORAGE_ROOT", "") or os.getenv("ZAOMENG_STORAGE_DIR", "")).strip()
+        if storage_root:
+            resolved_storage_root = Path(storage_root)
+        elif env_storage_root:
+            resolved_storage_root = Path(env_storage_root)
+        else:
+            resolved_storage_root = self.project_root / ".zaomeng-web"
+        self.storage_root = resolved_storage_root
         self.runs_root = self.storage_root / "runs"
         self.settings_path = self.storage_root / "model_settings.json"
         self.runs_root.mkdir(parents=True, exist_ok=True)

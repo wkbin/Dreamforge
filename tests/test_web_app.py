@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +19,17 @@ except Exception:  # pragma: no cover - optional test dependency guard
 
 
 class WebRunServiceTests(unittest.TestCase):
+    def test_service_prefers_storage_root_env_when_explicit_root_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            storage_root = Path(tmp) / "custom-storage"
+            with patch.dict(os.environ, {"ZAOMENG_STORAGE_DIR": str(storage_root)}, clear=False):
+                service = WebRunService()
+
+            self.assertEqual(service.storage_root, storage_root)
+            self.assertEqual(service.runs_root, storage_root / "runs")
+            self.assertEqual(service.settings_path, storage_root / "model_settings.json")
+            self.assertTrue(service.runs_root.exists())
+
     def test_build_distill_chunk_payloads_splits_large_excerpt(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)

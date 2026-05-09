@@ -10,6 +10,7 @@ class InstallScriptTests(unittest.TestCase):
         script_text = (repo_root / "scripts" / "install.sh").read_text(encoding="utf-8")
 
         self.assertIn('VERSION_FILE_RELATIVE="src/web/static/version.txt"', script_text)
+        self.assertIn('STORAGE_ROOT="${ZAOMENG_STORAGE_DIR:-$HOME/.local/share/zaomeng-data}"', script_text)
         self.assertIn('fetch_remote_version()', script_text)
         self.assertIn('local_version="\\$(current_version || true)"', script_text)
         self.assertIn('remote_version="\\$(fetch_remote_version "\\${target_ref}" || true)"', script_text)
@@ -22,6 +23,10 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('if [ ! -x "$launcher_path" ]; then', script_text)
         self.assertIn('Launcher creation failed / 启动命令创建失败', script_text)
         self.assertIn('export PATH="$HOME/.local/bin:$PATH"', script_text)
+        self.assertIn('Data root / 数据目录:   ${STORAGE_ROOT}', script_text)
+        self.assertIn('ZAOMENG_STORAGE_DIR="\\${STORAGE_ROOT}"', script_text)
+        self.assertIn('"\\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\\${STORAGE_ROOT}"', script_text)
+        self.assertIn('exec "\\${PYTHON_BIN}" "\\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\\${STORAGE_ROOT}" "\\$@"', script_text)
 
 
 if __name__ == "__main__":
