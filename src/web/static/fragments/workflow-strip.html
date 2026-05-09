@@ -158,6 +158,28 @@
             <h4>这一轮看到了什么</h4>
           </div>
         </div>
+        <section class="work-summary-shell">
+          <article class="work-summary-card is-hero">
+            <span class="work-summary-label">一句话概览</span>
+            <strong id="work-summary-line">这一卷的整体状态会在这里收住。</strong>
+            <p id="work-summary-bottleneck" class="work-summary-copy">当前最卡的地方，也会直接告诉你。</p>
+          </article>
+          <div class="work-summary-grid">
+            <article class="work-summary-card">
+              <span class="work-summary-label">最近进展</span>
+              <div id="work-summary-events" class="work-summary-events"></div>
+              <p id="work-summary-events-empty" class="card-note hidden">这一轮还没有更多进展留在这里。</p>
+            </article>
+            <article class="work-summary-card">
+              <span class="work-summary-label">推荐动作</span>
+              <strong id="work-summary-recommend-title">下一步建议会在这里出现。</strong>
+              <p id="work-summary-recommend-copy" class="work-summary-copy">这里会告诉你为什么先做这一步。</p>
+              <div class="work-summary-actions">
+                <button id="work-summary-recommend-button" type="button" class="soft-button">去执行</button>
+              </div>
+            </article>
+          </div>
+        </section>
         <section id="quality-section" class="quality-section-shell hidden">
           <div class="quality-grid">
             <article class="quality-card">

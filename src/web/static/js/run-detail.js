@@ -72,6 +72,7 @@ function renderRunSummary(run) {
   setText("work-overview-next-step", buildWorkOverviewNextStep(run), "");
   setText("run-progress-review", buildWorkReviewStatus(run), "");
   setText("run-progress-graph", buildWorkGraphStatus(run), "");
+  renderWorkSummaryNarrative(run);
   renderSourceHistory(run);
   renderRedistillPlan(run);
   renderQualitySnapshot(run);
@@ -80,6 +81,201 @@ function renderRunSummary(run) {
   renderWorkGraphSummary(run);
   renderWorkSessionPreview(run);
   syncRedistillPreview();
+}
+
+function renderWorkSummaryNarrative(run) {
+  setText("work-summary-line", buildWorkSummaryLine(run), "");
+  setText("work-summary-bottleneck", buildWorkSummaryBottleneck(run), "");
+  renderWorkSummaryEvents(run);
+  renderWorkRecommendedAction(run);
+}
+
+function buildWorkSummaryLine(run) {
+  if (!run) {
+    return "先放入一本书，这里才会开始替你归纳整卷状态。";
+  }
+  const title = runNovelTitle(run);
+  const characterCount = getRunCharacterNames(run).length;
+  const weakCount = countWeakCharacters(run);
+  if (run.status === "running") {
+    return `《${title}》还在整理中，目前已经请出了 ${characterCount || 0} 位角色。`;
+  }
+  if (run.status === "failed") {
+    return `《${title}》这一轮停在半途，但已落下的角色和资料仍然能继续接着用。`;
+  }
+  if (run.status === "stopped") {
+    return `《${title}》这轮已经收住，现在适合决定是继续蒸馏还是先校对人物。`;
+  }
+  if (!characterCount) {
+    return `《${title}》还没有稳定的人物包，先把角色请出来，这页才会真正亮起来。`;
+  }
+  if (weakCount > 0) {
+    return `《${title}》的人物骨架已经立住一部分，但还有 ${weakCount} 位角色值得优先补稳。`;
+  }
+  if (!run?.artifact_index?.relation_graph?.relations_file) {
+    return `《${title}》的人物已经基本站稳，关系图谱还没完全落下，但不影响先开聊。`;
+  }
+  return `《${title}》这卷已经形成比较完整的工作面，可以校对、看关系，也可以直接入场。`;
+}
+
+function buildWorkSummaryBottleneck(run) {
+  if (!run) {
+    return "当前还没有工作对象。";
+  }
+  if (run.status === "running") {
+    return String(run.progress?.message || "").trim() || "当前瓶颈还在模型整理进度本身，先盯住这一轮往哪里走。";
+  }
+  if (run.status === "failed") {
+    return "当前瓶颈是这一轮中断；最稳的接法是继续蒸馏，而不是从零重来。";
+  }
+  const priority = buildWorkPriorityReviewItems(run)[0];
+  if (priority?.hasEvidenceGap) {
+    return `当前最卡的是「${priority.name}」证据偏薄，建议换入更贴近他的正文片段做增量蒸馏。`;
+  }
+  if (priority?.weakCount > 0) {
+    return `当前最卡的是「${priority.name}」还有 ${priority.weakCount} 处关键字段偏薄，先补这个角色最划算。`;
+  }
+  if (!run?.artifact_index?.relation_graph?.relations_file) {
+    return "当前瓶颈已经不在人物，而在关系图谱尚未落成；不过这不阻塞聊天与继续校对。";
+  }
+  return "当前没有明显卡点，这卷已经可以把重点从整理切到体验。";
+}
+
+function renderWorkSummaryEvents(run) {
+  const root = el("work-summary-events");
+  if (!root) return;
+  root.innerHTML = "";
+  const events = Array.isArray(run?.events) ? run.events.slice(-3).reverse() : [];
+  events.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "work-summary-event";
+    row.innerHTML = `
+      <strong>${String(item.stage || "进展").trim() || "进展"}</strong>
+      <p>${String(item.message || "").trim() || "这一轮有新的变化落在这里。"}</p>
+    `;
+    root.appendChild(row);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("work-summary-events-empty", root.childElementCount === 0);
+}
+
+function buildWorkRecommendedAction(run) {
+  const priority = buildWorkPriorityReviewItems(run)[0];
+  if (!run) {
+    return {
+      buttonLabel: "开始蒸馏",
+      title: "先放入一本书",
+      copy: "没有工作对象时，最值得做的是先新建一卷，把故事请上书架。",
+      action: "new_run",
+      payload: "",
+    };
+  }
+  if (run.status === "running") {
+    return {
+      buttonLabel: "查看进度",
+      title: "先盯住当前整理进度",
+      copy: "这一轮还在跑，先不用切太多动作；等角色再落下几位，判断会更稳。",
+      action: "focus_timeline",
+      payload: "",
+    };
+  }
+  if (run.status === "failed" || run.status === "stopped") {
+    return {
+      buttonLabel: "继续蒸馏",
+      title: "把这一轮先接上",
+      copy: "当前最值钱的是沿着这卷继续往下走，而不是把已落成的人物重新来一遍。",
+      action: "open_redistill",
+      payload: "",
+    };
+  }
+  if (priority?.hasEvidenceGap) {
+    return {
+      buttonLabel: "补这位角色",
+      title: `先给「${priority.name}」补正文证据`,
+      copy: "这个角色不是简单字段缺字，而是素材本身偏薄；优先增量蒸馏最有效。",
+      action: "redistill_character",
+      payload: priority.name,
+    };
+  }
+  if (priority?.weakCount > 0) {
+    return {
+      buttonLabel: "打开角色页",
+      title: `先补稳「${priority.name}」`,
+      copy: "当前最值钱的动作，是把最薄的角色先补稳；这样整卷对话信任感会涨得最快。",
+      action: "open_character",
+      payload: priority.name,
+    };
+  }
+  if (!run?.artifact_index?.relation_graph?.relations_file) {
+    return {
+      buttonLabel: "开始聊天",
+      title: "人物已经够用，可以先入场",
+      copy: "关系图还没完全落下，但已经不影响体验；可以先开一局，回头再补图谱。",
+      action: "start_chat",
+      payload: "",
+    };
+  }
+  return {
+    buttonLabel: "查看关系",
+    title: "先看整卷关系",
+    copy: "人物和图谱都比较稳了，下一步最值得的是看全局关系，再决定从谁入场。",
+    action: "open_relations",
+    payload: "",
+  };
+}
+
+function renderWorkRecommendedAction(run) {
+  const recommendation = buildWorkRecommendedAction(run);
+  setText("work-summary-recommend-title", recommendation.title, "");
+  setText("work-summary-recommend-copy", recommendation.copy, "");
+  const button = el("work-summary-recommend-button");
+  if (!button) return;
+  button.textContent = recommendation.buttonLabel;
+  button.dataset.workRecommendedAction = recommendation.action || "";
+  button.dataset.workRecommendedPayload = recommendation.payload || "";
+  button.onclick = () => {
+    handleWorkRecommendedAction(button.dataset.workRecommendedAction || "", button.dataset.workRecommendedPayload || "");
+  };
+}
+
+function handleWorkRecommendedAction(action, payload = "") {
+  if (action === "new_run") {
+    startNewRunFlow();
+    return;
+  }
+  if (action === "focus_timeline") {
+    el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
+  if (action === "open_redistill") {
+    redistillPanelOpen = true;
+    renderBookshelfDetail(currentRun);
+    updateWorkflowState();
+    el("redistill-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    el("redistill-characters")?.focus();
+    return;
+  }
+  if (action === "redistill_character") {
+    openIncrementalDistillForCharacter(payload);
+    return;
+  }
+  if (action === "open_character") {
+    openCharacterOverview(payload).catch((error) => {
+      setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
+    });
+    return;
+  }
+  if (action === "start_chat") {
+    openNewDialogueSession().catch((error) => {
+      setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
+    });
+    return;
+  }
+  if (action === "open_relations") {
+    openRelationDetails().catch((error) => {
+      setStatus("bookshelf-status", error.message || "关系明细暂时没有载入。");
+    });
+  }
 }
 
 function buildWorkOverviewNextStep(run) {

@@ -237,6 +237,88 @@
   gap: 0.8rem;
 }
 
+.work-summary-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.work-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.work-summary-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.92rem 0.96rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(170, 146, 127, 0.1);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.work-summary-card.is-hero {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(249, 240, 234, 0.82));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 10px 22px rgba(126, 92, 70, 0.04);
+}
+
+.work-summary-label {
+  color: var(--ink-faint);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.work-summary-card strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+  line-height: 1.6;
+  font-weight: 600;
+}
+
+.work-summary-copy {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  line-height: 1.7;
+}
+
+.work-summary-events {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.work-summary-event {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.72rem 0.76rem;
+  border-radius: calc(var(--radius-lg) - 6px);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(170, 146, 127, 0.08);
+}
+
+.work-summary-event strong {
+  color: var(--ink);
+  font-size: 0.73rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.work-summary-event p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.65;
+}
+
+.work-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  padding-top: 0.15rem;
+}
+
 .work-overview-hero {
   display: grid;
   gap: 0.95rem;
@@ -1492,6 +1574,7 @@ textarea::placeholder {
 
   .work-progress-strip,
   .work-overview-grid,
+  .work-summary-grid,
   .character-overview-grid,
   .character-overview-fields {
     grid-template-columns: 1fr;
