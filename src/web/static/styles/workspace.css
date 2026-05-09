@@ -369,7 +369,7 @@
 
 .work-overview-grid {
   display: grid;
-  grid-template-columns: minmax(18.5rem, 1.05fr) minmax(19rem, 1fr) minmax(16rem, 0.82fr);
+  grid-template-columns: minmax(18rem, 1fr) minmax(18rem, 0.95fr) minmax(20rem, 1.08fr);
   gap: 0.75rem;
   align-items: start;
 }
@@ -590,25 +590,25 @@
 
 .work-session-preview-head strong {
   color: var(--ink);
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   line-height: 1.45;
   font-weight: 600;
 }
 
 .work-mode-shortcuts {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0.45rem;
+  flex-wrap: wrap;
+  gap: 0.42rem;
   padding-top: 0;
 }
 
 .work-mode-shortcuts .soft-button {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 1.95rem;
-  padding: 0 0.58rem;
-  font-size: 0.7rem;
-  line-height: 1.2;
+  flex: 1 1 calc(50% - 0.24rem);
+  min-width: 7rem;
+  min-height: 2.02rem;
+  padding: 0 0.68rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1169,8 +1169,8 @@
   margin: 0;
   padding-left: var(--text-inset);
   color: var(--ink-soft);
-  font-size: 0.75rem;
-  line-height: 1.6;
+  font-size: 0.76rem;
+  line-height: 1.68;
 }
 
 .detail-section .link-row,
@@ -1713,13 +1713,13 @@ textarea::placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2rem;
-  padding: 0 0.72rem;
+  min-height: 2.08rem;
+  padding: 0 0.86rem;
   text-decoration: none;
   background: rgba(255, 255, 255, 0.68);
   border-color: rgba(170, 146, 127, 0.14);
   color: var(--ink-soft);
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   line-height: 1.2;
   white-space: nowrap;
 }
