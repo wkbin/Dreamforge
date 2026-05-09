@@ -290,7 +290,8 @@ async function handlePersonaFieldAutofill(event) {
   trigger.disabled = true;
   const originalText = trigger.textContent || "AI补全";
   trigger.textContent = "生成中...";
-  setStatus("persona-review-status", `正在联网补全「${labelText}」...`);
+  setPersonaReviewFieldFeedback(field, "loading", "正在生成补全...");
+  setStatus("persona-review-status", `正在生成「${labelText}」的补全内容...`);
   try {
     const payload = await apiJson(
       `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}/suggest-field`,
@@ -308,13 +309,16 @@ async function handlePersonaFieldAutofill(event) {
       }
       markPersonaReviewFieldAutofilled(field);
       renderPersonaAutofillReferences(payload);
+      setPersonaReviewFieldFeedback(field, "success", "已生成补全内容，记得保存。");
       setStatus("persona-review-status", payload.message || "已生成补全内容，请记得保存人物校对。");
     } else {
       renderPersonaAutofillReferences(payload);
+      setPersonaReviewFieldFeedback(field, "error", payload?.message || payload?.reason || "人物信息补全无法生成。");
       setStatus("persona-review-status", payload?.message || payload?.reason || "人物信息补全无法生成。");
     }
   } catch (error) {
     renderPersonaAutofillReferences(null);
+    setPersonaReviewFieldFeedback(field, "error", error.message || "人物信息补全无法生成。");
     setStatus("persona-review-status", error.message || "人物信息补全无法生成。");
   } finally {
     delete trigger.dataset.loading;
@@ -346,6 +350,7 @@ async function handlePersonaReviewSubmit(event) {
       )
     );
     clearAllPersonaReviewAutofilledFields();
+    clearAllPersonaReviewFieldFeedback();
     renderPersonaAutofillReferences(null);
     renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
     setStatus("persona-review-status", "人物校对已经写回这一卷。");
@@ -757,6 +762,7 @@ function bindEvents() {
       const field = PERSONA_REVIEW_FIELD_BINDINGS.find(([, id]) => id === target.id)?.[0];
       if (field) {
         clearPersonaReviewFieldAutofilled(field);
+        setPersonaReviewFieldFeedback(field, "", "");
       }
     }
     syncPersonaReviewAutofillButtons();

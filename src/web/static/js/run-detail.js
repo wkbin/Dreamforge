@@ -500,6 +500,7 @@ const personaReviewAutofilledFields = new Set();
 
 function fillPersonaReviewFields(fields) {
   personaReviewAutofilledFields.clear();
+  clearAllPersonaReviewFieldFeedback();
   PERSONA_REVIEW_FIELD_BINDINGS.forEach(([field, id]) => {
     setValue(id, fields?.[field] || "");
   });
@@ -556,6 +557,36 @@ function personaReviewFieldNeedsAutofill(field) {
   if (!value) return true;
   const normalized = value.replace(/\s+/g, "");
   return ["证据不足", "资料不足", "信息不足", "暂无资料", "暂缺", "待补充"].includes(normalized);
+}
+
+function setPersonaReviewFieldFeedback(field, kind = "", message = "") {
+  const id = personaReviewFieldId(field);
+  const input = id ? el(id) : null;
+  const card = input?.closest(".field-card");
+  if (!card) return;
+  let note = card.querySelector(".persona-field-feedback");
+  const text = String(message || "").trim();
+  if (!text) {
+    if (note) {
+      note.remove();
+    }
+    card.classList.remove("field-card-feedback-loading", "field-card-feedback-success", "field-card-feedback-error");
+    return;
+  }
+  if (!(note instanceof HTMLElement)) {
+    note = document.createElement("p");
+    note.className = "persona-field-feedback";
+    card.appendChild(note);
+  }
+  note.textContent = text;
+  card.classList.remove("field-card-feedback-loading", "field-card-feedback-success", "field-card-feedback-error");
+  if (kind) {
+    card.classList.add(`field-card-feedback-${kind}`);
+  }
+}
+
+function clearAllPersonaReviewFieldFeedback() {
+  PERSONA_REVIEW_FIELD_BINDINGS.forEach(([field]) => setPersonaReviewFieldFeedback(field, "", ""));
 }
 
 function markPersonaReviewFieldAutofilled(field) {

@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 from src.core.exceptions import LLMRequestError
 from src.web.chat.helpers import parse_dialogue_suggestion
+from src.web.review.persona_completion import collect_persona_web_references
 from src.web.workflow import WebRunService
 
 try:
@@ -29,6 +30,29 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(service.runs_root, storage_root / "runs")
             self.assertEqual(service.settings_path, storage_root / "model_settings.json")
             self.assertTrue(service.runs_root.exists())
+
+    def test_persona_web_references_filters_dictionary_like_results(self):
+        fake_html = """
+        <html><body>
+          <li class="b_algo">
+            <h2>江（汉语汉字）_百度百科</h2>
+            <p>江，通用规范汉字，一级字，读作 jiang，常见于江河湖海的名称。</p>
+          </li>
+          <li class="b_algo">
+            <h2>江澄角色介绍</h2>
+            <p>江澄是《魔道祖师》中的重要角色，性格冷厉而重情，成长线鲜明。</p>
+          </li>
+        </body></html>
+        """
+
+        refs = collect_persona_web_references(
+            character="江澄",
+            novel_title="魔道祖师",
+            fetch_text=lambda url, timeout: fake_html,
+        )
+
+        self.assertEqual(len(refs), 1)
+        self.assertIn("江澄", refs[0]["title"])
 
     def test_build_distill_chunk_payloads_splits_large_excerpt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1801,9 +1825,10 @@ class WebAppRouteTests(unittest.TestCase):
             )
             fake_parts = Mock()
             fake_parts.llm.chat_completion = Mock(
-                return_value={
-                    "content": '{"status":"filled","value":"对真心极敏感，也极重自尊。","reason":"多条人物分析都强调其真心与自尊。"}'
-                }
+                side_effect=[
+                    {"content": '{"status":"insufficient","value":"","reason":"我对这个角色的把握不够稳定。"}'},
+                    {"content": '{"status":"filled","value":"对真心极敏感，也极重自尊。","reason":"多条人物分析都强调其真心与自尊。"}'},
+                ]
             )
 
             with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
@@ -1816,6 +1841,8 @@ class WebAppRouteTests(unittest.TestCase):
 
             self.assertEqual(payload["status"], "filled")
             self.assertIn("真心", payload["value"])
+            self.assertEqual(payload["source_mode"], "web_fallback")
+            self.assertEqual(fake_parts.llm.chat_completion.call_count, 2)
             review = service.get_persona_review(run["run_id"], "林黛玉")
             self.assertEqual(review["fields"]["identity_anchor"], "")
 
@@ -1841,7 +1868,9 @@ class WebAppRouteTests(unittest.TestCase):
                 ).decode("ascii"),
             )
             fake_parts = Mock()
-            fake_parts.llm.chat_completion = Mock()
+            fake_parts.llm.chat_completion = Mock(
+                return_value={"content": '{"status":"insufficient","value":"","reason":"我对这个角色的把握不够稳定。"}'}
+            )
 
             with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
                 "src.web.service_facades.artifacts.collect_persona_web_references",
@@ -1850,8 +1879,238 @@ class WebAppRouteTests(unittest.TestCase):
                 payload = service.suggest_persona_field(run["run_id"], "林黛玉", "identity_anchor")
 
             self.assertEqual(payload["status"], "insufficient")
-            self.assertIn("无法生成", payload["message"])
-            fake_parts.llm.chat_completion.assert_not_called()
+            self.assertIn("把握不够稳定", payload["message"])
+            self.assertEqual(payload["source_mode"], "none")
+            fake_parts.llm.chat_completion.assert_called_once()
+
+    def test_persona_field_autofill_prefers_model_knowledge_before_web_lookup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉初入贾府。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    "- name: 林黛玉\n- novel_id: 红楼梦\n- core_identity: 贾府外来才女\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock(
+                return_value={"content": '{"status":"filled","value":"把真心和自尊看得极重。","reason":"经典角色知识稳定。"}'}
+            )
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
+                "src.web.service_facades.artifacts.collect_persona_web_references",
+                side_effect=AssertionError("web fallback should not run when model knowledge succeeds"),
+            ):
+                payload = service.suggest_persona_field(run["run_id"], "林黛玉", "identity_anchor")
+
+            self.assertEqual(payload["status"], "filled")
+            self.assertEqual(payload["source_mode"], "model_knowledge")
+            self.assertIn("模型知识", payload["message"])
+            fake_parts.llm.chat_completion.assert_called_once()
+
+    def test_persona_field_autofill_accepts_plaintext_model_completion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉初入贾府。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    "- name: 林黛玉\n- novel_id: 红楼梦\n- core_identity: 贾府外来才女\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock(return_value={"content": "把真心和自尊看得极重。"})
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
+                "src.web.service_facades.artifacts.collect_persona_web_references",
+                side_effect=AssertionError("web fallback should not run when plaintext model knowledge succeeds"),
+            ):
+                payload = service.suggest_persona_field(run["run_id"], "林黛玉", "identity_anchor")
+
+            self.assertEqual(payload["status"], "filled")
+            self.assertIn("真心", payload["value"])
+            self.assertEqual(payload["source_mode"], "model_knowledge")
+
+    def test_persona_field_autofill_retries_after_broken_brace_response(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉初入贾府。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    "- name: 林黛玉\n- novel_id: 红楼梦\n- core_identity: 贾府外来才女\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock(
+                side_effect=[
+                    {"content": "{"},
+                    {"content": "把真心和自尊看得极重。"},
+                ]
+            )
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
+                "src.web.service_facades.artifacts.collect_persona_web_references",
+                side_effect=AssertionError("web fallback should not run when retry succeeds"),
+            ):
+                payload = service.suggest_persona_field(run["run_id"], "林黛玉", "identity_anchor")
+
+            self.assertEqual(payload["status"], "filled")
+            self.assertIn("真心", payload["value"])
+            self.assertEqual(payload["source_mode"], "model_knowledge")
+            self.assertEqual(fake_parts.llm.chat_completion.call_count, 2)
+
+    def test_persona_field_autofill_retries_after_broken_value_fragment_response(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="modao.txt",
+                novel_content_base64=base64.b64encode("江澄站在船头。".encode("utf-8")).decode("ascii"),
+                characters=["江澄"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="江澄",
+                content_base64=base64.b64encode(
+                    "- name: 江澄\n- novel_id: 魔道祖师\n- core_identity: 云梦江氏宗主\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock(
+                side_effect=[
+                    {"content": '"value": "魏无羡（前师弟/宿敌）；江厌离（姐姐）；金凌（外甥）；蓝忘机（对立者/前'},
+                    {"content": "魏无羡（前师弟/宿敌）；江厌离（姐姐/精神支柱）；金凌（外甥）；蓝忘机（对立者）。"},
+                ]
+            )
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
+                "src.web.service_facades.artifacts.collect_persona_web_references",
+                side_effect=AssertionError("web fallback should not run when retry succeeds"),
+            ):
+                payload = service.suggest_persona_field(run["run_id"], "江澄", "key_bonds")
+
+            self.assertEqual(payload["status"], "filled")
+            self.assertNotIn('"value":', payload["value"])
+            self.assertIn("魏无羡", payload["value"])
+            self.assertEqual(fake_parts.llm.chat_completion.call_count, 2)
+
+    def test_persona_field_autofill_extracts_final_candidate_from_meta_reasoning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="modao.txt",
+                novel_content_base64=base64.b64encode("江澄站在船头。".encode("utf-8")).decode("ascii"),
+                characters=["江澄"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="江澄",
+                content_base64=base64.b64encode(
+                    "- name: 江澄\n- novel_id: 魔道祖师\n- core_identity: 云梦江氏宗主\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock(
+                return_value={
+                    "content": "我们被要求为江澄这个角色补全“重要牵系”字段。我知道《魔道祖师》是墨香铜臭的作品。可以给出：魏无羡（师弟/宿敌）；金凌（外甥）；江厌离（亡姐）；虞紫鸢（亡母）；蓝忘机（对立者）。理由：我对这个角色比较熟悉。"
+                }
+            )
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
+                "src.web.service_facades.artifacts.collect_persona_web_references",
+                side_effect=AssertionError("web fallback should not run when extraction succeeds"),
+            ):
+                payload = service.suggest_persona_field(run["run_id"], "江澄", "key_bonds")
+
+            self.assertEqual(payload["status"], "filled")
+            self.assertIn("魏无羡", payload["value"])
+            self.assertNotIn("我们被要求", payload["value"])
+
+    def test_persona_field_autofill_retries_when_meta_reasoning_has_no_final_answer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="modao.txt",
+                novel_content_base64=base64.b64encode("江澄站在船头。".encode("utf-8")).decode("ascii"),
+                characters=["江澄"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="江澄",
+                content_base64=base64.b64encode(
+                    "- name: 江澄\n- novel_id: 魔道祖师\n- core_identity: 云梦江氏宗主\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock(
+                side_effect=[
+                    {"content": "我们被要求补全江澄的重要牵系。我知道他和魏无羡、金凌、江厌离关系都很重要。我觉得需要提取最关键的那些。"},
+                    {"content": "魏无羡（师弟/宿敌）；金凌（外甥）；江厌离（亡姐）；虞紫鸢（亡母）。"},
+                ]
+            )
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
+                "src.web.service_facades.artifacts.collect_persona_web_references",
+                side_effect=AssertionError("web fallback should not run when retry succeeds"),
+            ):
+                payload = service.suggest_persona_field(run["run_id"], "江澄", "key_bonds")
+
+            self.assertEqual(payload["status"], "filled")
+            self.assertIn("魏无羡", payload["value"])
+            self.assertEqual(payload["source_mode"], "model_knowledge")
+            self.assertEqual(fake_parts.llm.chat_completion.call_count, 2)
 
     def test_relation_details_list_exposes_evidence_lines(self):
         with tempfile.TemporaryDirectory() as tmp:
