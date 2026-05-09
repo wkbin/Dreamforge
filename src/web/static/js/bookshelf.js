@@ -78,13 +78,15 @@ function renderBookshelfDetail(run) {
     reviewButton.disabled = !hasReviewAction;
   }
   const relationButton = el("open-relation-details-button");
+  const hasRelation = Boolean(run?.artifact_index?.relation_graph?.relations_file);
   if (relationButton) {
     relationButton.classList.remove("hidden");
-    relationButton.disabled = !Boolean(run?.artifact_index?.relation_graph?.relations_file);
+    relationButton.disabled = !hasRelation;
   }
   const exportButton = el("detail-export-summary-button");
+  let hasExport = false;
   if (exportButton) {
-    const hasExport =
+    hasExport =
       Boolean(run?.file_urls?.manifest) ||
       Boolean(run?.file_urls?.graph_relations_file) ||
       Boolean(run?.file_urls?.graph_html) ||
@@ -93,8 +95,9 @@ function renderBookshelfDetail(run) {
     exportButton.disabled = !hasExport;
   }
   const graphButton = el("detail-view-graph-button");
+  let hasGraphLink = false;
   if (graphButton) {
-    const hasGraphLink = Boolean(run?.file_urls?.graph_html || run?.file_urls?.graph_svg);
+    hasGraphLink = Boolean(run?.file_urls?.graph_html || run?.file_urls?.graph_svg);
     graphButton.classList.remove("hidden");
     graphButton.disabled = !hasGraphLink;
     graphButton.onclick = () => {
@@ -104,6 +107,11 @@ function renderBookshelfDetail(run) {
     };
   }
   toggle("detail-secondary-actions-shell", Boolean(run));
+  const shouldSoftenSecondary = isRunning && (!hasRelation || !hasGraphLink || !hasExport);
+  const secondaryActions = el("detail-secondary-actions");
+  if (secondaryActions) {
+    secondaryActions.classList.toggle("is-softened", shouldSoftenSecondary);
+  }
   toggle("detail-action-note", Boolean(run) && (isRunning || isStopped));
   if (stopRequested) {
     setText("detail-action-note", "已收到停止请求，正在把当前这一步收住。", "");
@@ -199,8 +207,18 @@ function renderBookshelf(runs) {
     `;
     button.title = `${runNovelTitle(run)}${humanizeSummary(run.summary?.status_text) ? ` · ${humanizeSummary(run.summary?.status_text)}` : ""}`;
     button.addEventListener("click", async () => {
-      const freshRun = await apiJson(`/api/web/runs/${run.run_id}`);
-      renderRun(freshRun);
+      if (typeof setWorkOverviewLoading === "function") {
+        setWorkOverviewLoading(true, "正在载入这一卷...");
+      }
+      try {
+        const freshRun = await apiJson(`/api/web/runs/${run.run_id}`);
+        renderRun(freshRun);
+      } catch (error) {
+        if (typeof setWorkOverviewLoading === "function") {
+          setWorkOverviewLoading(false);
+        }
+        setStatus("bookshelf-status", error.message || "这卷暂时没有载入。");
+      }
     });
 
     const removeButton = document.createElement("button");
@@ -288,6 +306,9 @@ function showBookshelfHome() {
   sourceHistoryExpanded = false;
   sidebarCollapsed = false;
   setStatus("bookshelf-status", "");
+  if (typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(false);
+  }
   resetDialogueView();
   renderBookshelfDetail(null);
   applySidebarState();
@@ -304,6 +325,9 @@ function startNewRunFlow() {
   sourceHistoryExpanded = false;
   sidebarCollapsed = false;
   setStatus("bookshelf-status", "");
+  if (typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(false);
+  }
   resetDialogueView();
   renderBookshelfDetail(null);
   applySidebarState();

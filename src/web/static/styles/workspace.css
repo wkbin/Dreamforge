@@ -391,6 +391,10 @@
   padding-left: var(--text-inset);
 }
 
+#detail-secondary-actions.is-softened {
+  opacity: 0.7;
+}
+
 .work-progress-card {
   display: grid;
   gap: 0.38rem;
