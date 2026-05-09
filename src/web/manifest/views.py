@@ -117,15 +117,44 @@ def file_url(run_id: str, relative_path: Path) -> str:
 
 
 def relative_to_run_dir(path: Path, run_dir: Path) -> Path | None:
-    path_real = os.path.normcase(os.path.realpath(os.fspath(path)))
-    run_real = os.path.normcase(os.path.realpath(os.fspath(run_dir)))
-    try:
-        common = os.path.commonpath([path_real, run_real])
-    except ValueError:
+    for candidate_path, candidate_run_dir in _relative_candidates(path, run_dir):
+        try:
+            return candidate_path.relative_to(candidate_run_dir)
+        except ValueError:
+            continue
+
+    path_parts = _normalized_parts(path)
+    run_parts = _normalized_parts(run_dir)
+    if len(path_parts) < len(run_parts) or path_parts[: len(run_parts)] != run_parts:
         return None
-    if common != run_real:
+
+    actual_path = Path(path).resolve(strict=False)
+    actual_parts = actual_path.parts
+    if len(actual_parts) < len(run_parts):
         return None
-    relative_text = os.path.relpath(path_real, run_real)
-    if relative_text in {".", ""}:
-        return Path()
-    return Path(relative_text)
+    relative_parts = actual_parts[len(run_parts) :]
+    return Path(*relative_parts) if relative_parts else Path()
+
+
+def _relative_candidates(path: Path, run_dir: Path) -> list[tuple[Path, Path]]:
+    path_obj = Path(path)
+    run_dir_obj = Path(run_dir)
+    pairs = [
+        (path_obj, run_dir_obj),
+        (path_obj.resolve(strict=False), run_dir_obj.resolve(strict=False)),
+        (Path(os.path.realpath(os.fspath(path_obj))), Path(os.path.realpath(os.fspath(run_dir_obj)))),
+    ]
+    ordered: list[tuple[Path, Path]] = []
+    seen: set[tuple[str, str]] = set()
+    for candidate_path, candidate_run_dir in pairs:
+        key = (os.fspath(candidate_path), os.fspath(candidate_run_dir))
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append((candidate_path, candidate_run_dir))
+    return ordered
+
+
+def _normalized_parts(path: Path) -> tuple[str, ...]:
+    resolved = Path(path).resolve(strict=False)
+    return tuple(part.casefold() for part in resolved.parts)
