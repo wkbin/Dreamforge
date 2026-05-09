@@ -25,11 +25,14 @@ from src.web.artifacts import (
     ingest_relation_result as apply_relation_ingest,
 )
 from src.web.review import (
+    PERSONA_AUTOFILLABLE_FIELDS,
     apply_persona_review_updates,
+    collect_persona_web_references,
     get_persona_review_payload,
     read_persona_review_fields,
     resolve_persona_review_source,
     save_persona_review_payload,
+    suggest_persona_field_payload,
 )
 
 
@@ -124,6 +127,33 @@ class ArtifactServiceMixin:
         )
         self._write_json(self._manifest_path(run_id), result["manifest"])
         return result["payload"]
+
+    def suggest_persona_field(self, run_id: str, character: str, field: str) -> dict[str, Any]:
+        if not self.model_is_configured():
+            raise ValueError("Model is not configured yet.")
+        manifest = self._require_manifest(run_id)
+        persona_dir = resolve_persona_dir(manifest, character)
+        config = self._build_runtime_config_for_run(run_dir=self.runs_root / run_id)
+        parts = self._build_runtime_parts(config)
+        return suggest_persona_field_payload(
+            run_id=run_id,
+            character=character,
+            field=field,
+            persona_dir=persona_dir,
+            manifest=manifest,
+            resolve_persona_review_source=resolve_persona_review_source,
+            load_profile_source=load_profile_source,
+            read_persona_review_fields=read_persona_review_fields,
+            collect_references=lambda current_character, novel_title: collect_persona_web_references(
+                character=current_character,
+                novel_title=novel_title,
+            ),
+            chat_completion=lambda messages, temperature, max_tokens: parts.llm.chat_completion(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ),
+        )
 
     def list_relation_details(self, run_id: str) -> dict[str, Any]:
         manifest = self._require_manifest(run_id)

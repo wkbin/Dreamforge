@@ -1778,6 +1778,81 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertIn("贾母", saved["fields"]["key_bonds"])
             self.assertIn("冷意", saved["fields"]["anger_style"])
 
+    def test_persona_field_autofill_uses_web_references_and_does_not_force_save(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉初入贾府。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    "- name: 林黛玉\n- novel_id: 红楼梦\n- core_identity: 贾府外来才女\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock(
+                return_value={
+                    "content": '{"status":"filled","value":"对真心极敏感，也极重自尊。","reason":"多条人物分析都强调其真心与自尊。"}'
+                }
+            )
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
+                "src.web.service_facades.artifacts.collect_persona_web_references",
+                return_value=[
+                    {"title": "林黛玉人物分析", "snippet": "林黛玉敏感而自尊极重，极重真情。", "source": "Bing", "query": "林黛玉 红楼梦 人物分析"}
+                ],
+            ):
+                payload = service.suggest_persona_field(run["run_id"], "林黛玉", "identity_anchor")
+
+            self.assertEqual(payload["status"], "filled")
+            self.assertIn("真心", payload["value"])
+            review = service.get_persona_review(run["run_id"], "林黛玉")
+            self.assertEqual(review["fields"]["identity_anchor"], "")
+
+    def test_persona_field_autofill_returns_insufficient_when_web_refs_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉初入贾府。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    "- name: 林黛玉\n- novel_id: 红楼梦\n- core_identity: 贾府外来才女\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock()
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
+                "src.web.service_facades.artifacts.collect_persona_web_references",
+                return_value=[],
+            ):
+                payload = service.suggest_persona_field(run["run_id"], "林黛玉", "identity_anchor")
+
+            self.assertEqual(payload["status"], "insufficient")
+            self.assertIn("无法生成", payload["message"])
+            fake_parts.llm.chat_completion.assert_not_called()
+
     def test_relation_details_list_exposes_evidence_lines(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
@@ -1920,6 +1995,48 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertIn("真心", fields["identity_anchor"])
             self.assertIn("贾母", fields["key_bonds"])
             self.assertIn("冷意", fields["anger_style"])
+
+    def test_persona_field_autofill_route_returns_generated_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉初入贾府。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            service.ingest_character_result(
+                run["run_id"],
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    "- name: 林黛玉\n- novel_id: 红楼梦\n- core_identity: 贾府外来才女\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock(
+                return_value={"content": '{"status":"filled","value":"对真心极敏感，也极重自尊。","reason":"证据足够。"}'}
+            )
+            client = TestClient(create_app(service))
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts), patch(
+                "src.web.service_facades.artifacts.collect_persona_web_references",
+                return_value=[
+                    {"title": "林黛玉人物分析", "snippet": "林黛玉敏感而自尊极重，极重真情。", "source": "Bing", "query": "林黛玉 红楼梦 人物分析"}
+                ],
+            ):
+                response = client.post(
+                    f"/api/web/runs/{run['run_id']}/personas/林黛玉/suggest-field",
+                    json={"field": "identity_anchor"},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["status"], "filled")
+            self.assertIn("真心", response.json()["value"])
 
     def test_model_settings_route_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp:

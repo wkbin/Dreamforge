@@ -7,6 +7,15 @@ from .persona import (
     read_persona_review_fields,
     resolve_persona_review_source,
 )
+from .persona_completion import (
+    PERSONA_AUTOFILLABLE_FIELDS,
+    PERSONA_REVIEW_ADVANCED_GROUPS,
+    PERSONA_REVIEW_FIELD_LABELS,
+    PERSONA_REVIEW_KEY_FIELDS,
+    collect_persona_web_references,
+    parse_persona_field_completion_response,
+    suggest_persona_field_payload,
+)
 from .persona_service import get_persona_review_payload, save_persona_review_payload
 from .profile_evidence import (
     finalize_generated_profile_source,
@@ -32,12 +41,17 @@ from .repair_orchestration import maybe_repair_generated_profile, maybe_repair_g
 
 __all__ = [
     "PERSONA_REVIEW_FIELDS",
+    "PERSONA_AUTOFILLABLE_FIELDS",
+    "PERSONA_REVIEW_ADVANCED_GROUPS",
+    "PERSONA_REVIEW_FIELD_LABELS",
+    "PERSONA_REVIEW_KEY_FIELDS",
     "PROFILE_LIST_FIELDS",
     "PROFILE_MAP_FIELDS",
     "apply_persona_review_updates",
     "apply_profile_missing_fallbacks",
     "collect_profile_completion_groups",
     "collect_profile_repair_targets",
+    "collect_persona_web_references",
     "collect_relation_repair_issues",
     "extract_dialogue_evidence",
     "finalize_generated_profile_source",
@@ -51,6 +65,7 @@ __all__ = [
     "maybe_repair_generated_relations",
     "merge_profile_patch",
     "parse_profile_metric_map",
+    "parse_persona_field_completion_response",
     "profile_evidence_from_payload",
     "profile_field_is_effectively_empty",
     "profile_list_value",
@@ -58,4 +73,5 @@ __all__ = [
     "resolve_persona_review_source",
     "save_persona_review_payload",
     "split_profile_list_value",
+    "suggest_persona_field_payload",
 ]

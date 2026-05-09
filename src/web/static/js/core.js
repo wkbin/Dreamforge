@@ -26,6 +26,7 @@ var newRunFlowOpen = false;
 var redistillPanelOpen = false;
 var sourceHistoryExpanded = false;
 var currentPersonaReview = null;
+var currentPersonaAutofill = null;
 var currentRelationDetails = null;
 var samplingSuggestion = null;
 const DISTILL_CHUNK_MAX_CHARS = 9000;

@@ -13,6 +13,7 @@ from src.web.api.schemas import (
     IngestRelationRequest,
     RestartRunRequest,
     SavePersonaReviewRequest,
+    SuggestPersonaFieldRequest,
 )
 from src.web.workflow import WebRunService
 
@@ -127,6 +128,21 @@ def save_persona_review(
 ) -> dict[str, Any]:
     try:
         return run_service.save_persona_review(run_id, character, model_to_dict(payload))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Character not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/web/runs/{run_id}/personas/{character}/suggest-field")
+def suggest_persona_field(
+    run_id: str,
+    character: str,
+    payload: SuggestPersonaFieldRequest,
+    run_service: WebRunService = Depends(get_run_service),
+) -> dict[str, Any]:
+    try:
+        return run_service.suggest_persona_field(run_id, character, payload.field)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Character not found.") from exc
     except ValueError as exc:

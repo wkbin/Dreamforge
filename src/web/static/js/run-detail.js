@@ -440,39 +440,151 @@ function renderPersonaReviewCharacterOptions(names, currentValue) {
   });
 }
 
+const PERSONA_REVIEW_FIELD_BINDINGS = [
+  ["core_identity", "persona-core-identity"],
+  ["story_role", "persona-story-role"],
+  ["identity_anchor", "persona-identity-anchor"],
+  ["temperament_type", "persona-temperament-type"],
+  ["soul_goal", "persona-soul-goal"],
+  ["hidden_desire", "persona-hidden-desire"],
+  ["inner_conflict", "persona-inner-conflict"],
+  ["self_cognition", "persona-self-cognition"],
+  ["private_self", "persona-private-self"],
+  ["core_traits", "persona-core-traits"],
+  ["speech_style", "persona-speech-style"],
+  ["cadence", "persona-cadence"],
+  ["typical_lines", "persona-typical-lines"],
+  ["signature_phrases", "persona-signature-phrases"],
+  ["sentence_openers", "persona-sentence-openers"],
+  ["sentence_endings", "persona-sentence-endings"],
+  ["social_mode", "persona-social-mode"],
+  ["thinking_style", "persona-thinking-style"],
+  ["decision_rules", "persona-decision-rules"],
+  ["reward_logic", "persona-reward-logic"],
+  ["worldview", "persona-worldview"],
+  ["belief_anchor", "persona-belief-anchor"],
+  ["moral_bottom_line", "persona-moral-bottom-line"],
+  ["restraint_threshold", "persona-restraint-threshold"],
+  ["key_bonds", "persona-key-bonds"],
+  ["forbidden_behaviors", "persona-forbidden-behaviors"],
+  ["stress_response", "persona-stress-response"],
+  ["emotion_model", "persona-emotion-model"],
+  ["anger_style", "persona-anger-style"],
+  ["joy_style", "persona-joy-style"],
+  ["grievance_style", "persona-grievance-style"],
+  ["others_impression", "persona-others-impression"],
+];
+
+const PERSONA_AUTOFILLABLE_FIELDS = new Set([
+  "core_identity",
+  "story_role",
+  "identity_anchor",
+  "temperament_type",
+  "soul_goal",
+  "hidden_desire",
+  "inner_conflict",
+  "self_cognition",
+  "private_self",
+  "core_traits",
+  "speech_style",
+  "social_mode",
+  "thinking_style",
+  "worldview",
+  "belief_anchor",
+  "moral_bottom_line",
+  "key_bonds",
+  "others_impression",
+]);
+
+const personaReviewAutofilledFields = new Set();
+
 function fillPersonaReviewFields(fields) {
-  setValue("persona-core-identity", fields.core_identity || "");
-  setValue("persona-story-role", fields.story_role || "");
-  setValue("persona-identity-anchor", fields.identity_anchor || "");
-  setValue("persona-temperament-type", fields.temperament_type || "");
-  setValue("persona-soul-goal", fields.soul_goal || "");
-  setValue("persona-hidden-desire", fields.hidden_desire || "");
-  setValue("persona-inner-conflict", fields.inner_conflict || "");
-  setValue("persona-self-cognition", fields.self_cognition || "");
-  setValue("persona-private-self", fields.private_self || "");
-  setValue("persona-core-traits", fields.core_traits || "");
-  setValue("persona-speech-style", fields.speech_style || "");
-  setValue("persona-cadence", fields.cadence || "");
-  setValue("persona-typical-lines", fields.typical_lines || "");
-  setValue("persona-signature-phrases", fields.signature_phrases || "");
-  setValue("persona-sentence-openers", fields.sentence_openers || "");
-  setValue("persona-sentence-endings", fields.sentence_endings || "");
-  setValue("persona-social-mode", fields.social_mode || "");
-  setValue("persona-thinking-style", fields.thinking_style || "");
-  setValue("persona-decision-rules", fields.decision_rules || "");
-  setValue("persona-reward-logic", fields.reward_logic || "");
-  setValue("persona-worldview", fields.worldview || "");
-  setValue("persona-belief-anchor", fields.belief_anchor || "");
-  setValue("persona-moral-bottom-line", fields.moral_bottom_line || "");
-  setValue("persona-restraint-threshold", fields.restraint_threshold || "");
-  setValue("persona-key-bonds", fields.key_bonds || "");
-  setValue("persona-forbidden-behaviors", fields.forbidden_behaviors || "");
-  setValue("persona-stress-response", fields.stress_response || "");
-  setValue("persona-emotion-model", fields.emotion_model || "");
-  setValue("persona-anger-style", fields.anger_style || "");
-  setValue("persona-joy-style", fields.joy_style || "");
-  setValue("persona-grievance-style", fields.grievance_style || "");
-  setValue("persona-others-impression", fields.others_impression || "");
+  personaReviewAutofilledFields.clear();
+  PERSONA_REVIEW_FIELD_BINDINGS.forEach(([field, id]) => {
+    setValue(id, fields?.[field] || "");
+  });
+  syncPersonaReviewFieldHighlights();
+  syncPersonaReviewAutofillButtons();
+}
+
+function renderPersonaAutofillReferences(payload) {
+  currentPersonaAutofill = payload || null;
+  const panel = el("persona-review-reference-panel");
+  const summary = el("persona-review-reference-summary");
+  const list = el("persona-review-reference-list");
+  if (!panel || !summary || !list) return;
+  const refs = Array.isArray(payload?.references) ? payload.references : [];
+  panel.classList.toggle("hidden", refs.length === 0);
+  panel.open = false;
+  list.innerHTML = "";
+  if (!refs.length) {
+    summary.textContent = "网页摘要参考";
+    return;
+  }
+  summary.textContent = `${refs.length} 条网页摘要参考`;
+  refs.forEach((item, index) => {
+    const card = document.createElement("article");
+    card.className = "persona-reference-card";
+    const title = escapeHtml(item?.title || `参考 ${index + 1}`);
+    const snippet = escapeHtml(item?.snippet || "");
+    const source = escapeHtml(item?.source || "");
+    const query = escapeHtml(item?.query || "");
+    card.innerHTML = `
+      <div class="persona-reference-head">
+        <strong>${title}</strong>
+        ${source ? `<span>${source}</span>` : ""}
+      </div>
+      ${query ? `<p class="persona-reference-query">检索词：${query}</p>` : ""}
+      ${snippet ? `<p class="persona-reference-snippet">${snippet}</p>` : ""}
+    `;
+    list.appendChild(card);
+  });
+}
+
+function personaReviewFieldId(field) {
+  const item = PERSONA_REVIEW_FIELD_BINDINGS.find(([key]) => key === field);
+  return item ? item[1] : "";
+}
+
+function personaReviewFieldValue(field) {
+  const id = personaReviewFieldId(field);
+  return id ? trimmedValue(id, "") : "";
+}
+
+function markPersonaReviewFieldAutofilled(field) {
+  if (!field) return;
+  personaReviewAutofilledFields.add(field);
+  syncPersonaReviewFieldHighlights();
+}
+
+function clearPersonaReviewFieldAutofilled(field) {
+  if (!field) return;
+  personaReviewAutofilledFields.delete(field);
+  syncPersonaReviewFieldHighlights();
+}
+
+function clearAllPersonaReviewAutofilledFields() {
+  personaReviewAutofilledFields.clear();
+  syncPersonaReviewFieldHighlights();
+}
+
+function syncPersonaReviewFieldHighlights() {
+  PERSONA_REVIEW_FIELD_BINDINGS.forEach(([field, id]) => {
+    const input = el(id);
+    const card = input?.closest(".field-card");
+    if (!card) return;
+    card.classList.toggle("field-card-autofilled", personaReviewAutofilledFields.has(field));
+  });
+}
+
+function syncPersonaReviewAutofillButtons() {
+  document.querySelectorAll("[data-persona-autofill-field]").forEach((node) => {
+    const field = node.getAttribute("data-persona-autofill-field") || "";
+    if (!(node instanceof HTMLButtonElement)) return;
+    const shouldShow = PERSONA_AUTOFILLABLE_FIELDS.has(field) && !personaReviewFieldValue(field);
+    node.classList.toggle("hidden", !shouldShow);
+    node.disabled = Boolean(node.dataset.loading === "true");
+  });
 }
 
 function renderRelationDetails(payload) {

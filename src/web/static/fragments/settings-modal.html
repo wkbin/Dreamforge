@@ -91,138 +91,88 @@
 
         <section class="review-group">
           <div class="review-group-head">
-            <strong>身份与内核</strong>
-            <p>先把人物的站位、气质和真正想守住的东西写准。</p>
+            <strong>关键字段</strong>
+            <p>先收紧最影响聊天味道的人物骨架。剩下的细字段收进二级菜单里慢慢磨。</p>
           </div>
           <div class="mini-grid">
             <label class="field-card">
-              <span>核心身份</span>
+              <div class="field-card-head">
+                <span>核心身份</span>
+                <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="core_identity">AI补全</button>
+              </div>
               <input id="persona-core-identity" type="text" />
             </label>
             <label class="field-card">
-              <span>故事位置</span>
+              <div class="field-card-head">
+                <span>故事位置</span>
+                <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="story_role">AI补全</button>
+              </div>
               <input id="persona-story-role" type="text" />
             </label>
           </div>
           <div class="mini-grid">
             <label class="field-card">
-              <span>身份锚点</span>
+              <div class="field-card-head">
+                <span>身份锚点</span>
+                <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="identity_anchor">AI补全</button>
+              </div>
               <input id="persona-identity-anchor" type="text" />
             </label>
             <label class="field-card">
-              <span>气质底色</span>
+              <div class="field-card-head">
+                <span>气质底色</span>
+                <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="temperament_type">AI补全</button>
+              </div>
               <input id="persona-temperament-type" type="text" />
             </label>
           </div>
           <label class="field-card">
-            <span>灵魂目标</span>
+            <div class="field-card-head">
+              <span>灵魂目标</span>
+              <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="soul_goal">AI补全</button>
+            </div>
             <textarea id="persona-soul-goal" rows="2"></textarea>
           </label>
           <label class="field-card">
-            <span>隐秘渴望</span>
-            <textarea id="persona-hidden-desire" rows="2"></textarea>
-          </label>
-          <div class="mini-grid">
-            <label class="field-card">
-              <span>内在冲突</span>
-              <textarea id="persona-inner-conflict" rows="2"></textarea>
-            </label>
-            <label class="field-card">
-              <span>自我认知</span>
-              <textarea id="persona-self-cognition" rows="2"></textarea>
-            </label>
-          </div>
-          <label class="field-card">
-            <span>私下的一面</span>
-            <textarea id="persona-private-self" rows="2"></textarea>
-          </label>
-          <label class="field-card">
-            <span>核心特质</span>
+            <div class="field-card-head">
+              <span>核心特质</span>
+              <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="core_traits">AI补全</button>
+            </div>
             <textarea id="persona-core-traits" rows="2" placeholder="用；分开"></textarea>
           </label>
-        </section>
-
-        <section class="review-group">
-          <div class="review-group-head">
-            <strong>判断与关系</strong>
-            <p>把人物怎么想、怎么选、会向谁靠近补完整。</p>
-          </div>
           <label class="field-card">
-            <span>思考方式</span>
-            <textarea id="persona-thinking-style" rows="2"></textarea>
-          </label>
-          <label class="field-card">
-            <span>社交模式</span>
-            <textarea id="persona-social-mode" rows="2"></textarea>
-          </label>
-          <label class="field-card">
-            <span>决策规则</span>
-            <textarea id="persona-decision-rules" rows="2" placeholder="用；分开"></textarea>
-          </label>
-          <label class="field-card">
-            <span>回报逻辑</span>
-            <textarea id="persona-reward-logic" rows="2"></textarea>
-          </label>
-          <label class="field-card">
-            <span>重要牵系</span>
+            <div class="field-card-head">
+              <span>重要牵系</span>
+              <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="key_bonds">AI补全</button>
+            </div>
             <textarea id="persona-key-bonds" rows="2" placeholder="用；分开"></textarea>
           </label>
           <label class="field-card">
-            <span>不会做的事</span>
-            <textarea id="persona-forbidden-behaviors" rows="2" placeholder="用；分开"></textarea>
-          </label>
-        </section>
-
-        <section class="review-group">
-          <div class="review-group-head">
-            <strong>语气与对白</strong>
-            <p>这一组最影响聊天味道，口头禅和句式都可以直接改。</p>
-          </div>
-          <label class="field-card">
-            <span>说话方式</span>
+            <div class="field-card-head">
+              <span>说话方式</span>
+              <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="speech_style">AI补全</button>
+            </div>
             <textarea id="persona-speech-style" rows="2"></textarea>
           </label>
-          <div class="mini-grid">
-            <label class="field-card">
-              <span>语句节奏</span>
-              <input id="persona-cadence" type="text" />
-            </label>
-            <label class="field-card">
-              <span>句尾习惯</span>
-              <input id="persona-sentence-endings" type="text" placeholder="用；分开" />
-            </label>
-          </div>
-          <div class="mini-grid">
-            <label class="field-card">
-              <span>起句习惯</span>
-              <input id="persona-sentence-openers" type="text" placeholder="用；分开" />
-            </label>
-            <label class="field-card">
-              <span>口头禅</span>
-              <input id="persona-signature-phrases" type="text" placeholder="用；分开" />
-            </label>
-          </div>
           <label class="field-card">
-            <span>代表句</span>
-            <textarea id="persona-typical-lines" rows="3" placeholder="用；分开"></textarea>
-          </label>
-        </section>
-
-        <section class="review-group">
-          <div class="review-group-head">
-            <strong>情绪与边界</strong>
-            <p>这部分会决定人物在委屈、愤怒、快乐时到底怎么变。</p>
-          </div>
-          <label class="field-card">
-            <span>世界观</span>
+            <div class="field-card-head">
+              <span>世界观</span>
+              <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="worldview">AI补全</button>
+            </div>
             <textarea id="persona-worldview" rows="2"></textarea>
           </label>
           <label class="field-card">
-            <span>信念支点</span>
+            <div class="field-card-head">
+              <span>信念支点</span>
+              <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="belief_anchor">AI补全</button>
+            </div>
             <textarea id="persona-belief-anchor" rows="2"></textarea>
           </label>
           <label class="field-card">
-            <span>道德底线</span>
+            <div class="field-card-head">
+              <span>道德底线</span>
+              <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="moral_bottom_line">AI补全</button>
+            </div>
             <textarea id="persona-moral-bottom-line" rows="2"></textarea>
           </label>
           <label class="field-card">
@@ -233,31 +183,140 @@
             <span>应激反应</span>
             <textarea id="persona-stress-response" rows="2"></textarea>
           </label>
-          <label class="field-card">
-            <span>情绪底模</span>
-            <textarea id="persona-emotion-model" rows="2"></textarea>
-          </label>
-          <div class="mini-grid">
+        </section>
+
+        <details class="review-advanced-shell">
+          <summary class="review-advanced-trigger">
+            <span>继续细调更多字段</span>
+            <small>打开二级菜单，补全和微调全部剩余字段</small>
+          </summary>
+
+          <section class="review-group review-advanced-panel">
+            <div class="review-group-head">
+              <strong>内核细调</strong>
+              <p>这里放更细的心理、判断和外界观感，适合补齐人物的细腻层次。</p>
+            </div>
             <label class="field-card">
-              <span>发怒方式</span>
-              <textarea id="persona-anger-style" rows="2"></textarea>
+              <div class="field-card-head">
+                <span>隐秘渴望</span>
+                <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="hidden_desire">AI补全</button>
+              </div>
+              <textarea id="persona-hidden-desire" rows="2"></textarea>
+            </label>
+            <div class="mini-grid">
+              <label class="field-card">
+                <div class="field-card-head">
+                  <span>内在冲突</span>
+                  <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="inner_conflict">AI补全</button>
+                </div>
+                <textarea id="persona-inner-conflict" rows="2"></textarea>
+              </label>
+              <label class="field-card">
+                <div class="field-card-head">
+                  <span>自我认知</span>
+                  <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="self_cognition">AI补全</button>
+                </div>
+                <textarea id="persona-self-cognition" rows="2"></textarea>
+              </label>
+            </div>
+            <label class="field-card">
+              <div class="field-card-head">
+                <span>私下的一面</span>
+                <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="private_self">AI补全</button>
+              </div>
+              <textarea id="persona-private-self" rows="2"></textarea>
             </label>
             <label class="field-card">
-              <span>开心方式</span>
-              <textarea id="persona-joy-style" rows="2"></textarea>
+              <div class="field-card-head">
+                <span>思考方式</span>
+                <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="thinking_style">AI补全</button>
+              </div>
+              <textarea id="persona-thinking-style" rows="2"></textarea>
             </label>
-          </div>
-          <div class="mini-grid">
+            <label class="field-card">
+              <div class="field-card-head">
+                <span>社交模式</span>
+                <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="social_mode">AI补全</button>
+              </div>
+              <textarea id="persona-social-mode" rows="2"></textarea>
+            </label>
+            <label class="field-card">
+              <span>决策规则</span>
+              <textarea id="persona-decision-rules" rows="2" placeholder="用；分开"></textarea>
+            </label>
+            <label class="field-card">
+              <span>回报逻辑</span>
+              <textarea id="persona-reward-logic" rows="2"></textarea>
+            </label>
+            <label class="field-card">
+              <div class="field-card-head">
+                <span>他人观感</span>
+                <button type="button" class="inline-assist-button hidden" data-persona-autofill-field="others_impression">AI补全</button>
+              </div>
+              <textarea id="persona-others-impression" rows="2"></textarea>
+            </label>
+          </section>
+
+          <section class="review-group review-advanced-panel">
+            <div class="review-group-head">
+              <strong>对白细调</strong>
+              <p>这些字段不一定适合联网补全，但很适合你直接手修出人物口气。</p>
+            </div>
+            <div class="mini-grid">
+              <label class="field-card">
+                <span>语句节奏</span>
+                <input id="persona-cadence" type="text" />
+              </label>
+              <label class="field-card">
+                <span>句尾习惯</span>
+                <input id="persona-sentence-endings" type="text" placeholder="用；分开" />
+              </label>
+            </div>
+            <div class="mini-grid">
+              <label class="field-card">
+                <span>起句习惯</span>
+                <input id="persona-sentence-openers" type="text" placeholder="用；分开" />
+              </label>
+              <label class="field-card">
+                <span>口头禅</span>
+                <input id="persona-signature-phrases" type="text" placeholder="用；分开" />
+              </label>
+            </div>
+            <label class="field-card">
+              <span>代表句</span>
+              <textarea id="persona-typical-lines" rows="3" placeholder="用；分开"></textarea>
+            </label>
+          </section>
+
+          <section class="review-group review-advanced-panel">
+            <div class="review-group-head">
+              <strong>情绪细调</strong>
+              <p>这一层更偏细节表现。没有把握时宁可留空，也别强凹一套设定。</p>
+            </div>
+            <label class="field-card">
+              <span>不会做的事</span>
+              <textarea id="persona-forbidden-behaviors" rows="2" placeholder="用；分开"></textarea>
+            </label>
+            <label class="field-card">
+              <span>情绪底模</span>
+              <textarea id="persona-emotion-model" rows="2"></textarea>
+            </label>
+            <div class="mini-grid">
+              <label class="field-card">
+                <span>发怒方式</span>
+                <textarea id="persona-anger-style" rows="2"></textarea>
+              </label>
+              <label class="field-card">
+                <span>开心方式</span>
+                <textarea id="persona-joy-style" rows="2"></textarea>
+              </label>
+            </div>
             <label class="field-card">
               <span>委屈方式</span>
               <textarea id="persona-grievance-style" rows="2"></textarea>
             </label>
-            <label class="field-card">
-              <span>他人观感</span>
-              <textarea id="persona-others-impression" rows="2"></textarea>
-            </label>
-          </div>
-        </section>
+          </section>
+        </details>
 
         <div class="card-actions">
           <button id="save-persona-review-button" type="submit" class="primary-button">保存校对</button>
@@ -265,6 +324,13 @@
       </form>
 
       <p id="persona-review-status" class="card-note"></p>
+      <details id="persona-review-reference-panel" class="persona-reference-panel hidden">
+        <summary class="persona-reference-trigger">
+          <span>看看这次补全参考了什么</span>
+          <small id="persona-review-reference-summary">网页摘要参考</small>
+        </summary>
+        <div id="persona-review-reference-list" class="persona-reference-list"></div>
+      </details>
     </div>
   </div>
 </div>

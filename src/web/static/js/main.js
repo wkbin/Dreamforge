@@ -249,6 +249,7 @@ async function openPersonaReview() {
   setStatus("persona-review-status", "正在载入人物档案...");
   try {
     renderPersonaReview(await apiJson(`/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`));
+    renderPersonaAutofillReferences(null);
     setStatus("persona-review-status", ""); 
   } catch (error) {
     setStatus("persona-review-status", error.message || "人物档案暂时没有载入。");
@@ -262,9 +263,64 @@ async function handlePersonaCharacterChange() {
   setStatus("persona-review-status", "正在切换人物...");
   try {
     renderPersonaReview(await apiJson(`/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`));
+    renderPersonaAutofillReferences(null);
     setStatus("persona-review-status", "");
   } catch (error) {
     setStatus("persona-review-status", error.message || "人物档案暂时没有载入。");
+  }
+}
+
+function collectPersonaReviewPayload() {
+  return Object.fromEntries(
+    (PERSONA_REVIEW_FIELD_BINDINGS || []).map(([field, id]) => [field, trimmedValue(id, "")])
+  );
+}
+
+async function handlePersonaFieldAutofill(event) {
+  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-persona-autofill-field]") : null;
+  if (!(trigger instanceof HTMLButtonElement) || !currentRunId) return;
+  const character = valueOf("persona-review-character", "");
+  const field = trigger.getAttribute("data-persona-autofill-field") || "";
+  if (!character || !field) {
+    setStatus("persona-review-status", "先选一个人物。");
+    return;
+  }
+  const labelText = trigger.closest(".field-card")?.querySelector(".field-card-head span, span")?.textContent || field;
+  trigger.dataset.loading = "true";
+  trigger.disabled = true;
+  const originalText = trigger.textContent || "AI补全";
+  trigger.textContent = "生成中...";
+  setStatus("persona-review-status", `正在联网补全「${labelText}」...`);
+  try {
+    const payload = await apiJson(
+      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}/suggest-field`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field }),
+      },
+      "人物信息补全失败。"
+    );
+    if (payload?.status === "filled" && payload?.value) {
+      const targetId = personaReviewFieldId(field);
+      if (targetId) {
+        setValue(targetId, payload.value);
+      }
+      markPersonaReviewFieldAutofilled(field);
+      renderPersonaAutofillReferences(payload);
+      setStatus("persona-review-status", payload.message || "已生成补全内容，请记得保存人物校对。");
+    } else {
+      renderPersonaAutofillReferences(payload);
+      setStatus("persona-review-status", payload?.message || payload?.reason || "人物信息补全无法生成。");
+    }
+  } catch (error) {
+    renderPersonaAutofillReferences(null);
+    setStatus("persona-review-status", error.message || "人物信息补全无法生成。");
+  } finally {
+    delete trigger.dataset.loading;
+    trigger.disabled = false;
+    trigger.textContent = originalText;
+    syncPersonaReviewAutofillButtons();
   }
 }
 
@@ -284,44 +340,13 @@ async function handlePersonaReviewSubmit(event) {
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            core_identity: trimmedValue("persona-core-identity", ""),
-            story_role: trimmedValue("persona-story-role", ""),
-            identity_anchor: trimmedValue("persona-identity-anchor", ""),
-            temperament_type: trimmedValue("persona-temperament-type", ""),
-            soul_goal: trimmedValue("persona-soul-goal", ""),
-            hidden_desire: trimmedValue("persona-hidden-desire", ""),
-            inner_conflict: trimmedValue("persona-inner-conflict", ""),
-            self_cognition: trimmedValue("persona-self-cognition", ""),
-            private_self: trimmedValue("persona-private-self", ""),
-            core_traits: trimmedValue("persona-core-traits", ""),
-            speech_style: trimmedValue("persona-speech-style", ""),
-            cadence: trimmedValue("persona-cadence", ""),
-            typical_lines: trimmedValue("persona-typical-lines", ""),
-            signature_phrases: trimmedValue("persona-signature-phrases", ""),
-            sentence_openers: trimmedValue("persona-sentence-openers", ""),
-            sentence_endings: trimmedValue("persona-sentence-endings", ""),
-            social_mode: trimmedValue("persona-social-mode", ""),
-            thinking_style: trimmedValue("persona-thinking-style", ""),
-            decision_rules: trimmedValue("persona-decision-rules", ""),
-            reward_logic: trimmedValue("persona-reward-logic", ""),
-            worldview: trimmedValue("persona-worldview", ""),
-            belief_anchor: trimmedValue("persona-belief-anchor", ""),
-            moral_bottom_line: trimmedValue("persona-moral-bottom-line", ""),
-            restraint_threshold: trimmedValue("persona-restraint-threshold", ""),
-            key_bonds: trimmedValue("persona-key-bonds", ""),
-            forbidden_behaviors: trimmedValue("persona-forbidden-behaviors", ""),
-            stress_response: trimmedValue("persona-stress-response", ""),
-            emotion_model: trimmedValue("persona-emotion-model", ""),
-            anger_style: trimmedValue("persona-anger-style", ""),
-            joy_style: trimmedValue("persona-joy-style", ""),
-            grievance_style: trimmedValue("persona-grievance-style", ""),
-            others_impression: trimmedValue("persona-others-impression", ""),
-          }),
+          body: JSON.stringify(collectPersonaReviewPayload()),
         },
         "保存人物校对失败。"
       )
     );
+    clearAllPersonaReviewAutofilledFields();
+    renderPersonaAutofillReferences(null);
     renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
     setStatus("persona-review-status", "人物校对已经写回这一卷。");
   } catch (error) {
@@ -726,6 +751,17 @@ function bindEvents() {
 
   bind("dialogue-mode", "change", syncModeFields);
   bind("persona-review-character", "change", handlePersonaCharacterChange);
+  el("persona-review-form")?.addEventListener("input", (event) => {
+    const target = event.target;
+    if (target instanceof HTMLElement) {
+      const field = PERSONA_REVIEW_FIELD_BINDINGS.find(([, id]) => id === target.id)?.[0];
+      if (field) {
+        clearPersonaReviewFieldAutofilled(field);
+      }
+    }
+    syncPersonaReviewAutofillButtons();
+  });
+  el("persona-review-form")?.addEventListener("click", handlePersonaFieldAutofill);
   bind("dialogue-mode", "change", updateCharacterPillState);
   bind("dialogue-participants", "input", updateCharacterPillState);
   bind("redistill-characters", "input", updateRedistillPillState);

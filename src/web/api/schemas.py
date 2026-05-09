@@ -80,6 +80,10 @@ class SavePersonaReviewRequest(BaseModel):
     others_impression: str = Field(default="")
 
 
+class SuggestPersonaFieldRequest(BaseModel):
+    field: str = Field(..., min_length=1)
+
+
 class CreateDialogueSessionRequest(BaseModel):
     mode: str = Field(...)
     participants: list[str] = Field(default_factory=list)
