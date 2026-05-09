@@ -36,7 +36,16 @@
   .experience-shell.dialogue-layout #main-shell-root > .main-shell {
     min-height: auto;
     height: auto;
+    max-height: none;
     grid-template-rows: auto auto;
+    overflow: visible;
+  }
+
+  .experience-shell.dialogue-layout .chat-shell,
+  .experience-shell.dialogue-layout .chat-detail,
+  .experience-shell.dialogue-layout .chat-content {
+    height: auto;
+    overflow: visible;
   }
 
   .library-rail {
