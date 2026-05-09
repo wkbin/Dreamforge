@@ -78,6 +78,8 @@ class SavePersonaReviewRequest(BaseModel):
     joy_style: str = Field(default="")
     grievance_style: str = Field(default="")
     others_impression: str = Field(default="")
+    review_source: str = Field(default="")
+    review_note: str = Field(default="")
 
 
 class SuggestPersonaFieldRequest(BaseModel):

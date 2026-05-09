@@ -56,6 +56,11 @@ const CHARACTER_OVERVIEW_FIELD_LABELS = {
 };
 
 const characterOverviewExpandedGroups = new Set();
+const characterOverviewAutofillHistory = new Map();
+
+function getCurrentRunEvents() {
+  return Array.isArray(currentRun?.events) ? currentRun.events : [];
+}
 
 function renderRunSummary(run) {
   setValue("redistill-characters", joinCharacters(getRunCharacterNames(run)));
@@ -583,6 +588,7 @@ function renderCharacterOverview(payload) {
 
   renderCharacterOverviewHealthMetrics(snapshot);
   renderCharacterOverviewEvidenceMetrics(evidenceSnapshot);
+  renderCharacterOverviewTrustSignals(payload, snapshot, evidenceSnapshot);
   renderCharacterOverviewKeyFields(fields);
   renderCharacterOverviewVoiceSummary(fields);
   renderCharacterOverviewRelationSummary(fields);
@@ -711,13 +717,239 @@ function renderCharacterOverviewEvidenceMetrics(snapshot) {
   });
 }
 
+function characterOverviewHistoryKey(character) {
+  return `${currentRunId || ""}::${String(character || "").trim()}`;
+}
+
+function getCharacterOverviewAutofillItems(character) {
+  const historyItems = characterOverviewAutofillHistory.get(characterOverviewHistoryKey(character)) || [];
+  const eventItems = getCurrentRunEvents()
+    .filter((item) => {
+      const eventCharacter = String(item?.character || "").trim();
+      const eventStage = String(item?.stage || "").trim();
+      const reviewSource = String(item?.review_source || "").trim();
+      return eventCharacter === String(character || "").trim() && eventStage === "persona_review_saved" && reviewSource === "character_overview_autofill";
+    })
+    .slice()
+    .reverse()
+    .map((item) => {
+      const changedFields = Array.isArray(item?.changed_fields) ? item.changed_fields : [];
+      const firstField = String(changedFields[0] || "").trim();
+      const reviewNote = String(item?.review_note || "").trim();
+      return {
+        field: firstField,
+        label: CHARACTER_OVERVIEW_FIELD_LABELS[firstField] || reviewNote || firstField || "最近补全",
+        value: "",
+        message: String(item?.message || "").trim(),
+        sourceMode: reviewNote,
+        timestamp: String(item?.timestamp || "").trim(),
+      };
+    });
+  const merged = [];
+  const seen = new Set();
+  [...historyItems, ...eventItems].forEach((item) => {
+    const key = `${String(item?.field || "").trim()}::${String(item?.timestamp || "").trim()}::${String(item?.sourceMode || "").trim()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(item);
+  });
+  return merged
+    .sort((left, right) => String(right?.timestamp || "").localeCompare(String(left?.timestamp || "")))
+    .slice(0, 6);
+}
+
+function rememberCharacterOverviewAutofill(character, payload) {
+  const field = String(payload?.field || "").trim();
+  if (!character || !field) return;
+  const key = characterOverviewHistoryKey(character);
+  const items = getCharacterOverviewAutofillItems(character).filter((item) => item.field !== field);
+  items.unshift({
+    field,
+    label: CHARACTER_OVERVIEW_FIELD_LABELS[field] || String(payload?.label || field).trim() || field,
+    value: String(payload?.value || "").trim(),
+    message: String(payload?.message || "").trim(),
+    sourceMode: String(payload?.source_mode || "").trim(),
+    timestamp: new Date().toISOString(),
+  });
+  characterOverviewAutofillHistory.set(key, items.slice(0, 6));
+}
+
+function buildCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSnapshot) {
+  const character = String(payload?.character || "").trim();
+  const autofillItems = getCharacterOverviewAutofillItems(character);
+  const lastAutofill = autofillItems[0] || null;
+  const reviewEvent = findLatestRunEventForCharacter(character, "persona_review_saved");
+  const redistillSignal = buildCharacterOverviewRedistillSignal(character);
+  const editableProfilePath = String(payload?.editable_profile_path || "").trim();
+  const generatedProfilePath = String(payload?.generated_profile_path || "").trim();
+  const sourceLabel = editableProfilePath ? "校对稿" : generatedProfilePath ? "蒸馏稿" : "来源待确认";
+  const sourceCopy = editableProfilePath
+    ? "已经存在可编辑人物稿，说明这份档案至少被写回过一次；字段仍可继续逐项复核。"
+    : generatedProfilePath
+      ? "当前主要来自自动蒸馏生成稿；关键字段稳了再进入对话会更可靠。"
+      : "暂时没有拿到明确的人物稿路径，建议先打开原档或重新载入角色页。";
+  return [
+    {
+      label: "字段来源",
+      value: sourceLabel,
+      copy: sourceCopy,
+      tone: editableProfilePath ? "stable" : "neutral",
+    },
+    {
+      label: "最近 AI 补全",
+      value: lastAutofill ? lastAutofill.label : "暂无本次补全",
+      copy: lastAutofill
+        ? `${lastAutofill.label} 刚由 ${formatCharacterOverviewAutofillSource(lastAutofill.sourceMode)}写回，建议再用对话测试口气。`
+        : healthSnapshot.weakKeyCount > 0
+          ? "关键字段里还有薄处，可以点字段旁的 AI补全 先补一版。"
+          : "本次打开角色页后还没有使用 AI补全。",
+      tone: lastAutofill ? "stable" : healthSnapshot.weakKeyCount > 0 ? "warning" : "neutral",
+    },
+    {
+      label: "最近增量蒸馏",
+      value: redistillSignal.value,
+      copy: redistillSignal.copy,
+      tone: redistillSignal.tone,
+    },
+    {
+      label: "手动校对",
+      value: reviewEvent && String(reviewEvent.review_source || "").trim() !== "character_overview_autofill" ? "已有保存痕迹" : editableProfilePath ? "有可编辑稿" : "未见保存",
+      copy: reviewEvent
+        ? buildCharacterOverviewReviewCopy(reviewEvent)
+        : editableProfilePath
+          ? "这份角色已经有可编辑稿，但当前运行记录里没有找到最近保存事件。"
+          : "还没有看到人工校对痕迹，适合先从薄字段开始检查。",
+      tone: reviewEvent || editableProfilePath ? "stable" : "warning",
+    },
+    {
+      label: "证据提醒",
+      value: evidenceSnapshot.evidenceLabel,
+      copy: evidenceSnapshot.evidenceCopy,
+      tone: evidenceSnapshot.evidenceLabel === "证据偏薄" ? "weak" : "neutral",
+    },
+  ];
+}
+
+function renderCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSnapshot) {
+  const root = el("character-overview-trust-signals");
+  if (!root) return;
+  root.innerHTML = "";
+  buildCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSnapshot).forEach((item) => {
+    const card = document.createElement("article");
+    card.className = `character-overview-trust-card is-${item.tone || "neutral"}`;
+    card.innerHTML = `
+      <span>${escapeHtml(item.label)}</span>
+      <strong>${escapeHtml(item.value)}</strong>
+      <small>${escapeHtml(item.copy)}</small>
+    `;
+    root.appendChild(card);
+  });
+}
+
+function findLatestRunEventForCharacter(character, stage = "") {
+  const name = String(character || "").trim();
+  const expectedStage = String(stage || "").trim();
+  const events = getCurrentRunEvents();
+  return events
+    .slice()
+    .reverse()
+    .find((item) => {
+      const eventCharacter = String(item?.character || "").trim();
+      const eventStage = String(item?.stage || "").trim();
+      return (!name || eventCharacter === name) && (!expectedStage || eventStage === expectedStage);
+    });
+}
+
+function buildCharacterOverviewReviewCopy(reviewEvent) {
+  const timestampText = formatWeakTime(reviewEvent?.timestamp || "") || "最近";
+  const reviewSource = String(reviewEvent?.review_source || "").trim();
+  const reviewNote = String(reviewEvent?.review_note || "").trim();
+  const changedFields = Array.isArray(reviewEvent?.changed_fields) ? reviewEvent.changed_fields.filter(Boolean) : [];
+  const changedLabels = changedFields.map((field) => CHARACTER_OVERVIEW_FIELD_LABELS[field] || field).slice(0, 3);
+  const changedCopy = changedLabels.length ? `涉及 ${changedLabels.join("、")}。` : "";
+  if (reviewSource === "character_overview_autofill") {
+    const sourceLabel = formatCharacterOverviewAutofillSource(reviewNote);
+    return `${timestampText}通过 ${sourceLabel} 自动写回过补全；${changedCopy || "仍建议人工扫一眼关键字段。"}`
+      .replace("；", "，")
+      .trim();
+  }
+  return `${timestampText}保存过人物校对。${changedCopy}`.trim();
+}
+
+function buildCharacterOverviewRedistillSignal(character) {
+  const name = String(character || "").trim();
+  const redistill = currentRun?.redistill || {};
+  const existing = new Set(Array.isArray(redistill.existing_characters) ? redistill.existing_characters : []);
+  const newcomers = new Set(Array.isArray(redistill.new_characters) ? redistill.new_characters : []);
+  const currentSource = getCurrentNovelSource(currentRun);
+  const sourceName = String(redistill.source_name || currentSource?.source_name || "").trim();
+  if (existing.has(name)) {
+    return {
+      value: "本轮做过增量",
+      copy: `${sourceName ? `最近沿着「${sourceName}」` : "最近"}继续更新过这个角色，适合检查新片段有没有进入关键字段。`,
+      tone: "stable",
+    };
+  }
+  if (newcomers.has(name)) {
+    return {
+      value: "本轮首次蒸馏",
+      copy: `${sourceName ? `来自「${sourceName}」` : "来自本轮正文"}的新角色，建议先校对核心身份、目标和说话方式。`,
+      tone: "warning",
+    };
+  }
+  if (currentRun?.status === "running") {
+    return {
+      value: "仍在整理",
+      copy: "这一轮还没结束，增量痕迹可能稍后才会落到角色页。",
+      tone: "neutral",
+    };
+  }
+  return {
+    value: "暂无近期增量",
+    copy: "当前没有看到这位角色在最近一轮增量名单里；如果证据偏薄，可以换入更贴近他的书段继续蒸馏。",
+    tone: "neutral",
+  };
+}
+
+function formatCharacterOverviewAutofillSource(sourceMode) {
+  if (sourceMode === "web_fallback") {
+    return "联网参考";
+  }
+  if (sourceMode === "model_knowledge") {
+    return "模型知识";
+  }
+  return "AI";
+}
+
+function buildCharacterOverviewFieldTags(field, value, evidenceSnapshot) {
+  const text = String(value || "").trim();
+  const tags = [];
+  const recentAutofill = getCharacterOverviewAutofillItems(currentCharacterOverview?.character).find((item) => item.field === field);
+  if (recentAutofill) {
+    tags.push({ label: "AI补全", tone: "stable" });
+  }
+  if (!text) {
+    tags.push({ label: "待补", tone: "weak" });
+  } else if (isCharacterOverviewFieldWeak(field, text)) {
+    tags.push({ label: "需复核", tone: "warning" });
+  } else if (!recentAutofill) {
+    tags.push({ label: currentCharacterOverview?.editable_profile_path ? "校对稿" : "蒸馏稿", tone: "neutral" });
+  }
+  if (evidenceSnapshot?.evidenceLabel === "证据偏薄" && ["core_identity", "story_role", "soul_goal", "key_bonds"].includes(field)) {
+    tags.push({ label: "证据薄", tone: "weak" });
+  }
+  return tags.slice(0, 3);
+}
+
 function renderCharacterOverviewKeyFields(fields) {
   const root = el("character-overview-key-fields");
   if (!root) return;
   root.innerHTML = "";
+  const evidenceSnapshot = buildCharacterOverviewEvidenceSnapshot(currentCharacterOverview?.character || "");
   CHARACTER_OVERVIEW_KEY_FIELDS.forEach(([field, label]) => {
     const value = String(fields[field] || "").trim();
     const weak = isCharacterOverviewFieldWeak(field, value);
+    const tags = buildCharacterOverviewFieldTags(field, value, evidenceSnapshot);
     const card = document.createElement("article");
     card.className = `character-overview-field-card${weak ? " is-missing" : ""}`;
     const canAutofill = weak;
@@ -725,6 +957,7 @@ function renderCharacterOverviewKeyFields(fields) {
       <div class="character-overview-field-head">
         <span>${label}</span>
         <div class="character-overview-field-actions">
+          ${tags.map((tag) => `<span class="character-overview-field-tag is-${tag.tone}">${tag.label}</span>`).join("")}
           ${canAutofill ? `<button type="button" class="character-overview-mini-button" data-character-overview-field="${field}">AI补全</button>` : ""}
         </div>
       </div>
@@ -876,10 +1109,15 @@ async function handleCharacterOverviewFieldAutofill(event) {
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextFields),
+        body: JSON.stringify({
+          ...nextFields,
+          review_source: "character_overview_autofill",
+          review_note: String(payload?.source_mode || "").trim(),
+        }),
       },
       "保存人物校对失败。"
     );
+    rememberCharacterOverviewAutofill(character, payload);
     currentCharacterOverview = saved;
     renderCharacterOverview(saved);
     renderRun(await apiJson(`/api/web/runs/${currentRunId}`));

@@ -717,6 +717,57 @@
   font-size: 0.68rem;
 }
 
+.character-overview-trust-signals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+}
+
+.character-overview-trust-card {
+  display: grid;
+  gap: 0.32rem;
+  padding: 0.9rem 0.95rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(170, 146, 127, 0.1);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.character-overview-trust-card.is-stable {
+  border-color: rgba(134, 155, 103, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 238, 0.82));
+}
+
+.character-overview-trust-card.is-warning {
+  border-color: rgba(184, 132, 113, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(250, 240, 233, 0.82));
+}
+
+.character-overview-trust-card.is-weak {
+  border-color: rgba(187, 126, 114, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 235, 233, 0.84));
+}
+
+.character-overview-trust-card span,
+.character-overview-trust-card small {
+  color: var(--ink-faint);
+  line-height: 1.55;
+}
+
+.character-overview-trust-card span {
+  font-size: 0.7rem;
+}
+
+.character-overview-trust-card strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.character-overview-trust-card small {
+  font-size: 0.68rem;
+}
+
 .character-overview-grid {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
@@ -775,6 +826,39 @@
   align-items: center;
   gap: 0.45rem;
   flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.character-overview-field-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.45rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(170, 146, 127, 0.12);
+  color: var(--ink-faint);
+  font-size: 0.64rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.character-overview-field-tag.is-stable {
+  border-color: rgba(134, 155, 103, 0.16);
+  background: rgba(244, 247, 238, 0.9);
+  color: #6f7f55;
+}
+
+.character-overview-field-tag.is-warning {
+  border-color: rgba(184, 132, 113, 0.16);
+  background: rgba(250, 240, 233, 0.9);
+  color: #9d684f;
+}
+
+.character-overview-field-tag.is-weak {
+  border-color: rgba(187, 126, 114, 0.18);
+  background: rgba(248, 235, 233, 0.92);
+  color: #a86456;
 }
 
 .character-overview-mini-button {
