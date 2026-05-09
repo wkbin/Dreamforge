@@ -75,7 +75,7 @@ class SavePersonaReviewRequest(BaseModel):
 
 
 class CreateDialogueSessionRequest(BaseModel):
-    mode: str = Field(..., pattern="^(act|insert|observe)$")
+    mode: str = Field(...)
     participants: list[str] = Field(default_factory=list)
     controlled_character: str = Field(default="")
     self_profile: dict[str, str] = Field(default_factory=dict)

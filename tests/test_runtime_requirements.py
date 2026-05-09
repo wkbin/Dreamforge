@@ -12,6 +12,8 @@ class RuntimeRequirementsTests(unittest.TestCase):
 
         self.assertIsNone(re.search(r"(?im)^\s*ebooklib(?:\[.*\])?\s*(?:[<>=!~].*)?$", requirements))
         self.assertIn("Optional input support", requirements)
+        self.assertRegex(requirements, r"(?im)^\s*fastapi>=0\.99\.0,<0\.100\.0\s*$")
+        self.assertRegex(requirements, r"(?im)^\s*pydantic>=1\.10\.0,<2\.0\.0\s*$")
 
 
 if __name__ == "__main__":

@@ -13,5 +13,6 @@ jieba>=0.42.1
 # Install ebooklib manually only when you need direct .epub import support.
 
 # Web UI runtime
-fastapi>=0.104.0
+fastapi>=0.99.0,<0.100.0
+pydantic>=1.10.0,<2.0.0
 uvicorn>=0.24.0

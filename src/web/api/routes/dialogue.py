@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from src.web.api.compat import model_to_dict
 from src.web.api.deps import get_run_service
 from src.web.api.schemas import (
     CreateDialogueSessionRequest,
@@ -125,7 +126,7 @@ def ingest_dialogue_turn(
         return run_service.ingest_dialogue_turn(
             run_id,
             session_id=session_id,
-            responses=[item.model_dump() for item in payload.responses],
+            responses=[model_to_dict(item) for item in payload.responses],
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Session not found.") from exc

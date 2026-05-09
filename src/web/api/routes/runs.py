@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
+from src.web.api.compat import model_to_dict
 from src.web.api.deps import get_run_service
 from src.web.api.schemas import (
     CreateRunRequest,
@@ -125,7 +126,7 @@ def save_persona_review(
     run_service: WebRunService = Depends(get_run_service),
 ) -> dict[str, Any]:
     try:
-        return run_service.save_persona_review(run_id, character, payload.model_dump())
+        return run_service.save_persona_review(run_id, character, model_to_dict(payload))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Character not found.") from exc
     except ValueError as exc:
