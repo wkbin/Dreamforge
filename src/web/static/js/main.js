@@ -431,12 +431,21 @@ async function applyQuickReply(value) {
   await handleSendTurn(message);
 }
 
+function coerceMessageOverride(value) {
+  if (value && typeof value === "object") {
+    if (typeof value.preventDefault === "function") value.preventDefault();
+    if (typeof value.stopPropagation === "function") value.stopPropagation();
+    return "";
+  }
+  return String(value || "");
+}
+
 async function handleSendTurn(messageOverride = "") {
   if (!currentRunId || !currentDialogueSessionId) {
     setComposerWaiting(false, "先进入这一幕，再把话递出去。");
     return;
   }
-  const message = String(messageOverride || "").trim() || trimmedValue("dialogue-message", "");
+  const message = coerceMessageOverride(messageOverride).trim() || trimmedValue("dialogue-message", "");
   if (!message) {
     setComposerWaiting(false, "先写一句你想让他们听见的话。");
     return;
@@ -475,7 +484,10 @@ async function handleSendTurn(messageOverride = "") {
   }
 }
 
-async function handleSuggestTurn() {
+async function handleSuggestTurn(event) {
+  if (event && typeof event.preventDefault === "function") {
+    event.preventDefault();
+  }
   console.log("[dialogue suggest] click", {
     runId: currentRunId,
     sessionId: currentDialogueSessionId,
