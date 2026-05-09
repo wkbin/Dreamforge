@@ -1,5 +1,5 @@
 (() => {
-  const version = "20260509152722";
+  const version = "20260509181433";
   window.__ZAOMENG_WEB_UI_VERSION__ = version;
   const rootFragments = [
     { id: "header-root", url: `/web/fragments/header.html?v=${version}` },

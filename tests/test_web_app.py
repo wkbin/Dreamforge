@@ -2243,6 +2243,48 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertIn("贾母", saved["fields"]["key_bonds"])
             self.assertIn("冷意", saved["fields"]["anger_style"])
 
+    def test_persona_review_save_records_review_event_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            service.ingest_character_result(
+                payload["run_id"],
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    "- name: 林黛玉\n- novel_id: hongloumeng\n- core_identity: 贾府外来才女\n- speech_style: 清冷带刺\n".encode("utf-8")
+                ).decode("ascii"),
+            )
+
+            service.save_persona_review(
+                payload["run_id"],
+                "林黛玉",
+                {
+                    "core_identity": "自尊极重的外来才女",
+                    "speech_style": "轻冷含刺，真心一动就更薄更快。",
+                    "review_source": "character_overview_autofill",
+                    "review_note": "model_knowledge",
+                },
+            )
+
+            run = service.get_run(payload["run_id"])
+            review_event = next(
+                item for item in reversed(run["events"]) if item.get("stage") == "persona_review_saved" and item.get("character") == "林黛玉"
+            )
+            self.assertEqual(review_event["review_source"], "character_overview_autofill")
+            self.assertEqual(review_event["review_note"], "model_knowledge")
+            self.assertEqual(review_event["message"], "林黛玉 的人物补全已写回")
+            self.assertEqual(review_event["changed_fields"], ["core_identity", "speech_style"])
+
     def test_persona_field_autofill_uses_web_references_and_does_not_force_save(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
@@ -2687,6 +2729,8 @@ class WebAppRouteTests(unittest.TestCase):
                     "signature_phrases": "也罢；你又来哄我",
                     "key_bonds": "贾宝玉；紫鹃；贾母",
                     "anger_style": "先收住声气，再把冷意压进话里。",
+                    "review_source": "character_overview_autofill",
+                    "review_note": "web_fallback",
                 },
             )
 
@@ -2695,6 +2739,12 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertIn("真心", fields["identity_anchor"])
             self.assertIn("贾母", fields["key_bonds"])
             self.assertIn("冷意", fields["anger_style"])
+            run_payload = service.get_run(run["run_id"])
+            review_event = next(
+                item for item in reversed(run_payload["events"]) if item.get("stage") == "persona_review_saved" and item.get("character") == "林黛玉"
+            )
+            self.assertEqual(review_event["review_source"], "character_overview_autofill")
+            self.assertEqual(review_event["review_note"], "web_fallback")
 
     def test_persona_field_autofill_route_returns_generated_value(self):
         with tempfile.TemporaryDirectory() as tmp:

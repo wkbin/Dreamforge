@@ -1,18 +1,1272 @@
+const CHARACTER_OVERVIEW_KEY_FIELDS = [
+  ["core_identity", "核心身份"],
+  ["story_role", "故事位置"],
+  ["identity_anchor", "身份锚点"],
+  ["temperament_type", "气质底色"],
+  ["soul_goal", "灵魂目标"],
+  ["core_traits", "核心特质"],
+  ["key_bonds", "重要牵系"],
+  ["speech_style", "说话方式"],
+  ["worldview", "世界观"],
+  ["belief_anchor", "信念支点"],
+  ["moral_bottom_line", "道德底线"],
+  ["restraint_threshold", "失控阈值"],
+  ["stress_response", "应激反应"],
+];
+
+const CHARACTER_OVERVIEW_ADVANCED_GROUPS = [
+  ["内核细调", ["hidden_desire", "inner_conflict", "self_cognition", "private_self", "social_mode", "thinking_style", "decision_rules", "reward_logic", "others_impression"]],
+  ["对白细调", ["cadence", "typical_lines", "signature_phrases", "sentence_openers", "sentence_endings"]],
+  ["情绪细调", ["forbidden_behaviors", "emotion_model", "anger_style", "joy_style", "grievance_style"]],
+];
+
+const CHARACTER_OVERVIEW_FIELD_LABELS = {
+  core_identity: "核心身份",
+  story_role: "故事位置",
+  identity_anchor: "身份锚点",
+  temperament_type: "气质底色",
+  soul_goal: "灵魂目标",
+  hidden_desire: "隐秘渴望",
+  inner_conflict: "内在冲突",
+  self_cognition: "自我认知",
+  private_self: "私下的一面",
+  speech_style: "说话方式",
+  cadence: "语句节奏",
+  typical_lines: "代表句",
+  signature_phrases: "口头禅",
+  sentence_openers: "起句习惯",
+  sentence_endings: "句尾习惯",
+  social_mode: "社交模式",
+  thinking_style: "思考方式",
+  decision_rules: "决策规则",
+  reward_logic: "回报逻辑",
+  worldview: "世界观",
+  belief_anchor: "信念支点",
+  moral_bottom_line: "道德底线",
+  restraint_threshold: "失控阈值",
+  core_traits: "核心特质",
+  key_bonds: "重要牵系",
+  forbidden_behaviors: "不会做的事",
+  stress_response: "应激反应",
+  emotion_model: "情绪底模",
+  anger_style: "发怒方式",
+  joy_style: "开心方式",
+  grievance_style: "委屈方式",
+  others_impression: "他人观感",
+};
+
+const characterOverviewExpandedGroups = new Set();
+const characterOverviewAutofillHistory = new Map();
+
+function getCurrentRunEvents() {
+  return Array.isArray(currentRun?.events) ? currentRun.events : [];
+}
+
 function renderRunSummary(run) {
   setValue("redistill-characters", joinCharacters(getRunCharacterNames(run)));
   setText("redistill-status", run.redistill?.summary || "", "");
   setText("run-novel", runNovelTitle(run));
   setText("run-characters", joinCharacters(getRunCharacterNames(run) || run.locked_characters || []));
   setText("run-summary", humanizeSummary(run.summary?.status_text));
+  setText("run-progress-latest", formatWeakTime(run.updated_at || "") || "刚刚", "");
   const elapsedText = String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim();
   const progressCopy = String(run.progress?.message || "").trim() || "人物与关系会依次浮现。";
   const enrichedCopy =
     elapsedText && run.summary?.status_text === "workflow_complete" ? `${progressCopy} · 本次用时 ${elapsedText}` : progressCopy;
   setText("progress-copy", enrichedCopy, "");
+  setText("work-overview-next-step", buildWorkOverviewNextStep(run), "");
+  setText("run-progress-review", buildWorkReviewStatus(run), "");
+  setText("run-progress-graph", buildWorkGraphStatus(run), "");
+  renderWorkSummaryNarrative(run);
   renderSourceHistory(run);
   renderRedistillPlan(run);
   renderQualitySnapshot(run);
+  renderCharacterReadiness(run);
+  renderWorkPriorityReview(run);
+  renderWorkGraphSummary(run);
+  renderWorkSessionPreview(run);
   syncRedistillPreview();
+}
+
+function renderWorkSummaryNarrative(run) {
+  setText("work-summary-line", buildWorkSummaryLine(run), "");
+  setText("work-summary-bottleneck", buildWorkSummaryBottleneck(run), "");
+  renderWorkSummaryEvents(run);
+  renderWorkRecommendedAction(run);
+}
+
+function buildWorkSummaryLine(run) {
+  if (!run) {
+    return "先放入一本书，这里才会开始替你归纳整卷状态。";
+  }
+  const title = runNovelTitle(run);
+  const characterCount = getRunCharacterNames(run).length;
+  const weakCount = countWeakCharacters(run);
+  if (run.status === "running") {
+    return `《${title}》还在整理中，目前已经请出了 ${characterCount || 0} 位角色。`;
+  }
+  if (run.status === "failed") {
+    return `《${title}》这一轮停在半途，但已落下的角色和资料仍然能继续接着用。`;
+  }
+  if (run.status === "stopped") {
+    return `《${title}》这轮已经收住，现在适合决定是继续蒸馏还是先校对人物。`;
+  }
+  if (!characterCount) {
+    return `《${title}》还没有稳定的人物包，先把角色请出来，这页才会真正亮起来。`;
+  }
+  if (weakCount > 0) {
+    return `《${title}》的人物骨架已经立住一部分，但还有 ${weakCount} 位角色值得优先补稳。`;
+  }
+  if (!run?.artifact_index?.relation_graph?.relations_file) {
+    return `《${title}》的人物已经基本站稳，关系图谱还没完全落下，但不影响先开聊。`;
+  }
+  return `《${title}》这卷已经形成比较完整的工作面，可以校对、看关系，也可以直接入场。`;
+}
+
+function buildWorkSummaryBottleneck(run) {
+  if (!run) {
+    return "当前还没有工作对象。";
+  }
+  if (run.status === "running") {
+    return String(run.progress?.message || "").trim() || "当前瓶颈还在模型整理进度本身，先盯住这一轮往哪里走。";
+  }
+  if (run.status === "failed") {
+    return "当前瓶颈是这一轮中断；最稳的接法是继续蒸馏，而不是从零重来。";
+  }
+  const priority = buildWorkPriorityReviewItems(run)[0];
+  if (priority?.hasEvidenceGap) {
+    return `当前最卡的是「${priority.name}」证据偏薄，建议换入更贴近他的正文片段做增量蒸馏。`;
+  }
+  if (priority?.weakCount > 0) {
+    return `当前最卡的是「${priority.name}」还有 ${priority.weakCount} 处关键字段偏薄，先补这个角色最划算。`;
+  }
+  if (!run?.artifact_index?.relation_graph?.relations_file) {
+    return "当前瓶颈已经不在人物，而在关系图谱尚未落成；不过这不阻塞聊天与继续校对。";
+  }
+  return "当前没有明显卡点，这卷已经可以把重点从整理切到体验。";
+}
+
+function renderWorkSummaryEvents(run) {
+  const root = el("work-summary-events");
+  if (!root) return;
+  root.innerHTML = "";
+  const events = Array.isArray(run?.events) ? run.events.slice(-3).reverse() : [];
+  events.forEach((item) => {
+    const stageLabel = humanizeRunEventStage(String(item?.stage || "").trim());
+    const row = document.createElement("div");
+    row.className = "work-summary-event";
+    row.innerHTML = `
+      <strong>${escapeHtml(stageLabel)}</strong>
+      <p>${String(item.message || "").trim() || "这一轮有新的变化落在这里。"}</p>
+    `;
+    root.appendChild(row);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("work-summary-events-empty", root.childElementCount === 0);
+}
+
+function buildWorkRecommendedAction(run) {
+  const priority = buildWorkPriorityReviewItems(run)[0];
+  if (!run) {
+    return {
+      buttonLabel: "开始蒸馏",
+      title: "先放入一本书",
+      copy: "没有工作对象时，最值得做的是先新建一卷，把故事请上书架。",
+      action: "new_run",
+      payload: "",
+    };
+  }
+  if (run.status === "running") {
+    return {
+      buttonLabel: "查看进度",
+      title: "先盯住当前整理进度",
+      copy: "这一轮还在跑，先不用切太多动作；等角色再落下几位，判断会更稳。",
+      action: "focus_timeline",
+      payload: "",
+    };
+  }
+  if (run.status === "failed" || run.status === "stopped") {
+    return {
+      buttonLabel: "继续蒸馏",
+      title: "把这一轮先接上",
+      copy: "当前最值钱的是沿着这卷继续往下走，而不是把已落成的人物重新来一遍。",
+      action: "open_redistill",
+      payload: "",
+    };
+  }
+  if (priority?.hasEvidenceGap) {
+    return {
+      buttonLabel: "补这位角色",
+      title: `先给「${priority.name}」补正文证据`,
+      copy: "这个角色不是简单字段缺字，而是素材本身偏薄；优先增量蒸馏最有效。",
+      action: "redistill_character",
+      payload: priority.name,
+    };
+  }
+  if (priority?.weakCount > 0) {
+    return {
+      buttonLabel: "打开角色页",
+      title: `先补稳「${priority.name}」`,
+      copy: "当前最值钱的动作，是把最薄的角色先补稳；这样整卷对话信任感会涨得最快。",
+      action: "open_character",
+      payload: priority.name,
+    };
+  }
+  if (!run?.artifact_index?.relation_graph?.relations_file) {
+    return {
+      buttonLabel: "开始聊天",
+      title: "人物已经够用，可以先入场",
+      copy: "关系图还没完全落下，但已经不影响体验；可以先开一局，回头再补图谱。",
+      action: "start_chat",
+      payload: "",
+    };
+  }
+  return {
+    buttonLabel: "查看关系",
+    title: "先看整卷关系",
+    copy: "人物和图谱都比较稳了，下一步最值得的是看全局关系，再决定从谁入场。",
+    action: "open_relations",
+    payload: "",
+  };
+}
+
+function renderWorkRecommendedAction(run) {
+  const recommendation = buildWorkRecommendedAction(run);
+  setText("work-summary-recommend-title", recommendation.title, "");
+  setText("work-summary-recommend-copy", recommendation.copy, "");
+  const button = el("work-summary-recommend-button");
+  if (!button) return;
+  button.textContent = recommendation.buttonLabel;
+  button.dataset.workRecommendedAction = recommendation.action || "";
+  button.dataset.workRecommendedPayload = recommendation.payload || "";
+  button.onclick = () => {
+    handleWorkRecommendedAction(button.dataset.workRecommendedAction || "", button.dataset.workRecommendedPayload || "");
+  };
+}
+
+function handleWorkRecommendedAction(action, payload = "") {
+  if (action === "new_run") {
+    startNewRunFlow();
+    return;
+  }
+  if (action === "focus_timeline") {
+    el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
+  if (action === "open_redistill") {
+    redistillPanelOpen = true;
+    renderBookshelfDetail(currentRun);
+    updateWorkflowState();
+    el("redistill-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    el("redistill-characters")?.focus();
+    return;
+  }
+  if (action === "redistill_character") {
+    openIncrementalDistillForCharacter(payload);
+    return;
+  }
+  if (action === "open_character") {
+    openCharacterOverview(payload).catch((error) => {
+      setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
+    });
+    return;
+  }
+  if (action === "start_chat") {
+    openNewDialogueSession().catch((error) => {
+      setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
+    });
+    return;
+  }
+  if (action === "open_relations") {
+    openRelationDetails().catch((error) => {
+      setStatus("bookshelf-status", error.message || "关系明细暂时没有载入。");
+    });
+  }
+}
+
+function buildWorkOverviewNextStep(run) {
+  if (!run) {
+    return "先放入一本书，人物和关系才会在这里长出来。";
+  }
+  if (run.status === "running") {
+    return "先盯住这一轮的进度，等人物落定后再决定要不要继续补人或开聊。";
+  }
+  if (run.status === "failed") {
+    return "这一轮停在半途，最值得做的是继续蒸馏，把人物和关系重新接上。";
+  }
+  if (run.status === "stopped") {
+    return "这卷已经收住，下一步可以继续蒸馏，也可以先回头校对已落成的人物。";
+  }
+  if (!getRunCharacterNames(run).length) {
+    return "这一卷还没有稳定的人物包，先继续蒸馏，把角色请出来。";
+  }
+  if (!run?.artifact_index?.relation_graph?.relations_file) {
+    return "人物已经开始成形，接下来可以先校对角色，关系图谱补出来后再看全局。";
+  }
+  return "这卷已经可以继续校对人物、查看关系，或者直接进入其中一幕。";
+}
+
+function buildWorkReviewStatus(run) {
+  const weakCount = countWeakCharacters(run);
+  if (!getRunCharacterNames(run).length) {
+    return "还没有人物";
+  }
+  if (weakCount <= 0) {
+    return "关键字段已齐";
+  }
+  return `还有 ${weakCount} 位待补`;
+}
+
+function buildWorkGraphStatus(run) {
+  if (run?.artifact_index?.relation_graph?.relations_file) {
+    return "已可查看";
+  }
+  if (run?.status === "running") {
+    return "正在织就";
+  }
+  return "暂未落成";
+}
+
+function countWeakCharacters(run) {
+  return buildCharacterReadinessItems(run).filter((item) => item.weakCount > 0 || item.statusTone !== "stable").length;
+}
+
+function buildCharacterReadinessItems(run) {
+  const qualityMissing = new Set(Array.isArray(run?.quality?.excerpt_focus?.missing_characters) ? run.quality.excerpt_focus.missing_characters : []);
+  const cards = Array.isArray(run?.artifact_index?.characters) ? run.artifact_index.characters : [];
+  return cards.map((item) => {
+    const preview = item?.preview || {};
+    const missingFields = [
+      !String(preview.core_identity || "").trim() ? "核心身份" : "",
+      !String(preview.story_role || "").trim() ? "故事位置" : "",
+      !String(preview.soul_goal || "").trim() ? "灵魂目标" : "",
+      !String(preview.speech_style || "").trim() ? "说话方式" : "",
+      !String(preview.temperament_type || "").trim() ? "气质底色" : "",
+    ].filter(Boolean);
+    const weakCount = missingFields.length;
+    let statusText = "稳定";
+    let statusTone = "stable";
+    if (qualityMissing.has(item.name)) {
+      statusText = "证据偏薄";
+      statusTone = "weak";
+    } else if (weakCount >= 3) {
+      statusText = "待校对";
+      statusTone = "weak";
+    } else if (weakCount > 0) {
+      statusText = "待补全";
+      statusTone = "warning";
+    }
+    return {
+      name: item.name,
+      preview,
+      weakCount,
+      missingFields,
+      statusText,
+      statusTone,
+      hasEvidenceGap: qualityMissing.has(item.name),
+      priorityScore: qualityMissing.has(item.name) ? 100 + weakCount : weakCount,
+      updatedText: formatWeakTime(run.updated_at || ""),
+    };
+  });
+}
+
+function renderCharacterReadiness(run) {
+  const root = el("run-character-readiness");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = buildCharacterReadinessItems(run);
+  items.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "work-character-card";
+    button.innerHTML = `
+      <div class="work-character-head">
+        <div class="work-character-title">
+          <strong>${item.name}</strong>
+          <small>${item.preview.core_identity || item.preview.story_role || "人物包已经落地，可继续补细节"}</small>
+        </div>
+        <span class="work-character-status is-${item.statusTone}">${item.statusText}</span>
+      </div>
+      <p class="work-character-copy">${item.preview.speech_style || item.preview.soul_goal || "说话方式或灵魂目标还可以继续补得更稳。"}</p>
+      <div class="work-character-meta">
+        <span>${item.weakCount > 0 ? `待补关键字段 ${item.weakCount}` : "关键字段已齐"}</span>
+        <span>${item.updatedText ? `最近更新 ${item.updatedText}` : "刚刚落成"}</span>
+      </div>
+    `;
+    button.addEventListener("click", () => {
+      openCharacterOverview(item.name).catch((error) => {
+        setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
+      });
+    });
+    root.appendChild(button);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("run-character-readiness-empty", root.childElementCount === 0);
+}
+
+function buildWorkPriorityReviewItems(run) {
+  return buildCharacterReadinessItems(run)
+    .filter((item) => item.hasEvidenceGap || item.weakCount > 0 || item.statusTone !== "stable")
+    .sort((left, right) => {
+      if (right.priorityScore !== left.priorityScore) {
+        return right.priorityScore - left.priorityScore;
+      }
+      if (right.weakCount !== left.weakCount) {
+        return right.weakCount - left.weakCount;
+      }
+      return String(left.name).localeCompare(String(right.name), "zh-Hans-CN");
+    })
+    .slice(0, 3)
+    .map((item, index) => ({
+      ...item,
+      order: index + 1,
+      headline: buildWorkPriorityHeadline(item),
+      reason: buildWorkPriorityReason(item),
+      actionHint: item.hasEvidenceGap ? "建议换入新书段做增量蒸馏，别只靠字段补全硬补。" : "可以先打开角色页，把关键字段补稳后再决定要不要继续增量蒸馏。",
+    }));
+}
+
+function buildWorkPriorityHeadline(item) {
+  if (item.hasEvidenceGap) {
+    return "正文证据偏薄，优先补素材";
+  }
+  if (item.weakCount >= 3) {
+    return "关键骨架还没站稳，优先校对";
+  }
+  return "还差最后几笔，适合快速补齐";
+}
+
+function buildWorkPriorityReason(item) {
+  if (item.hasEvidenceGap) {
+    return "当前正文里对这个角色的有效片段还偏少，容易出现信息薄、口气虚或关系不稳。";
+  }
+  if (item.missingFields.length) {
+    return `当前最薄的地方是：${item.missingFields.slice(0, 3).join("、")}。`;
+  }
+  return "这个角色已经有轮廓，但还有几处字段偏薄，适合顺手补稳。";
+}
+
+function renderWorkPriorityReview(run) {
+  const root = el("work-priority-review-list");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = buildWorkPriorityReviewItems(run);
+  items.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "work-priority-card";
+    card.innerHTML = `
+      <div class="work-priority-card-head">
+        <span class="work-priority-rank">优先 ${item.order}</span>
+        <span class="work-character-status is-${item.statusTone}">${item.statusText}</span>
+      </div>
+      <div class="work-priority-title">
+        <strong>${item.name}</strong>
+        <small>${item.preview.core_identity || item.preview.story_role || "人物轮廓还在慢慢站稳"}</small>
+      </div>
+      <p class="work-priority-headline">${item.headline}</p>
+      <p class="work-priority-copy">${item.reason}</p>
+      <div class="work-priority-meta">
+        <span>${item.weakCount > 0 ? `待补关键字段 ${item.weakCount}` : "关键字段已齐"}</span>
+        <span>${item.updatedText ? `最近更新 ${item.updatedText}` : "刚刚落成"}</span>
+      </div>
+      <p class="work-priority-hint">${item.actionHint}</p>
+      <div class="work-priority-actions">
+        <button type="button" class="soft-button" data-work-priority-open="${item.name}">打开角色页</button>
+        <button type="button" class="soft-button" data-work-priority-redistill="${item.name}">增量蒸馏</button>
+      </div>
+    `;
+    root.appendChild(card);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("work-priority-review-empty", root.childElementCount === 0);
+  root.querySelectorAll("[data-work-priority-open]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openCharacterOverview(button.getAttribute("data-work-priority-open") || "").catch((error) => {
+        setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
+      });
+    });
+  });
+  root.querySelectorAll("[data-work-priority-redistill]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openIncrementalDistillForCharacter(button.getAttribute("data-work-priority-redistill") || "");
+    });
+  });
+}
+
+function renderWorkGraphSummary(run) {
+  const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
+  const hasCharacters = getRunCharacterNames(run).length > 0;
+  if (hasGraph) {
+    setText("run-graph-status-copy", "关系线已经能看，先看牵系和张力，再决定从哪种方式入场。", "");
+    return;
+  }
+  if (run?.status === "running") {
+    setText("run-graph-status-copy", "关系网还在织，但不妨先盯住人物进度；图谱落下后会自动接到这里。", "");
+    return;
+  }
+  if (hasCharacters) {
+    setText("run-graph-status-copy", "关系图暂时还没落成，但人物已经可以继续校对，也不影响你先进入聊天。", "");
+    return;
+  }
+  setText("run-graph-status-copy", "先把人物请出来，关系网才会在这里慢慢织成。", "");
+}
+
+function renderWorkSessionPreview(run) {
+  const root = el("work-session-preview");
+  if (!root) return;
+  root.innerHTML = "";
+  const novelTitle = runNovelTitle(run);
+  const sessions = (recentSessionsCache || [])
+    .filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle)
+    .slice(0, 3);
+  sessions.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "work-session-card";
+    button.innerHTML = `
+      <div class="work-session-head">
+        <div class="work-session-title">
+          <strong>${joinCharacters(item.participants || []) || "未命名会话"}</strong>
+          <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"}</small>
+        </div>
+      </div>
+      <div class="work-session-meta">
+        <span>${humanizeSessionStatus(item.status)}</span>
+        <span>${formatWeakTime(item.updated_at) || "刚刚"}</span>
+      </div>
+    `;
+    button.addEventListener("click", async () => {
+      currentRunId = item.run_id || currentRunId;
+      currentDialogueSessionId = item.session_id || "";
+      currentDialogueSession = null;
+      sessionBooting = true;
+      setComposerEnabled(false);
+      setSessionBadge("入场中");
+      renderSessionBooting(item.mode, item.participants || []);
+      updateWorkflowState();
+      const [freshRun, session] = await Promise.all([
+        apiJson(`/api/web/runs/${item.run_id}`),
+        apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
+      ]);
+      renderRun(freshRun, { preserveDialogue: true, suppressWorkflowUpdate: true });
+      await renderDialogueSession(session);
+    });
+    root.appendChild(button);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("work-session-preview-empty", root.childElementCount === 0);
+}
+
+async function openCharacterOverview(characterName) {
+  if (!currentRunId || !currentRun || !characterName) return;
+  const payload = await apiJson(`/api/web/runs/${currentRunId}/personas/${encodeURIComponent(characterName)}`);
+  characterOverviewExpandedGroups.clear();
+  currentCharacterOverview = payload;
+  characterOverviewOpen = true;
+  renderCharacterOverview(payload);
+  updateWorkflowState();
+}
+
+function renderCharacterOverview(payload) {
+  const fields = payload?.fields || {};
+  const character = String(payload?.character || "").trim() || "人物";
+  const workTitle = runNovelTitle(currentRun);
+  const role = String(fields.story_role || fields.core_identity || "这一页会慢慢把他的轮廓立起来").trim();
+  const snapshot = buildCharacterOverviewHealthSnapshot(fields);
+  const evidenceSnapshot = buildCharacterOverviewEvidenceSnapshot(character);
+
+  setText("character-overview-title", `${character} · 人物档案`, "");
+  setText("character-overview-work", `出自《${workTitle}》`, "");
+  setText("character-overview-name", character, "");
+  setText("character-overview-role", role, "");
+  setText("character-overview-health-badge", snapshot.healthText, "");
+  const badge = el("character-overview-health-badge");
+  if (badge) {
+    badge.className = `work-character-status is-${snapshot.healthTone}`;
+  }
+  setText("character-overview-health-copy", snapshot.summaryCopy, "");
+  setStatus("character-overview-status", "");
+
+  renderCharacterOverviewHealthMetrics(snapshot);
+  renderCharacterOverviewEvidenceMetrics(evidenceSnapshot);
+  renderCharacterOverviewTrustSignals(payload, snapshot, evidenceSnapshot);
+  renderCharacterOverviewKeyFields(fields);
+  renderCharacterOverviewVoiceSummary(fields);
+  renderCharacterOverviewRelationSummary(fields);
+  renderCharacterOverviewAdvancedGroups(fields);
+}
+
+function buildCharacterOverviewHealthSnapshot(fields) {
+  let filledKeyCount = 0;
+  let weakKeyCount = 0;
+  CHARACTER_OVERVIEW_KEY_FIELDS.forEach(([field]) => {
+    const value = String(fields[field] || "").trim();
+    if (value) {
+      filledKeyCount += 1;
+    }
+    if (isCharacterOverviewFieldWeak(field, value)) {
+      weakKeyCount += 1;
+    }
+  });
+  const advancedFieldNames = CHARACTER_OVERVIEW_ADVANCED_GROUPS.flatMap(([, fieldNames]) => fieldNames);
+  const advancedFilledCount = advancedFieldNames.filter((field) => String(fields[field] || "").trim()).length;
+  const totalFieldCount = CHARACTER_OVERVIEW_KEY_FIELDS.length + advancedFieldNames.length;
+  const filledFieldCount = filledKeyCount + advancedFilledCount;
+  const completeness = totalFieldCount > 0 ? Math.round((filledFieldCount / totalFieldCount) * 100) : 0;
+  const stableKeyCount = Math.max(0, CHARACTER_OVERVIEW_KEY_FIELDS.length - weakKeyCount);
+  const healthTone = weakKeyCount <= 0 ? "stable" : weakKeyCount >= 4 ? "weak" : "warning";
+  const healthText = weakKeyCount <= 0 ? "关键字段已齐" : weakKeyCount >= 4 ? "待校对" : "待补全";
+  const updatedText = formatWeakTime(currentRun?.updated_at || "") || "刚刚";
+  const summaryCopy =
+    weakKeyCount <= 0
+      ? "这个角色的关键骨架已经比较完整，可以直接带进对话；如果还想更像本人，再慢慢抠细调字段。"
+      : `当前还有 ${weakKeyCount} 处关键字段偏薄，建议先补稳骨架，再决定是否继续增量蒸馏。`;
+  return {
+    completeness,
+    stableKeyCount,
+    weakKeyCount,
+    advancedFilledCount,
+    advancedTotalCount: advancedFieldNames.length,
+    updatedText,
+    healthTone,
+    healthText,
+    summaryCopy,
+  };
+}
+
+function renderCharacterOverviewHealthMetrics(snapshot) {
+  const root = el("character-overview-health-metrics");
+  if (!root) return;
+  root.innerHTML = "";
+  const metrics = [
+    ["完整度", `${snapshot.completeness}%`, "按关键字段与细调字段的当前覆盖度估算"],
+    ["稳住的关键字段", `${snapshot.stableKeyCount} / ${CHARACTER_OVERVIEW_KEY_FIELDS.length}`, "这些字段已经足够支撑角色概览与基础对话"],
+    ["待补位置", `${snapshot.weakKeyCount} 处`, snapshot.weakKeyCount > 0 ? "优先补这些地方，人物会更像自己" : "关键骨架已经收住，可以转去细修"],
+    ["细调覆盖", `${snapshot.advancedFilledCount} / ${snapshot.advancedTotalCount}`, "用于抠语气、情绪和更细的人设纹理"],
+    ["最近更新", snapshot.updatedText, "显示这一卷最近一次落盘或校对的大致时间"],
+  ];
+  metrics.forEach(([label, value, hint]) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-health-card";
+    card.innerHTML = `<span>${label}</span><strong>${value}</strong><small>${hint}</small>`;
+    root.appendChild(card);
+  });
+}
+
+function buildCharacterOverviewEvidenceSnapshot(character) {
+  const name = String(character || "").trim();
+  const focus = currentRun?.quality?.excerpt_focus || {};
+  const missing = new Set(Array.isArray(focus.missing_characters) ? focus.missing_characters : []);
+  const matched = new Set(Array.isArray(focus.matched_characters) ? focus.matched_characters : []);
+  const currentSource = getCurrentNovelSource(currentRun);
+  const allSources = Array.isArray(currentRun?.novel_sources) ? currentRun.novel_sources : [];
+  const currentSourceName = String(currentSource?.source_name || "").trim() || "当前书页";
+  const currentSourceKind = currentSource?.kind === "incremental_update" ? "增量书段" : "初始正文";
+  const currentSourceStats = formatSourceStats(currentSource);
+  const updatedText = formatWeakTime(currentRun?.updated_at || "") || "刚刚";
+  if (missing.has(name)) {
+    return {
+      evidenceLabel: "证据偏薄",
+      evidenceCopy: "这位角色在当前正文里的有效命中还偏少，字段补全可以救急，但更稳的办法仍然是补更贴近他的书段。",
+      sourceLabel: currentSourceName,
+      sourceCopy: [currentSourceKind, currentSourceStats].filter(Boolean).join(" · ") || "当前整理基于这份书段继续往下走。",
+      traceLabel: `${allSources.length || 1} 段来源`,
+      traceCopy: `最近更新 ${updatedText}。这轮更适合做增量蒸馏，而不是只补字段。`,
+      recommendationLabel: "建议动作",
+      recommendationCopy: "优先换入更贴近这个角色的正文片段，然后继续增量蒸馏。",
+    };
+  }
+  if (matched.has(name)) {
+    return {
+      evidenceLabel: "命中稳定",
+      evidenceCopy: "这位角色在当前正文中已经被稳定命中，当前更适合继续补关键字段或做细修。",
+      sourceLabel: currentSourceName,
+      sourceCopy: [currentSourceKind, currentSourceStats].filter(Boolean).join(" · ") || "当前整理基于这份书段继续往下走。",
+      traceLabel: `${allSources.length || 1} 段来源`,
+      traceCopy: `最近更新 ${updatedText}。如果字段已经够用，可以直接带进对话测试。`,
+      recommendationLabel: "建议动作",
+      recommendationCopy: "先补最薄的关键字段；若骨架已稳，就直接带进聊天里验证说话是否像本人。",
+    };
+  }
+  return {
+    evidenceLabel: currentRun?.status === "running" ? "仍在整理" : "等待更多证据",
+    evidenceCopy: currentRun?.status === "running" ? "这一轮还在继续，人物证据可能还会再长出来。" : "这位角色暂时没有明确命中或缺证据标记，先结合字段薄弱程度判断是否要继续补。",
+    sourceLabel: currentSourceName,
+    sourceCopy: [currentSourceKind, currentSourceStats].filter(Boolean).join(" · ") || "当前整理基于这份书段继续往下走。",
+    traceLabel: `${allSources.length || 1} 段来源`,
+    traceCopy: `最近更新 ${updatedText}。你可以先在角色页补字段，再决定要不要换入新书段。`,
+    recommendationLabel: "建议动作",
+    recommendationCopy: "如果说话方式和灵魂目标还薄，先补字段；如果整个人都虚，再考虑增量蒸馏。",
+  };
+}
+
+function renderCharacterOverviewEvidenceMetrics(snapshot) {
+  const root = el("character-overview-evidence-metrics");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = [
+    ["证据判断", snapshot.evidenceLabel, snapshot.evidenceCopy],
+    ["当前依据书段", snapshot.sourceLabel, snapshot.sourceCopy],
+    ["来源足迹", snapshot.traceLabel, snapshot.traceCopy],
+    [snapshot.recommendationLabel, "下一步", snapshot.recommendationCopy],
+  ];
+  items.forEach(([label, value, hint]) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-evidence-card";
+    card.innerHTML = `<span>${label}</span><strong>${value}</strong><small>${hint}</small>`;
+    root.appendChild(card);
+  });
+}
+
+function characterOverviewHistoryKey(character) {
+  return `${currentRunId || ""}::${String(character || "").trim()}`;
+}
+
+function getCharacterOverviewAutofillItems(character) {
+  const historyItems = characterOverviewAutofillHistory.get(characterOverviewHistoryKey(character)) || [];
+  const eventItems = getCurrentRunEvents()
+    .filter((item) => {
+      const eventCharacter = String(item?.character || "").trim();
+      const eventStage = String(item?.stage || "").trim();
+      const reviewSource = String(item?.review_source || "").trim();
+      return eventCharacter === String(character || "").trim() && eventStage === "persona_review_saved" && reviewSource === "character_overview_autofill";
+    })
+    .slice()
+    .reverse()
+    .map((item) => {
+      const changedFields = Array.isArray(item?.changed_fields) ? item.changed_fields : [];
+      const firstField = String(changedFields[0] || "").trim();
+      const reviewNote = String(item?.review_note || "").trim();
+      return {
+        field: firstField,
+        label: CHARACTER_OVERVIEW_FIELD_LABELS[firstField] || reviewNote || firstField || "最近补全",
+        value: "",
+        message: String(item?.message || "").trim(),
+        sourceMode: reviewNote,
+        timestamp: String(item?.timestamp || "").trim(),
+      };
+    });
+  const merged = [];
+  const seen = new Set();
+  [...historyItems, ...eventItems].forEach((item) => {
+    const key = `${String(item?.field || "").trim()}::${String(item?.timestamp || "").trim()}::${String(item?.sourceMode || "").trim()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(item);
+  });
+  return merged
+    .sort((left, right) => String(right?.timestamp || "").localeCompare(String(left?.timestamp || "")))
+    .slice(0, 6);
+}
+
+function rememberCharacterOverviewAutofill(character, payload) {
+  const field = String(payload?.field || "").trim();
+  if (!character || !field) return;
+  const key = characterOverviewHistoryKey(character);
+  const items = getCharacterOverviewAutofillItems(character).filter((item) => item.field !== field);
+  items.unshift({
+    field,
+    label: CHARACTER_OVERVIEW_FIELD_LABELS[field] || String(payload?.label || field).trim() || field,
+    value: String(payload?.value || "").trim(),
+    message: String(payload?.message || "").trim(),
+    sourceMode: String(payload?.source_mode || "").trim(),
+    timestamp: new Date().toISOString(),
+  });
+  characterOverviewAutofillHistory.set(key, items.slice(0, 6));
+}
+
+function buildCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSnapshot) {
+  const character = String(payload?.character || "").trim();
+  const autofillItems = getCharacterOverviewAutofillItems(character);
+  const lastAutofill = autofillItems[0] || null;
+  const reviewEvent = findLatestRunEventForCharacter(character, "persona_review_saved");
+  const redistillSignal = buildCharacterOverviewRedistillSignal(character);
+  const editableProfilePath = String(payload?.editable_profile_path || "").trim();
+  const generatedProfilePath = String(payload?.generated_profile_path || "").trim();
+  const sourceLabel = editableProfilePath ? "校对稿" : generatedProfilePath ? "蒸馏稿" : "来源待确认";
+  const sourceCopy = editableProfilePath
+    ? "已经存在可编辑人物稿，说明这份档案至少被写回过一次；字段仍可继续逐项复核。"
+    : generatedProfilePath
+      ? "当前主要来自自动蒸馏生成稿；关键字段稳了再进入对话会更可靠。"
+      : "暂时没有拿到明确的人物稿路径，建议先打开原档或重新载入角色页。";
+  return [
+    {
+      label: "字段来源",
+      value: sourceLabel,
+      copy: sourceCopy,
+      tone: editableProfilePath ? "stable" : "neutral",
+    },
+    {
+      label: "最近 AI 补全",
+      value: lastAutofill ? lastAutofill.label : "暂无本次补全",
+      copy: lastAutofill
+        ? `${lastAutofill.label} 刚由 ${formatCharacterOverviewAutofillSource(lastAutofill.sourceMode)}写回，建议再用对话测试口气。`
+        : healthSnapshot.weakKeyCount > 0
+          ? "关键字段里还有薄处，可以点字段旁的 AI补全 先补一版。"
+          : "本次打开角色页后还没有使用 AI补全。",
+      tone: lastAutofill ? "stable" : healthSnapshot.weakKeyCount > 0 ? "warning" : "neutral",
+    },
+    {
+      label: "最近增量蒸馏",
+      value: redistillSignal.value,
+      copy: redistillSignal.copy,
+      tone: redistillSignal.tone,
+    },
+    {
+      label: "手动校对",
+      value: reviewEvent && String(reviewEvent.review_source || "").trim() !== "character_overview_autofill" ? "已有保存痕迹" : editableProfilePath ? "有可编辑稿" : "未见保存",
+      copy: reviewEvent
+        ? buildCharacterOverviewReviewCopy(reviewEvent)
+        : editableProfilePath
+          ? "这份角色已经有可编辑稿，但当前运行记录里没有找到最近保存事件。"
+          : "还没有看到人工校对痕迹，适合先从薄字段开始检查。",
+      tone: reviewEvent || editableProfilePath ? "stable" : "warning",
+    },
+    {
+      label: "证据提醒",
+      value: evidenceSnapshot.evidenceLabel,
+      copy: evidenceSnapshot.evidenceCopy,
+      tone: evidenceSnapshot.evidenceLabel === "证据偏薄" ? "weak" : "neutral",
+    },
+  ];
+}
+
+function renderCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSnapshot) {
+  const root = el("character-overview-trust-signals");
+  if (!root) return;
+  root.innerHTML = "";
+  buildCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSnapshot).forEach((item) => {
+    const card = document.createElement("article");
+    card.className = `character-overview-trust-card is-${item.tone || "neutral"}`;
+    card.innerHTML = `
+      <span>${escapeHtml(item.label)}</span>
+      <strong>${escapeHtml(item.value)}</strong>
+      <small>${escapeHtml(item.copy)}</small>
+    `;
+    root.appendChild(card);
+  });
+}
+
+function findLatestRunEventForCharacter(character, stage = "") {
+  const name = String(character || "").trim();
+  const expectedStage = String(stage || "").trim();
+  const events = getCurrentRunEvents();
+  return events
+    .slice()
+    .reverse()
+    .find((item) => {
+      const eventCharacter = String(item?.character || "").trim();
+      const eventStage = String(item?.stage || "").trim();
+      return (!name || eventCharacter === name) && (!expectedStage || eventStage === expectedStage);
+    });
+}
+
+function buildCharacterOverviewReviewCopy(reviewEvent) {
+  const timestampText = formatWeakTime(reviewEvent?.timestamp || "") || "最近";
+  const reviewSource = String(reviewEvent?.review_source || "").trim();
+  const reviewNote = String(reviewEvent?.review_note || "").trim();
+  const changedFields = Array.isArray(reviewEvent?.changed_fields) ? reviewEvent.changed_fields.filter(Boolean) : [];
+  const changedLabels = changedFields.map((field) => CHARACTER_OVERVIEW_FIELD_LABELS[field] || field).slice(0, 3);
+  const changedCopy = changedLabels.length ? `涉及 ${changedLabels.join("、")}。` : "";
+  if (reviewSource === "character_overview_autofill") {
+    const sourceLabel = formatCharacterOverviewAutofillSource(reviewNote);
+    return `${timestampText}通过 ${sourceLabel} 自动写回过补全；${changedCopy || "仍建议人工扫一眼关键字段。"}`
+      .replace("；", "，")
+      .trim();
+  }
+  if (reviewSource === "character_overview_inline_edit") {
+    return `${timestampText}在角色页直接保存过字段。${changedCopy}`.trim();
+  }
+  return `${timestampText}保存过人物校对。${changedCopy}`.trim();
+}
+
+function buildCharacterOverviewRedistillSignal(character) {
+  const name = String(character || "").trim();
+  const redistill = currentRun?.redistill || {};
+  const existing = new Set(Array.isArray(redistill.existing_characters) ? redistill.existing_characters : []);
+  const newcomers = new Set(Array.isArray(redistill.new_characters) ? redistill.new_characters : []);
+  const currentSource = getCurrentNovelSource(currentRun);
+  const sourceName = String(redistill.source_name || currentSource?.source_name || "").trim();
+  if (existing.has(name)) {
+    return {
+      value: "本轮做过增量",
+      copy: `${sourceName ? `最近沿着「${sourceName}」` : "最近"}继续更新过这个角色，适合检查新片段有没有进入关键字段。`,
+      tone: "stable",
+    };
+  }
+  if (newcomers.has(name)) {
+    return {
+      value: "本轮首次蒸馏",
+      copy: `${sourceName ? `来自「${sourceName}」` : "来自本轮正文"}的新角色，建议先校对核心身份、目标和说话方式。`,
+      tone: "warning",
+    };
+  }
+  if (currentRun?.status === "running") {
+    return {
+      value: "仍在整理",
+      copy: "这一轮还没结束，增量痕迹可能稍后才会落到角色页。",
+      tone: "neutral",
+    };
+  }
+  return {
+    value: "暂无近期增量",
+    copy: "当前没有看到这位角色在最近一轮增量名单里；如果证据偏薄，可以换入更贴近他的书段继续蒸馏。",
+    tone: "neutral",
+  };
+}
+
+function formatCharacterOverviewAutofillSource(sourceMode) {
+  if (sourceMode === "web_fallback") {
+    return "联网参考";
+  }
+  if (sourceMode === "model_knowledge") {
+    return "模型知识";
+  }
+  return "AI";
+}
+
+function buildCharacterOverviewFieldTags(field, value, evidenceSnapshot) {
+  const text = String(value || "").trim();
+  const tags = [];
+  const recentAutofill = getCharacterOverviewAutofillItems(currentCharacterOverview?.character).find((item) => item.field === field);
+  if (recentAutofill) {
+    tags.push({ label: "AI补全", tone: "stable" });
+  }
+  if (!text) {
+    tags.push({ label: "待补", tone: "weak" });
+  } else if (!recentAutofill) {
+    tags.push({ label: currentCharacterOverview?.editable_profile_path ? "校对稿" : "蒸馏稿", tone: "neutral" });
+  }
+  if (evidenceSnapshot?.evidenceLabel === "证据偏薄" && ["core_identity", "story_role", "soul_goal", "key_bonds"].includes(field)) {
+    tags.push({ label: "证据薄", tone: "weak" });
+  }
+  return tags.slice(0, 3);
+}
+
+function renderCharacterOverviewKeyFields(fields) {
+  const root = el("character-overview-key-fields");
+  if (!root) return;
+  root.innerHTML = "";
+  const evidenceSnapshot = buildCharacterOverviewEvidenceSnapshot(currentCharacterOverview?.character || "");
+  CHARACTER_OVERVIEW_KEY_FIELDS.forEach(([field, label]) => {
+    const value = String(fields[field] || "").trim();
+    const weak = isCharacterOverviewFieldWeak(field, value);
+    const tags = buildCharacterOverviewFieldTags(field, value, evidenceSnapshot);
+    const card = document.createElement("article");
+    card.className = `character-overview-field-card${weak ? " is-missing" : ""}`;
+    const canAutofill = weak;
+    card.innerHTML = `
+      <div class="character-overview-field-head">
+        <span>${label}</span>
+        <div class="character-overview-field-actions">
+          ${tags.map((tag) => `<span class="character-overview-field-tag is-${tag.tone}">${tag.label}</span>`).join("")}
+          ${canAutofill ? `<button type="button" class="character-overview-mini-button" data-character-overview-field="${field}">AI补全</button>` : ""}
+          <button type="button" class="character-overview-mini-button" data-character-overview-save="${field}" disabled>已保存</button>
+        </div>
+      </div>
+      <textarea class="character-overview-field-input" data-character-overview-input="${field}" rows="4" placeholder="可以直接在这里修改，然后点保存改动。"></textarea>
+      <small class="character-overview-field-hint">${buildCharacterOverviewFieldHint(field, value)}</small>
+    `;
+    const input = card.querySelector(`[data-character-overview-input="${field}"]`);
+    if (input instanceof HTMLTextAreaElement) {
+      input.value = value;
+      input.dataset.initialValue = value;
+      syncCharacterOverviewFieldSaveButton(input);
+    }
+    root.appendChild(card);
+  });
+}
+
+function syncCharacterOverviewFieldSaveButton(inputNode) {
+  if (!(inputNode instanceof HTMLTextAreaElement)) return;
+  const field = String(inputNode.getAttribute("data-character-overview-input") || "").trim();
+  if (!field) return;
+  const card = inputNode.closest(".character-overview-field-card");
+  if (!(card instanceof HTMLElement)) return;
+  const button = card.querySelector(`[data-character-overview-save="${field}"]`);
+  if (!(button instanceof HTMLButtonElement)) return;
+  const initialValue = String(inputNode.dataset.initialValue || "").trim();
+  const currentValue = String(inputNode.value || "").trim();
+  const dirty = currentValue !== initialValue;
+  card.classList.toggle("is-dirty", dirty);
+  if (button.dataset.saving !== "true") {
+    button.disabled = !dirty;
+    button.textContent = dirty ? "保存改动" : "已保存";
+  }
+}
+
+function handleCharacterOverviewFieldInput(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLTextAreaElement)) return;
+  if (!target.hasAttribute("data-character-overview-input")) return;
+  syncCharacterOverviewFieldSaveButton(target);
+}
+
+function buildCharacterOverviewSavePayload(nextFields, reviewSource = "", reviewNote = "") {
+  const payload = {};
+  (PERSONA_REVIEW_FIELD_BINDINGS || []).forEach(([field]) => {
+    payload[field] = String(nextFields?.[field] || "").trim();
+  });
+  payload.review_source = reviewSource;
+  payload.review_note = reviewNote;
+  return payload;
+}
+
+function isCharacterOverviewFieldWeak(field, value) {
+  const text = String(value || "").trim();
+  if (!text) return true;
+  if (["worldview", "belief_anchor", "moral_bottom_line", "restraint_threshold", "stress_response", "speech_style", "identity_anchor", "soul_goal"].includes(field)) {
+    return text.length < 10;
+  }
+  if (["core_traits", "key_bonds"].includes(field)) {
+    return text.length < 6;
+  }
+  return text.length < 4;
+}
+
+function buildCharacterOverviewFieldHint(field, value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "这块还空着，可以先让 AI 补一版，再进人物校对里细修。";
+  }
+  if (isCharacterOverviewFieldWeak(field, text)) {
+    return "这块已经有轮廓，但还偏薄，适合继续补稳。";
+  }
+  return "这块已经能支撑当前角色概览。";
+}
+
+function renderCharacterOverviewVoiceSummary(fields) {
+  const root = el("character-overview-voice-summary");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = [
+    ["说话方式", fields.speech_style || "这部分还可以继续抠细。"],
+    ["代表句", fields.typical_lines || fields.signature_phrases || "人物口气还没有完全落稳。"],
+    ["句子习惯", [fields.sentence_openers, fields.sentence_endings].filter(Boolean).join(" / ") || "起句和句尾还可以继续补。"],
+  ];
+  items.forEach(([label, value]) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-summary-card";
+    card.innerHTML = `<span>${label}</span><p>${value}</p>`;
+    root.appendChild(card);
+  });
+}
+
+function renderCharacterOverviewRelationSummary(fields) {
+  const root = el("character-overview-relation-summary");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = [
+    ["重要牵系", fields.key_bonds || "这部分还没有完全落下来。"],
+    ["气质底色", fields.temperament_type || "气质底色还可以继续补稳。"],
+    ["世界观", fields.worldview || "世界观还没有完全成形。"],
+  ];
+  items.forEach(([label, value]) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-summary-card";
+    card.innerHTML = `<span>${label}</span><p>${value}</p>`;
+    root.appendChild(card);
+  });
+}
+
+function renderCharacterOverviewAdvancedGroups(fields) {
+  const root = el("character-overview-advanced-groups");
+  if (!root) return;
+  root.innerHTML = "";
+  CHARACTER_OVERVIEW_ADVANCED_GROUPS.forEach(([title, fieldNames]) => {
+    const values = fieldNames
+      .map((field) => {
+        const value = String(fields[field] || "").trim();
+        return value ? { field, label: CHARACTER_OVERVIEW_FIELD_LABELS[field] || field, value } : null;
+      })
+      .filter(Boolean);
+    const expanded = characterOverviewExpandedGroups.has(title);
+    const previewText = values
+      .slice(0, 2)
+      .map((item) => `${item.label}：${item.value}`)
+      .join("；");
+    const card = document.createElement("article");
+    card.className = "character-overview-advanced-group";
+    card.innerHTML = `
+      <button type="button" class="character-overview-advanced-toggle${expanded ? " is-open" : ""}" data-character-overview-group="${title}" aria-expanded="${expanded ? "true" : "false"}">
+        <span class="character-overview-advanced-title">${title}</span>
+        <span class="character-overview-advanced-meta">${values.length > 0 ? `已填 ${values.length} / ${fieldNames.length}` : "这一组还没铺开"}</span>
+        <span class="character-overview-advanced-arrow">${expanded ? "收起" : "展开"}</span>
+      </button>
+      <p class="character-overview-advanced-preview${expanded ? " hidden" : ""}">${previewText || "这一组还可以继续补更多细节，不必一次写满。"}</p>
+      <div class="character-overview-advanced-body${expanded ? "" : " hidden"}">
+        ${
+          values.length
+            ? values.map((item) => `<article class="character-overview-advanced-field"><span>${item.label}</span><p>${item.value}</p></article>`).join("")
+            : `<p class="character-overview-advanced-empty">这一组暂时还没写开，可以先稳住关键字段，再决定要不要继续细修。</p>`
+        }
+      </div>
+    `;
+    root.appendChild(card);
+  });
+}
+
+function handleCharacterOverviewAdvancedGroupToggle(event) {
+  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-character-overview-group]") : null;
+  if (!(trigger instanceof HTMLButtonElement) || !currentCharacterOverview?.fields) return;
+  const groupName = String(trigger.getAttribute("data-character-overview-group") || "").trim();
+  if (!groupName) return;
+  if (characterOverviewExpandedGroups.has(groupName)) {
+    characterOverviewExpandedGroups.delete(groupName);
+  } else {
+    characterOverviewExpandedGroups.add(groupName);
+  }
+  renderCharacterOverviewAdvancedGroups(currentCharacterOverview.fields || {});
+}
+
+async function handleCharacterOverviewFieldAutofill(event) {
+  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-character-overview-field]") : null;
+  if (!(trigger instanceof HTMLButtonElement) || !currentRunId || !currentCharacterOverview) return;
+  const character = String(currentCharacterOverview.character || "").trim();
+  const field = String(trigger.getAttribute("data-character-overview-field") || "").trim();
+  if (!character || !field) return;
+  const labelText = CHARACTER_OVERVIEW_FIELD_LABELS[field] || field;
+  const originalText = trigger.textContent || "AI补全";
+  trigger.disabled = true;
+  trigger.textContent = "生成中...";
+  setStatus("character-overview-status", `正在补全「${labelText}」...`);
+  try {
+    const payload = await apiJson(
+      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}/suggest-field`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field }),
+      },
+      "人物信息补全失败。"
+    );
+    if (payload?.status !== "filled" || !payload?.value) {
+      setStatus("character-overview-status", payload?.message || payload?.reason || "人物信息补全无法生成。");
+      return;
+    }
+    const nextFields = {
+      ...(currentCharacterOverview.fields || {}),
+      [field]: payload.value,
+    };
+    const saved = await apiJson(
+      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...nextFields,
+          review_source: "character_overview_autofill",
+          review_note: String(payload?.source_mode || "").trim(),
+        }),
+      },
+      "保存人物校对失败。"
+    );
+    rememberCharacterOverviewAutofill(character, payload);
+    currentCharacterOverview = saved;
+    renderCharacterOverview(saved);
+    renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
+    characterOverviewOpen = true;
+    currentCharacterOverview = saved;
+    updateWorkflowState();
+    setStatus("character-overview-status", payload.message || `「${labelText}」已经补上，并写回这一卷。`);
+  } catch (error) {
+    setStatus("character-overview-status", error.message || "人物信息补全无法生成。");
+  } finally {
+    trigger.disabled = false;
+    trigger.textContent = originalText;
+  }
+}
+
+async function handleCharacterOverviewFieldSave(event) {
+  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-character-overview-save]") : null;
+  if (!(trigger instanceof HTMLButtonElement) || !currentRunId || !currentCharacterOverview) return;
+  const character = String(currentCharacterOverview.character || "").trim();
+  const field = String(trigger.getAttribute("data-character-overview-save") || "").trim();
+  if (!character || !field) return;
+  const input = el("character-overview-key-fields")?.querySelector(`[data-character-overview-input="${field}"]`);
+  if (!(input instanceof HTMLTextAreaElement)) return;
+  const labelText = CHARACTER_OVERVIEW_FIELD_LABELS[field] || field;
+  const nextValue = String(input.value || "").trim();
+  const currentValue = String(currentCharacterOverview?.fields?.[field] || "").trim();
+  if (nextValue === currentValue) {
+    syncCharacterOverviewFieldSaveButton(input);
+    return;
+  }
+  const previousText = trigger.textContent || "保存改动";
+  trigger.dataset.saving = "true";
+  trigger.disabled = true;
+  trigger.textContent = "保存中...";
+  setStatus("character-overview-status", `正在保存「${labelText}」...`);
+  try {
+    const nextFields = {
+      ...(currentCharacterOverview.fields || {}),
+      [field]: nextValue,
+    };
+    const saved = await apiJson(
+      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildCharacterOverviewSavePayload(nextFields, "character_overview_inline_edit", "field_direct_save")),
+      },
+      "保存人物校对失败。"
+    );
+    currentCharacterOverview = saved;
+    renderCharacterOverview(saved);
+    renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
+    characterOverviewOpen = true;
+    currentCharacterOverview = saved;
+    updateWorkflowState();
+    setStatus("character-overview-status", `「${labelText}」已经写回这一卷。`);
+  } catch (error) {
+    trigger.textContent = previousText;
+    setStatus("character-overview-status", error.message || "这次保存没有成功。");
+  } finally {
+    delete trigger.dataset.saving;
+  }
+}
+
+function openCharacterOverviewIncrementalDistill() {
+  const character = String(currentCharacterOverview?.character || "").trim();
+  openIncrementalDistillForCharacter(character);
+}
+
+function openIncrementalDistillForCharacter(characterName) {
+  const character = String(characterName || "").trim();
+  if (!character || !currentRun) return;
+  characterOverviewOpen = false;
+  redistillPanelOpen = true;
+  renderBookshelfDetail(currentRun);
+  updateWorkflowState();
+  const mergedCharacters = joinCharacters([character, ...parseCharacters(valueOf("redistill-characters", ""))]);
+  setValue("redistill-characters", mergedCharacters);
+  syncRedistillPreview();
+  setStatus("redistill-status", `这轮会把「${character}」按增量方式继续补稳。`);
+  el("redistill-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  el("redistill-characters")?.focus();
+}
+
+async function openCharacterOverviewSessionMode(mode) {
+  const character = String(currentCharacterOverview?.character || "").trim();
+  if (!character || !currentRun) return;
+  await openNewDialogueSession();
+  const characters = getRunCharacterNames(currentRun);
+  setValue("dialogue-participants", joinCharacters(characters));
+  setValue("dialogue-mode", mode);
+  if (mode === "act") {
+    setValue("dialogue-controlled", character);
+  }
+  syncModeFields();
+  updateCharacterPillState();
+}
+
+function openCurrentCharacterProfileFile() {
+  const character = String(currentCharacterOverview?.character || "").trim();
+  if (!character || !currentRun?.file_urls) return;
+  const url = currentRun.file_urls[`character_${character}`];
+  if (url) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 }
 
 function renderQualitySnapshot(run) {
@@ -115,6 +1369,7 @@ function renderQualitySnapshot(run) {
     relationChunked ||
     standardChunkingVisible;
   toggle("quality-section", shouldShow);
+  toggle("quality-empty-copy", !shouldShow);
 }
 
 function renderQualityPills(rootId, values, emptyId) {
@@ -135,8 +1390,10 @@ function renderRunEvents(run) {
   if (!eventsRoot) return;
   eventsRoot.innerHTML = "";
   (run.events || []).slice(-8).forEach((event) => {
+    const stageLabel = humanizeRunEventStage(String(event?.stage || "").trim());
+    const message = String(event?.message || "").trim();
     const item = document.createElement("li");
-    item.textContent = event.message || event.stage || "";
+    item.textContent = message || stageLabel;
     eventsRoot.appendChild(item);
   });
   toggle("timeline-empty-note", eventsRoot.childElementCount === 0);
@@ -181,6 +1438,8 @@ function renderRun(run, options = {}) {
   currentRun = run;
   newRunFlowOpen = false;
   chatModePickerOpen = false;
+  characterOverviewOpen = false;
+  currentCharacterOverview = null;
   redistillPanelOpen = false;
   sourceHistoryExpanded = false;
   runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";

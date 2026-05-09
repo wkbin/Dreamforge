@@ -450,7 +450,7 @@ class DialogueService:
             speaker = str(entry.get("speaker", "")).strip()
             role = "character"
             if speaker in {"旁白", "场景提示"}:
-                role = "scene"
+                role = "director" if mode == "observe" else "scene"
             elif mode == "act" and speaker == controlled:
                 role = "user"
             elif mode == "insert" and speaker == self_insert_name:

@@ -119,6 +119,7 @@ class ArtifactServiceMixin:
             persona_dir=persona_dir,
             resolve_persona_review_source=resolve_persona_review_source,
             load_profile_source=load_profile_source,
+            read_persona_review_fields=read_persona_review_fields,
             apply_persona_review_updates=apply_persona_review_updates,
             write_persona_profile=write_persona_profile,
             discover_artifacts=self._discover_artifacts,
