@@ -329,6 +329,10 @@ esac
 EOF
 
   chmod +x "$launcher_path"
+  if [ ! -x "$launcher_path" ]; then
+    echo "Launcher creation failed / 启动命令创建失败: ${launcher_path}" >&2
+    exit 1
+  fi
   append_path_line "$rc_file"
 
 cat <<EOF
@@ -343,7 +347,7 @@ Shell rc / Shell 配置:  ${rc_file}
 
 Next / 下一步:
   Open a new shell, or run / 打开一个新的 shell，或执行：
-  export PATH="\$HOME/.local/bin:\$PATH"
+  export PATH="$HOME/.local/bin:$PATH"
   zaomeng
 
 If your shell rc already contains unrelated broken lines and "source ${rc_file}" reports errors,

@@ -19,6 +19,9 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('Update skipped / 跳过更新: zaomeng is already up to date.', script_text)
         self.assertIn('Update required / 需要更新: \\${local_version} -> \\${remote_version}', script_text)
         self.assertIn('Version check unavailable, proceeding with update.', script_text)
+        self.assertIn('if [ ! -x "$launcher_path" ]; then', script_text)
+        self.assertIn('Launcher creation failed / 启动命令创建失败', script_text)
+        self.assertIn('export PATH="$HOME/.local/bin:$PATH"', script_text)
 
 
 if __name__ == "__main__":
