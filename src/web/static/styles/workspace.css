@@ -644,6 +644,33 @@
   font-weight: 600;
 }
 
+.work-graph-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.82rem 0.86rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(170, 146, 127, 0.1);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.work-graph-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.work-graph-head strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.work-graph-card .detail-section-copy {
+  padding-left: 0;
+}
+
 .work-mode-shortcuts {
   display: flex;
   flex-wrap: wrap;
@@ -1808,6 +1835,43 @@ textarea::placeholder {
   line-height: 1.8;
   font-size: 13px;
   padding-left: 4px;
+}
+
+.timeline-dense {
+  margin: 0.25rem 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.timeline-dense li {
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.62rem 0.7rem;
+  border-radius: calc(var(--radius-lg) - 7px);
+  border: 1px solid rgba(170, 146, 127, 0.1);
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.58;
+}
+
+.timeline-dense li strong {
+  color: var(--ink);
+  font-size: 0.73rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.timeline-dense li p {
+  margin: 0;
+}
+
+.timeline-dense li small {
+  color: var(--ink-faint);
+  font-size: 0.66rem;
+  line-height: 1.45;
 }
 
 @media (max-width: 900px) {

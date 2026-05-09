@@ -245,7 +245,13 @@
             <h4>这一卷可以从哪里继续</h4>
           </div>
         </div>
-        <p id="run-graph-status-copy" class="detail-section-copy">先看关系与会话，再决定如何走进这一幕。</p>
+        <article class="work-graph-card">
+          <div class="work-graph-head">
+            <strong>关系图谱</strong>
+            <span id="run-graph-status-badge" class="work-character-status">未开始</span>
+          </div>
+          <p id="run-graph-status-copy" class="detail-section-copy">先看关系与会话，再决定如何走进这一幕。</p>
+        </article>
         <div id="graph-links" class="link-row hidden"></div>
         <p id="graph-empty-note" class="card-note hidden">关系图还在整理中，稍后会出现在这里。</p>
         <div class="work-session-preview-head">
@@ -336,7 +342,7 @@
           <h4>这一卷最近的整理轨迹</h4>
         </div>
       </div>
-      <ol id="events" class="timeline"></ol>
+      <ol id="events" class="timeline timeline-dense"></ol>
       <p id="timeline-empty-note" class="card-note hidden">还没有新的轨迹落在这里。</p>
     </section>
   </section>

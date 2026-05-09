@@ -541,20 +541,37 @@ function renderWorkPriorityReview(run) {
 
 function renderWorkGraphSummary(run) {
   const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
+  const graphFailed = String(run?.summary?.graph_status || "").trim() === "failed" || String(run?.progress?.graph_status || "").trim() === "failed";
   const hasCharacters = getRunCharacterNames(run).length > 0;
   if (hasGraph) {
+    setWorkGraphStatusBadge("已完成", "stable");
     setText("run-graph-status-copy", "关系线已经能看，先看牵系和张力，再决定从哪种方式入场。", "");
     return;
   }
+  if (graphFailed) {
+    setWorkGraphStatusBadge("失败可跳过", "weak");
+    setText("run-graph-status-copy", "这轮关系图谱生成失败，但不会阻塞聊天；可以先入场，稍后再补图谱。", "");
+    return;
+  }
   if (run?.status === "running") {
+    setWorkGraphStatusBadge("进行中", "warning");
     setText("run-graph-status-copy", "关系网还在织，但不妨先盯住人物进度；图谱落下后会自动接到这里。", "");
     return;
   }
   if (hasCharacters) {
+    setWorkGraphStatusBadge("待补图谱", "warning");
     setText("run-graph-status-copy", "关系图暂时还没落成，但人物已经可以继续校对，也不影响你先进入聊天。", "");
     return;
   }
+  setWorkGraphStatusBadge("未开始", "warning");
   setText("run-graph-status-copy", "先把人物请出来，关系网才会在这里慢慢织成。", "");
+}
+
+function setWorkGraphStatusBadge(text, tone = "warning") {
+  const badge = el("run-graph-status-badge");
+  if (!badge) return;
+  badge.textContent = text || "未开始";
+  badge.className = `work-character-status is-${tone}`;
 }
 
 function renderWorkSessionPreview(run) {
@@ -569,16 +586,17 @@ function renderWorkSessionPreview(run) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "work-session-card";
+    const participantCount = Array.isArray(item.participants) ? item.participants.length : 0;
     button.innerHTML = `
       <div class="work-session-head">
         <div class="work-session-title">
           <strong>${joinCharacters(item.participants || []) || "未命名会话"}</strong>
-          <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"}</small>
+          <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"} · ${participantCount || 0} 人</small>
         </div>
       </div>
       <div class="work-session-meta">
-        <span>${humanizeSessionStatus(item.status)}</span>
         <span>${formatWeakTime(item.updated_at) || "刚刚"}</span>
+        <span>${humanizeSessionStatus(item.status)}</span>
       </div>
     `;
     button.addEventListener("click", async () => {
@@ -1456,8 +1474,13 @@ function renderRunEvents(run) {
   (run.events || []).slice(-8).forEach((event) => {
     const stageLabel = humanizeRunEventStage(String(event?.stage || "").trim());
     const message = String(event?.message || "").trim();
+    const updated = formatWeakTime(String(event?.timestamp || "").trim()) || "刚刚";
     const item = document.createElement("li");
-    item.textContent = message || stageLabel;
+    item.innerHTML = `
+      <strong>${escapeHtml(stageLabel)}</strong>
+      <p>${escapeHtml(message || "这一轮有新的变化落在这里。")}</p>
+      <small>${escapeHtml(updated)}</small>
+    `;
     eventsRoot.appendChild(item);
   });
   toggle("timeline-empty-note", eventsRoot.childElementCount === 0);
