@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.core.runtime_factory import build_runtime_parts
 from src.web.chat import (
     build_dialogue_llm_messages,
     build_dialogue_suggestion_llm_messages,
@@ -20,6 +19,12 @@ from src.web.chat import (
     should_retry_suggestion_with_compact_payload,
     suggest_dialogue_turn_payload,
 )
+
+
+def build_runtime_parts(config: Any) -> Any:
+    from src.web.workflow import WebRunService
+
+    return WebRunService._build_runtime_parts(config)
 
 
 class DialogueServiceMixin:
