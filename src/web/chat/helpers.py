@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from typing import Any, Callable
+
+from src.core.exceptions import LLMRequestError
 
 
 def build_dialogue_opening_message(session: dict[str, Any]) -> str:
@@ -34,7 +37,129 @@ def friendly_dialogue_llm_error(exc: Exception) -> str:
     lowered = message.lower()
     if any(token in lowered for token in ("invalidsubscription", "codingplan", "subscription has expired", "does not have a valid")):
         return "当前模型账号没有可用的对话生成订阅权限，请更换可用模型，或检查并续订当前账号权限。"
+    if any(token in lowered for token in ("maximum context", "context length", "prompt is too long", "too many tokens", "max context")):
+        return "当前模型拒绝了这次续写建议请求，通常是上下文太长。系统已尝试自动压缩；如果仍失败，请减少参与角色或先清空一部分聊天上下文后重试。"
     return message or "当前模型调用失败，请检查模型配置后重试。"
+
+
+def should_retry_suggestion_with_compact_payload(exc: Exception) -> bool:
+    if not isinstance(exc, LLMRequestError):
+        return False
+    lowered = str(exc or "").lower()
+    if "400" in lowered and "bad request" in lowered:
+        return True
+    return any(
+        token in lowered
+        for token in (
+            "maximum context",
+            "context length",
+            "prompt is too long",
+            "too many tokens",
+            "max context",
+            "context_window_exceeded",
+        )
+    )
+
+
+def compact_dialogue_suggestion_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    compact = deepcopy(payload)
+
+    compact["history"] = list(compact.get("history", []) or [])[-4:]
+
+    input_block = dict(compact.get("input", {}) or {})
+    input_block["message"] = _trim_text(str(input_block.get("message", "")).strip(), 120)
+    compact["input"] = input_block
+
+    relation_context = dict(compact.get("relation_context", {}) or {})
+    relation_context["relations_excerpt"] = _trim_text(str(relation_context.get("relations_excerpt", "")).strip(), 1200)
+    compact["relation_context"] = relation_context
+
+    compact["persona_contexts"] = [
+        _compact_persona_context(item) for item in list(compact.get("persona_contexts", []) or [])[:4]
+    ]
+    compact["user_persona"] = _compact_user_persona(dict(compact.get("user_persona", {}) or {}))
+    return compact
+
+
+def _compact_persona_context(item: dict[str, Any]) -> dict[str, Any]:
+    preview = dict(item.get("preview", {}) or {})
+    profile = dict(item.get("profile", {}) or {})
+    compact_preview = {
+        key: value
+        for key, value in {
+            "display_name": str(preview.get("display_name", "")).strip(),
+            "core_identity": str(preview.get("core_identity", "")).strip(),
+            "speech_style": str(preview.get("speech_style", "")).strip(),
+        }.items()
+        if _has_meaningful_value(value)
+    }
+    compact_profile = {
+        key: value
+        for key, value in {
+            "core_identity": str(profile.get("core_identity", "")).strip(),
+            "story_role": str(profile.get("story_role", "")).strip(),
+            "speech_style": str(profile.get("speech_style", "")).strip(),
+            "temperament_type": str(profile.get("temperament_type", "")).strip(),
+            "stress_response": str(profile.get("stress_response", "")).strip(),
+            "key_bonds": _normalize_short_list(profile.get("key_bonds")),
+        }.items()
+        if _has_meaningful_value(value)
+    }
+    return {
+        "name": str(item.get("name", "")).strip(),
+        "preview": compact_preview,
+        "profile": compact_profile,
+    }
+
+
+def _compact_user_persona(persona: dict[str, Any]) -> dict[str, Any]:
+    profile = dict(persona.get("profile", {}) or {})
+    compact_profile = {
+        key: value
+        for key, value in {
+            "display_name": str(profile.get("display_name", "")).strip(),
+            "scene_identity": str(profile.get("scene_identity", "")).strip(),
+            "interaction_style": str(profile.get("interaction_style", "")).strip(),
+            "core_identity": str(profile.get("core_identity", "")).strip(),
+            "story_role": str(profile.get("story_role", "")).strip(),
+            "soul_goal": str(profile.get("soul_goal", "")).strip(),
+            "speech_style": str(profile.get("speech_style", "")).strip(),
+            "worldview": _trim_text(str(profile.get("worldview", "")).strip(), 120),
+            "belief_anchor": _trim_text(str(profile.get("belief_anchor", "")).strip(), 120),
+            "stress_response": _trim_text(str(profile.get("stress_response", "")).strip(), 120),
+            "key_bonds": _normalize_short_list(profile.get("key_bonds")),
+            "preferred_moves": _normalize_short_list(profile.get("preferred_moves")),
+            "goal": str(profile.get("goal", "")).strip(),
+        }.items()
+        if _has_meaningful_value(value)
+    }
+    compact_persona = dict(persona)
+    compact_persona["profile"] = compact_profile
+    return compact_persona
+
+
+def _normalize_short_list(value: Any) -> list[str] | str:
+    if isinstance(value, list):
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        return cleaned[:4]
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parts = [part.strip() for part in text.replace("；", ";").split(";") if part.strip()]
+    return parts[:4] if parts else text
+
+
+def _has_meaningful_value(value: Any) -> bool:
+    if isinstance(value, list):
+        return bool(value)
+    return bool(str(value or "").strip())
+
+
+def _trim_text(text: str, limit: int) -> str:
+    cleaned = str(text or "").strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: max(1, limit - 1)].rstrip() + "…"
 
 
 def build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool = False) -> list[dict[str, str]]:

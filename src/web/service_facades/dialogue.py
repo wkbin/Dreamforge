@@ -7,6 +7,7 @@ from src.web.chat import (
     build_dialogue_llm_messages,
     build_dialogue_suggestion_llm_messages,
     build_dialogue_opening_message,
+    compact_dialogue_suggestion_payload,
     create_dialogue_session_payload,
     friendly_dialogue_llm_error,
     generate_dialogue_suggestion,
@@ -16,6 +17,7 @@ from src.web.chat import (
     parse_dialogue_suggestion,
     parse_dialogue_responses,
     reply_dialogue_turn_payload,
+    should_retry_suggestion_with_compact_payload,
     suggest_dialogue_turn_payload,
 )
 
@@ -123,18 +125,35 @@ class DialogueServiceMixin:
         )
 
     def _generate_dialogue_suggestion(self, run_id: str, payload: dict[str, Any]) -> str:
-        return generate_dialogue_suggestion_for_run(
-            run_dir=self.runs_root / run_id,
-            payload=payload,
-            build_runtime_config_for_run=self._build_runtime_config_for_run,
-            build_runtime_parts=build_runtime_parts,
-            generate_dialogue_suggestion=generate_dialogue_suggestion,
-            build_dialogue_suggestion_llm_messages=lambda current_payload, retry_on_empty: self._build_dialogue_suggestion_llm_messages(
-                current_payload,
-                retry_on_empty=retry_on_empty,
-            ),
-            parse_dialogue_suggestion=self._parse_dialogue_suggestion,
-        )
+        try:
+            return generate_dialogue_suggestion_for_run(
+                run_dir=self.runs_root / run_id,
+                payload=payload,
+                build_runtime_config_for_run=self._build_runtime_config_for_run,
+                build_runtime_parts=build_runtime_parts,
+                generate_dialogue_suggestion=generate_dialogue_suggestion,
+                build_dialogue_suggestion_llm_messages=lambda current_payload, retry_on_empty: self._build_dialogue_suggestion_llm_messages(
+                    current_payload,
+                    retry_on_empty=retry_on_empty,
+                ),
+                parse_dialogue_suggestion=self._parse_dialogue_suggestion,
+            )
+        except Exception as exc:
+            if not should_retry_suggestion_with_compact_payload(exc):
+                raise
+            compact_payload = compact_dialogue_suggestion_payload(payload)
+            return generate_dialogue_suggestion_for_run(
+                run_dir=self.runs_root / run_id,
+                payload=compact_payload,
+                build_runtime_config_for_run=self._build_runtime_config_for_run,
+                build_runtime_parts=build_runtime_parts,
+                generate_dialogue_suggestion=generate_dialogue_suggestion,
+                build_dialogue_suggestion_llm_messages=lambda current_payload, retry_on_empty: self._build_dialogue_suggestion_llm_messages(
+                    current_payload,
+                    retry_on_empty=retry_on_empty,
+                ),
+                parse_dialogue_suggestion=self._parse_dialogue_suggestion,
+            )
 
     @staticmethod
     def _build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool = False) -> list[dict[str, str]]:

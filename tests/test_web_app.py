@@ -1496,6 +1496,98 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(result["suggestion"], "别生气，我刚才那句不是在呛你。")
             self.assertEqual(fake_parts.llm.chat_completion.call_count, 2)
 
+    def test_generate_dialogue_suggestion_retries_with_compact_payload_after_bad_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            service.ingest_character_result(
+                run_id,
+                character="林黛玉",
+                content_base64=base64.b64encode(
+                    (
+                        "- name: 林黛玉\n- novel_id: hongloumeng\n- core_identity: 林府孤女\n"
+                        "- story_role: 情感核心\n- speech_style: 轻冷带刺\n- temperament_type: 敏感自持\n"
+                        "- stress_response: 越难受越把话说轻\n- key_bonds: 贾宝玉；贾母；紫鹃\n"
+                    ).encode("utf-8")
+                ).decode("ascii"),
+            )
+            service.ingest_character_result(
+                run_id,
+                character="贾宝玉",
+                content_base64=base64.b64encode(
+                    (
+                        "- name: 贾宝玉\n- novel_id: hongloumeng\n- core_identity: 贾府公子\n"
+                        "- story_role: 情感引线\n- speech_style: 软中带急\n- temperament_type: 多情敏感\n"
+                        "- stress_response: 心急时话更碎\n- key_bonds: 林黛玉；薛宝钗；袭人\n"
+                    ).encode("utf-8")
+                ).decode("ascii"),
+            )
+            manifest = service._require_manifest(run_id)
+            relation_path = Path(tmp) / "relations.md"
+            relation_path.write_text("贾宝玉与林黛玉彼此牵挂。" * 400, encoding="utf-8")
+            manifest["artifact_index"]["relation_graph"] = {"relations_file": str(relation_path)}
+            (service.runs_root / run_id / "run_manifest.json").write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            session = service.dialogue.create_session(
+                manifest,
+                mode="insert",
+                participants=["林黛玉", "贾宝玉"],
+                controlled_character="",
+                self_profile={
+                    "display_name": "阿眠",
+                    "scene_identity": "误入园中的来客",
+                    "interaction_style": "先软后稳",
+                    "core_identity": "不肯轻易交底的来客",
+                    "story_role": "意外闯入的变量",
+                    "soul_goal": "先站稳再谈真心",
+                    "speech_style": "先轻后准，不把话说死",
+                    "worldview": "热闹场面里，没说出口的话更要紧。" * 20,
+                    "belief_anchor": "先护住自己，才谈得上护别人。",
+                    "stress_response": "越紧越先把语气放轻。",
+                    "key_bonds": "自己；眼前局势；少数值得信的人；还没看透的人",
+                },
+            )
+            raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
+            raw_session["history"] = [
+                {"speaker": "林黛玉", "message": f"第{i}句对话" * 20, "ts": "2026-05-09T00:00:00Z"}
+                for i in range(8)
+            ]
+            service.dialogue._write_json(service.dialogue._session_file(run_id, session["session_id"]), raw_session)
+
+            with patch("src.web.service_facades.dialogue.build_runtime_parts") as build_parts:
+                fake_parts = Mock()
+                fake_parts.llm.chat_completion.side_effect = [
+                    LLMRequestError("LLM 请求失败: 400 Bad Request | prompt is too long"),
+                    {"content": "你别急，我不是来添乱的。", "raw": {}},
+                ]
+                build_parts.return_value = fake_parts
+
+                result = service.suggest_dialogue_turn(
+                    run_id,
+                    session_id=session["session_id"],
+                    seed_text="我不是那个意思，我只是",
+                )
+
+            self.assertEqual(result["suggestion"], "你别急，我不是来添乱的。")
+            self.assertEqual(fake_parts.llm.chat_completion.call_count, 2)
+            first_prompt = fake_parts.llm.chat_completion.call_args_list[0].args[0][1]["content"]
+            second_prompt = fake_parts.llm.chat_completion.call_args_list[1].args[0][1]["content"]
+            self.assertLess(len(second_prompt), len(first_prompt))
+            self.assertIn("误入园中的来客", second_prompt)
+
     def test_build_suggestion_payload_uses_self_insert_persona_in_insert_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)

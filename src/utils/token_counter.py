@@ -8,6 +8,18 @@ from typing import List
 
 
 logger = logging.getLogger(__name__)
+_TIKTOKEN_FALLBACK_LOGGED = False
+
+
+def _log_tiktoken_fallback(exc: Exception) -> None:
+    global _TIKTOKEN_FALLBACK_LOGGED
+    if _TIKTOKEN_FALLBACK_LOGGED:
+        return
+    _TIKTOKEN_FALLBACK_LOGGED = True
+    if isinstance(exc, (ImportError, ModuleNotFoundError)):
+        logger.info("tiktoken unavailable, using heuristic token counting instead: %s", exc)
+        return
+    logger.warning("Failed to initialize tiktoken encoder, falling back to heuristic token counting: %s", exc)
 
 
 class TokenCounter:
@@ -20,7 +32,7 @@ class TokenCounter:
 
             self._encoder = tiktoken.get_encoding("cl100k_base")
         except Exception as exc:  # pragma: no cover - depends on local tiktoken/network state
-            logger.warning("Failed to initialize tiktoken encoder, falling back to heuristic token counting: %s", exc)
+            _log_tiktoken_fallback(exc)
             self._encoder = None
 
     def count(self, text: str) -> int:

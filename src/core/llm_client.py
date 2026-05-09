@@ -32,6 +32,18 @@ from src.utils.file_utils import load_markdown_data, save_markdown_data
 
 
 logger = logging.getLogger(__name__)
+_TIKTOKEN_FALLBACK_LOGGED = False
+
+
+def _log_tiktoken_fallback(exc: Exception) -> None:
+    global _TIKTOKEN_FALLBACK_LOGGED
+    if _TIKTOKEN_FALLBACK_LOGGED:
+        return
+    _TIKTOKEN_FALLBACK_LOGGED = True
+    if isinstance(exc, (ImportError, ModuleNotFoundError)):
+        logger.info("tiktoken unavailable, using heuristic token counting instead: %s", exc)
+        return
+    logger.warning("Failed to initialize tiktoken encoder, falling back to heuristic token counting: %s", exc)
 
 
 class LLMClient:
@@ -70,7 +82,7 @@ class LLMClient:
         try:
             self.encoder = tiktoken.get_encoding("cl100k_base") if tiktoken else None
         except Exception as exc:  # pragma: no cover - depends on local tiktoken/network state
-            logger.warning("Failed to initialize tiktoken encoder, falling back to heuristic token counting: %s", exc)
+            _log_tiktoken_fallback(exc)
             self.encoder = None
 
     def _load_cost_stats(self):
