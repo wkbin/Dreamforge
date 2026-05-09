@@ -551,6 +551,13 @@ function personaReviewFieldValue(field) {
   return id ? trimmedValue(id, "") : "";
 }
 
+function personaReviewFieldNeedsAutofill(field) {
+  const value = personaReviewFieldValue(field);
+  if (!value) return true;
+  const normalized = value.replace(/\s+/g, "");
+  return ["证据不足", "资料不足", "信息不足", "暂无资料", "暂缺", "待补充"].includes(normalized);
+}
+
 function markPersonaReviewFieldAutofilled(field) {
   if (!field) return;
   personaReviewAutofilledFields.add(field);
@@ -581,7 +588,7 @@ function syncPersonaReviewAutofillButtons() {
   document.querySelectorAll("[data-persona-autofill-field]").forEach((node) => {
     const field = node.getAttribute("data-persona-autofill-field") || "";
     if (!(node instanceof HTMLButtonElement)) return;
-    const shouldShow = PERSONA_AUTOFILLABLE_FIELDS.has(field) && !personaReviewFieldValue(field);
+    const shouldShow = PERSONA_AUTOFILLABLE_FIELDS.has(field) && personaReviewFieldNeedsAutofill(field);
     node.classList.toggle("hidden", !shouldShow);
     node.disabled = Boolean(node.dataset.loading === "true");
   });
