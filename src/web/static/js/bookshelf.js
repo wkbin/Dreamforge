@@ -9,9 +9,6 @@ function syncBookshelfSelection() {
 
 function renderBookshelfDetail(run) {
   setText("run-stage-title", run ? `《${runNovelTitle(run)}》` : "人物与关系正在慢慢浮现", "");
-  setText("run-novel", run ? runNovelTitle(run) : "", "");
-  setText("run-characters", run ? joinCharacters(getRunCharacterNames(run)) : "", "");
-  setText("run-summary", run ? humanizeSummary(run.summary?.status_text) : "", "");
   setText("progress-copy", run?.progress?.message || "人物会依次显形，关系也会慢慢织起来。", "");
   const isRunning = Boolean(run) && run.status === "running";
   const isStopped = Boolean(run) && run.status === "stopped";
@@ -70,9 +67,50 @@ function renderBookshelfDetail(run) {
     stopButton.classList.toggle("hidden", !isRunning);
     stopButton.textContent = stopRequested ? "正在停止..." : "停止蒸馏";
   }
+  const reviewButton = el("open-persona-review-button");
+  const hasReviewAction = Boolean(run?.artifact_index?.characters?.length);
   const detailActions = el("detail-primary-actions");
   if (detailActions) {
-    detailActions.classList.toggle("hidden", !canEnterChat && !canRedistill && !canStop);
+    detailActions.classList.toggle("hidden", !canEnterChat && !canRedistill && !canStop && !hasReviewAction);
+  }
+  if (reviewButton) {
+    reviewButton.classList.remove("hidden");
+    reviewButton.disabled = !hasReviewAction;
+  }
+  const relationButton = el("open-relation-details-button");
+  const hasRelation = Boolean(run?.artifact_index?.relation_graph?.relations_file);
+  if (relationButton) {
+    relationButton.classList.remove("hidden");
+    relationButton.disabled = !hasRelation;
+  }
+  const exportButton = el("detail-export-summary-button");
+  let hasExport = false;
+  if (exportButton) {
+    hasExport =
+      Boolean(run?.file_urls?.manifest) ||
+      Boolean(run?.file_urls?.graph_relations_file) ||
+      Boolean(run?.file_urls?.graph_html) ||
+      Boolean(run?.file_urls?.graph_svg);
+    exportButton.classList.remove("hidden");
+    exportButton.disabled = !hasExport;
+  }
+  const graphButton = el("detail-view-graph-button");
+  let hasGraphLink = false;
+  if (graphButton) {
+    hasGraphLink = Boolean(run?.file_urls?.graph_html || run?.file_urls?.graph_svg);
+    graphButton.classList.remove("hidden");
+    graphButton.disabled = !hasGraphLink;
+    graphButton.onclick = () => {
+      const target = run?.file_urls?.graph_html || run?.file_urls?.graph_svg || "";
+      if (!target) return;
+      window.open(target, "_blank", "noopener,noreferrer");
+    };
+  }
+  toggle("detail-secondary-actions-shell", Boolean(run));
+  const shouldSoftenSecondary = isRunning && (!hasRelation || !hasGraphLink || !hasExport);
+  const secondaryActions = el("detail-secondary-actions");
+  if (secondaryActions) {
+    secondaryActions.classList.toggle("is-softened", shouldSoftenSecondary);
   }
   toggle("detail-action-note", Boolean(run) && (isRunning || isStopped));
   if (stopRequested) {
@@ -169,8 +207,18 @@ function renderBookshelf(runs) {
     `;
     button.title = `${runNovelTitle(run)}${humanizeSummary(run.summary?.status_text) ? ` · ${humanizeSummary(run.summary?.status_text)}` : ""}`;
     button.addEventListener("click", async () => {
-      const freshRun = await apiJson(`/api/web/runs/${run.run_id}`);
-      renderRun(freshRun);
+      if (typeof setWorkOverviewLoading === "function") {
+        setWorkOverviewLoading(true, "正在载入这一卷...");
+      }
+      try {
+        const freshRun = await apiJson(`/api/web/runs/${run.run_id}`);
+        renderRun(freshRun);
+      } catch (error) {
+        if (typeof setWorkOverviewLoading === "function") {
+          setWorkOverviewLoading(false);
+        }
+        setStatus("bookshelf-status", error.message || "这卷暂时没有载入。");
+      }
     });
 
     const removeButton = document.createElement("button");
@@ -237,9 +285,15 @@ function getBookshelfCardState(run) {
 }
 
 async function loadRunsOverview() {
+  if (!allRuns.length && typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(true, "正在载入作品列表...");
+  }
   const data = await apiJson("/api/web/runs");
   allRuns = Array.isArray(data.items) ? data.items : [];
   renderBookshelf(allRuns);
+  if (typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(false);
+  }
   return allRuns;
 }
 
@@ -252,6 +306,9 @@ function showBookshelfHome() {
   sourceHistoryExpanded = false;
   sidebarCollapsed = false;
   setStatus("bookshelf-status", "");
+  if (typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(false);
+  }
   resetDialogueView();
   renderBookshelfDetail(null);
   applySidebarState();
@@ -268,6 +325,9 @@ function startNewRunFlow() {
   sourceHistoryExpanded = false;
   sidebarCollapsed = false;
   setStatus("bookshelf-status", "");
+  if (typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(false);
+  }
   resetDialogueView();
   renderBookshelfDetail(null);
   applySidebarState();

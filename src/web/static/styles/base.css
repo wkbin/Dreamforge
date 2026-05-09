@@ -416,12 +416,12 @@ textarea {
 }
 
 .experience-shell.dialogue-layout #main-shell-root > .main-shell {
-  min-height: 0;
-  height: auto;
-  max-height: none;
-  grid-template-rows: auto auto;
-  overflow: visible;
-  align-content: start;
+  min-height: var(--dialogue-rail-height);
+  height: var(--dialogue-rail-height);
+  max-height: var(--dialogue-rail-height);
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+  align-content: stretch;
 }
 
 .experience-shell.dialogue-layout .rail-sessions {
@@ -433,24 +433,24 @@ textarea {
 .experience-shell.dialogue-layout .chat-detail,
 .experience-shell.dialogue-layout .chat-content {
   min-height: 0;
-  height: auto;
+  height: 100%;
 }
 
 .experience-shell.dialogue-layout .chat-shell,
 .experience-shell.dialogue-layout .composer-shell {
-  align-self: start;
+  align-self: stretch;
 }
 
 .experience-shell.dialogue-layout .chat-shell,
 .experience-shell.dialogue-layout .chat-detail {
-  display: block;
-  overflow: visible;
+  display: grid;
+  overflow: hidden;
 }
 
 .experience-shell.dialogue-layout .transcript {
   min-height: 0;
-  height: auto;
-  max-height: min(62vh, 46rem);
+  height: 100%;
+  max-height: none;
   align-content: start;
 }
 

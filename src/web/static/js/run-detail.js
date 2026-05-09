@@ -62,12 +62,24 @@ function getCurrentRunEvents() {
   return Array.isArray(currentRun?.events) ? currentRun.events : [];
 }
 
+function setWorkOverviewLoading(loading, message = "") {
+  const progressRoot = el("step-progress");
+  if (progressRoot) {
+    progressRoot.classList.toggle("is-loading-work", Boolean(loading));
+  }
+  if (loading) {
+    setText("detail-action-note", message || "正在载入这一卷...", "");
+    toggle("detail-action-note", true);
+  } else if (currentRun?.status !== "running" && currentRun?.status !== "stopped" && currentRun?.status !== "failed") {
+    toggle("detail-action-note", false);
+  }
+}
+
 function renderRunSummary(run) {
   setValue("redistill-characters", joinCharacters(getRunCharacterNames(run)));
   setText("redistill-status", run.redistill?.summary || "", "");
-  setText("run-novel", runNovelTitle(run));
-  setText("run-characters", joinCharacters(getRunCharacterNames(run) || run.locked_characters || []));
-  setText("run-summary", humanizeSummary(run.summary?.status_text));
+  setText("run-progress-import", buildWorkImportStatus(run), "");
+  setText("run-progress-distill", buildWorkDistillStatus(run), "");
   setText("run-progress-latest", formatWeakTime(run.updated_at || "") || "刚刚", "");
   const elapsedText = String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim();
   const progressCopy = String(run.progress?.message || "").trim() || "人物与关系会依次浮现。";
@@ -77,6 +89,7 @@ function renderRunSummary(run) {
   setText("work-overview-next-step", buildWorkOverviewNextStep(run), "");
   setText("run-progress-review", buildWorkReviewStatus(run), "");
   setText("run-progress-graph", buildWorkGraphStatus(run), "");
+  renderWorkHeroMetrics(run);
   renderWorkSummaryNarrative(run);
   renderSourceHistory(run);
   renderRedistillPlan(run);
@@ -88,6 +101,44 @@ function renderRunSummary(run) {
   syncRedistillPreview();
 }
 
+function buildWorkImportStatus(run) {
+  const source = getCurrentNovelSource(run);
+  const sourceName = String(source?.source_name || "").trim();
+  if (!sourceName) {
+    return "未开始";
+  }
+  return `已完成 · ${sourceName}`;
+}
+
+function buildWorkDistillStatus(run) {
+  const total = Number(run?.progress?.total_characters || run?.locked_characters?.length || 0);
+  const completed = Number(run?.progress?.completed_count || run?.artifact_index?.characters?.length || 0);
+  if (total <= 0 && completed <= 0) {
+    return "未开始";
+  }
+  if (run?.status === "failed" || run?.status === "stopped") {
+    return `已中断 · ${completed}/${Math.max(total, completed)}`;
+  }
+  if (completed >= total && total > 0) {
+    return `已完成 · ${completed}/${total}`;
+  }
+  if (run?.status === "running") {
+    return `进行中 · ${completed}/${Math.max(total, completed)}`;
+  }
+  return `待校对 · ${completed}/${Math.max(total, completed)}`;
+}
+
+function renderWorkHeroMetrics(run) {
+  const sourceName = String(getCurrentNovelSource(run)?.source_name || "").trim() || "当前书页";
+  const characterTotal = getRunCharacterNames(run).length;
+  const statusText = humanizeSummary(run?.summary?.status_text);
+  const elapsedText = String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim() || "进行中";
+  setText("run-hero-source", sourceName, "");
+  setText("run-hero-character-total", characterTotal > 0 ? `${characterTotal} 位` : "0 位", "");
+  setText("run-hero-status", statusText || "未开始", "");
+  setText("run-hero-elapsed", elapsedText, "");
+}
+
 function renderWorkSummaryNarrative(run) {
   setText("work-summary-line", buildWorkSummaryLine(run), "");
   setText("work-summary-bottleneck", buildWorkSummaryBottleneck(run), "");
@@ -97,7 +148,7 @@ function renderWorkSummaryNarrative(run) {
 
 function buildWorkSummaryLine(run) {
   if (!run) {
-    return "先放入一本书，这里才会开始替你归纳整卷状态。";
+    return "先放入一本书，这里会开始归纳整卷状态。";
   }
   const title = runNovelTitle(run);
   const characterCount = getRunCharacterNames(run).length;
@@ -112,15 +163,15 @@ function buildWorkSummaryLine(run) {
     return `《${title}》这轮已经收住，现在适合决定是继续蒸馏还是先校对人物。`;
   }
   if (!characterCount) {
-    return `《${title}》还没有稳定的人物包，先把角色请出来，这页才会真正亮起来。`;
+    return `《${title}》还没有稳定的人物包，先把角色请出来。`;
   }
   if (weakCount > 0) {
     return `《${title}》的人物骨架已经立住一部分，但还有 ${weakCount} 位角色值得优先补稳。`;
   }
   if (!run?.artifact_index?.relation_graph?.relations_file) {
-    return `《${title}》的人物已经基本站稳，关系图谱还没完全落下，但不影响先开聊。`;
+    return `《${title}》的人物已基本站稳，关系图谱还没落下，但不影响先开聊。`;
   }
-  return `《${title}》这卷已经形成比较完整的工作面，可以校对、看关系，也可以直接入场。`;
+    return `《${title}》这卷已形成完整工作面，可以校对、看关系，也能直接入场。`;
 }
 
 function buildWorkSummaryBottleneck(run) {
@@ -128,10 +179,10 @@ function buildWorkSummaryBottleneck(run) {
     return "当前还没有工作对象。";
   }
   if (run.status === "running") {
-    return String(run.progress?.message || "").trim() || "当前瓶颈还在模型整理进度本身，先盯住这一轮往哪里走。";
+    return String(run.progress?.message || "").trim() || "当前瓶颈是流程仍在进行，先盯住这一轮进度。";
   }
   if (run.status === "failed") {
-    return "当前瓶颈是这一轮中断；最稳的接法是继续蒸馏，而不是从零重来。";
+    return "这一轮已中断；最稳的接法是继续蒸馏，而不是从零重来。";
   }
   const priority = buildWorkPriorityReviewItems(run)[0];
   if (priority?.hasEvidenceGap) {
@@ -141,9 +192,9 @@ function buildWorkSummaryBottleneck(run) {
     return `当前最卡的是「${priority.name}」还有 ${priority.weakCount} 处关键字段偏薄，先补这个角色最划算。`;
   }
   if (!run?.artifact_index?.relation_graph?.relations_file) {
-    return "当前瓶颈已经不在人物，而在关系图谱尚未落成；不过这不阻塞聊天与继续校对。";
+    return "当前主要瓶颈是关系图谱尚未落成；不过这不阻塞聊天与校对。";
   }
-  return "当前没有明显卡点，这卷已经可以把重点从整理切到体验。";
+  return "当前没有明显卡点，这卷可以把重点从整理切到体验。";
 }
 
 function renderWorkSummaryEvents(run) {
@@ -171,7 +222,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "开始蒸馏",
       title: "先放入一本书",
-      copy: "没有工作对象时，最值得做的是先新建一卷，把故事请上书架。",
+      copy: "先新建一卷，把故事请上书架。",
       action: "new_run",
       payload: "",
     };
@@ -180,7 +231,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "查看进度",
       title: "先盯住当前整理进度",
-      copy: "这一轮还在跑，先不用切太多动作；等角色再落下几位，判断会更稳。",
+      copy: "这一轮还在跑，先不用切太多动作，等角色再落下几位再判断。",
       action: "focus_timeline",
       payload: "",
     };
@@ -189,7 +240,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "继续蒸馏",
       title: "把这一轮先接上",
-      copy: "当前最值钱的是沿着这卷继续往下走，而不是把已落成的人物重新来一遍。",
+      copy: "沿着这卷继续往下走，比把已落成的人物重做一遍更划算。",
       action: "open_redistill",
       payload: "",
     };
@@ -198,7 +249,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "补这位角色",
       title: `先给「${priority.name}」补正文证据`,
-      copy: "这个角色不是简单字段缺字，而是素材本身偏薄；优先增量蒸馏最有效。",
+      copy: "这个角色不只是字段缺字，而是素材偏薄；优先增量蒸馏更有效。",
       action: "redistill_character",
       payload: priority.name,
     };
@@ -207,7 +258,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "打开角色页",
       title: `先补稳「${priority.name}」`,
-      copy: "当前最值钱的动作，是把最薄的角色先补稳；这样整卷对话信任感会涨得最快。",
+      copy: "先把最薄的角色补稳，这样整卷对话信任感提升最快。",
       action: "open_character",
       payload: priority.name,
     };
@@ -216,18 +267,18 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "开始聊天",
       title: "人物已经够用，可以先入场",
-      copy: "关系图还没完全落下，但已经不影响体验；可以先开一局，回头再补图谱。",
+      copy: "关系图还没落下，但不影响体验；可以先开一局，回头再补图谱。",
       action: "start_chat",
       payload: "",
     };
   }
   return {
-    buttonLabel: "查看关系",
-    title: "先看整卷关系",
-    copy: "人物和图谱都比较稳了，下一步最值得的是看全局关系，再决定从谁入场。",
-    action: "open_relations",
-    payload: "",
-  };
+      buttonLabel: "查看关系",
+      title: "先看整卷关系",
+      copy: "人物和图谱都已稳定，先看全局关系，再决定从谁入场。",
+      action: "open_relations",
+      payload: "",
+    };
 }
 
 function renderWorkRecommendedAction(run) {
@@ -286,45 +337,53 @@ function handleWorkRecommendedAction(action, payload = "") {
 
 function buildWorkOverviewNextStep(run) {
   if (!run) {
-    return "先放入一本书，人物和关系才会在这里长出来。";
+    return "先放入一本书，人物和关系才会在这里出现。";
   }
   if (run.status === "running") {
-    return "先盯住这一轮的进度，等人物落定后再决定要不要继续补人或开聊。";
+    return "先盯住这轮进度，等人物落定后再决定是否补人或开聊。";
   }
   if (run.status === "failed") {
-    return "这一轮停在半途，最值得做的是继续蒸馏，把人物和关系重新接上。";
+    return "这一轮停在半途，先继续蒸馏把人物和关系接上。";
   }
   if (run.status === "stopped") {
-    return "这卷已经收住，下一步可以继续蒸馏，也可以先回头校对已落成的人物。";
+    return "这卷已经收住，下一步可继续蒸馏，或先校对已落成人物。";
   }
   if (!getRunCharacterNames(run).length) {
-    return "这一卷还没有稳定的人物包，先继续蒸馏，把角色请出来。";
+    return "这一卷还没有稳定人物包，先继续蒸馏把角色请出来。";
   }
   if (!run?.artifact_index?.relation_graph?.relations_file) {
-    return "人物已经开始成形，接下来可以先校对角色，关系图谱补出来后再看全局。";
+    return "人物已开始成形，可先校对角色，关系图谱补出后再看全局。";
   }
-  return "这卷已经可以继续校对人物、查看关系，或者直接进入其中一幕。";
+  return "这卷可以继续校对人物、查看关系，或直接进入其中一幕。";
 }
 
 function buildWorkReviewStatus(run) {
   const weakCount = countWeakCharacters(run);
   if (!getRunCharacterNames(run).length) {
-    return "还没有人物";
+    return "未开始";
   }
   if (weakCount <= 0) {
-    return "关键字段已齐";
+    return "已完成";
   }
-  return `还有 ${weakCount} 位待补`;
+  return `待校对 · ${weakCount} 位`;
 }
 
 function buildWorkGraphStatus(run) {
-  if (run?.artifact_index?.relation_graph?.relations_file) {
-    return "已可查看";
+  const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
+  const graphFailed = String(run?.summary?.graph_status || "").trim() === "failed" || String(run?.progress?.graph_status || "").trim() === "failed";
+  if (hasGraph) {
+    return "已完成";
+  }
+  if (graphFailed) {
+    return "图谱失败但不影响聊天";
+  }
+  if (run?.status === "failed" || run?.status === "stopped") {
+    return "已中断";
   }
   if (run?.status === "running") {
-    return "正在织就";
+    return "进行中";
   }
-  return "暂未落成";
+  return "未开始";
 }
 
 function countWeakCharacters(run) {
@@ -495,20 +554,37 @@ function renderWorkPriorityReview(run) {
 
 function renderWorkGraphSummary(run) {
   const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
+  const graphFailed = String(run?.summary?.graph_status || "").trim() === "failed" || String(run?.progress?.graph_status || "").trim() === "failed";
   const hasCharacters = getRunCharacterNames(run).length > 0;
   if (hasGraph) {
+    setWorkGraphStatusBadge("已完成", "stable");
     setText("run-graph-status-copy", "关系线已经能看，先看牵系和张力，再决定从哪种方式入场。", "");
     return;
   }
+  if (graphFailed) {
+    setWorkGraphStatusBadge("失败可跳过", "weak");
+    setText("run-graph-status-copy", "这轮关系图谱生成失败，但不会阻塞聊天；可以先入场，稍后再补图谱。", "");
+    return;
+  }
   if (run?.status === "running") {
+    setWorkGraphStatusBadge("进行中", "warning");
     setText("run-graph-status-copy", "关系网还在织，但不妨先盯住人物进度；图谱落下后会自动接到这里。", "");
     return;
   }
   if (hasCharacters) {
+    setWorkGraphStatusBadge("待补图谱", "warning");
     setText("run-graph-status-copy", "关系图暂时还没落成，但人物已经可以继续校对，也不影响你先进入聊天。", "");
     return;
   }
+  setWorkGraphStatusBadge("未开始", "warning");
   setText("run-graph-status-copy", "先把人物请出来，关系网才会在这里慢慢织成。", "");
+}
+
+function setWorkGraphStatusBadge(text, tone = "warning") {
+  const badge = el("run-graph-status-badge");
+  if (!badge) return;
+  badge.textContent = text || "未开始";
+  badge.className = `work-character-status is-${tone}`;
 }
 
 function renderWorkSessionPreview(run) {
@@ -523,16 +599,17 @@ function renderWorkSessionPreview(run) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "work-session-card";
+    const participantCount = Array.isArray(item.participants) ? item.participants.length : 0;
     button.innerHTML = `
       <div class="work-session-head">
         <div class="work-session-title">
           <strong>${joinCharacters(item.participants || []) || "未命名会话"}</strong>
-          <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"}</small>
+          <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"} · ${participantCount || 0} 人</small>
         </div>
       </div>
       <div class="work-session-meta">
-        <span>${humanizeSessionStatus(item.status)}</span>
         <span>${formatWeakTime(item.updated_at) || "刚刚"}</span>
+        <span>${humanizeSessionStatus(item.status)}</span>
       </div>
     `;
     button.addEventListener("click", async () => {
@@ -555,6 +632,20 @@ function renderWorkSessionPreview(run) {
   });
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("work-session-preview-empty", root.childElementCount === 0);
+}
+
+function openWorkSummaryExport() {
+  const target =
+    currentRun?.file_urls?.manifest ||
+    currentRun?.file_urls?.graph_relations_file ||
+    currentRun?.file_urls?.graph_html ||
+    currentRun?.file_urls?.graph_svg ||
+    "";
+  if (!target) {
+    setStatus("bookshelf-status", "当前没有可导出的摘要文件。");
+    return;
+  }
+  window.open(target, "_blank", "noopener,noreferrer");
 }
 
 async function openCharacterOverview(characterName) {
@@ -878,6 +969,10 @@ function buildCharacterOverviewReviewCopy(reviewEvent) {
     return `${timestampText}在角色页直接保存过字段。${changedCopy}`.trim();
   }
   return `${timestampText}保存过人物校对。${changedCopy}`.trim();
+}
+
+function openWorkTimeline() {
+  el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function buildCharacterOverviewRedistillSignal(character) {
@@ -1370,6 +1465,10 @@ function renderQualitySnapshot(run) {
     standardChunkingVisible;
   toggle("quality-section", shouldShow);
   toggle("quality-empty-copy", !shouldShow);
+  const qualitySection = el("quality-section");
+  if (qualitySection) {
+    qualitySection.open = Boolean(run?.status === "running");
+  }
 }
 
 function renderQualityPills(rootId, values, emptyId) {
@@ -1392,8 +1491,13 @@ function renderRunEvents(run) {
   (run.events || []).slice(-8).forEach((event) => {
     const stageLabel = humanizeRunEventStage(String(event?.stage || "").trim());
     const message = String(event?.message || "").trim();
+    const updated = formatWeakTime(String(event?.timestamp || "").trim()) || "刚刚";
     const item = document.createElement("li");
-    item.textContent = message || stageLabel;
+    item.innerHTML = `
+      <strong>${escapeHtml(stageLabel)}</strong>
+      <p>${escapeHtml(message || "这一轮有新的变化落在这里。")}</p>
+      <small>${escapeHtml(updated)}</small>
+    `;
     eventsRoot.appendChild(item);
   });
   toggle("timeline-empty-note", eventsRoot.childElementCount === 0);
@@ -1418,19 +1522,28 @@ function renderRunGraphLinks(run) {
     });
   graphLinksRoot.classList.toggle("hidden", graphLinksRoot.childElementCount === 0);
   toggle("graph-empty-note", graphLinksRoot.childElementCount === 0);
-  toggle("open-relation-details-button", Boolean(run?.artifact_index?.relation_graph?.relations_file));
+  const relationButton = el("open-relation-details-button");
+  if (relationButton) {
+    relationButton.classList.remove("hidden");
+    relationButton.disabled = !Boolean(run?.artifact_index?.relation_graph?.relations_file);
+  }
 }
 
 function syncRunArtifacts(run) {
   renderCharacterPills(run);
   renderRedistillPills(run);
-  toggle("open-persona-review-button", Boolean(run?.artifact_index?.characters?.length));
+  const reviewButton = el("open-persona-review-button");
+  if (reviewButton) {
+    reviewButton.classList.remove("hidden");
+    reviewButton.disabled = !Boolean(run?.artifact_index?.characters?.length);
+  }
   if (run.artifact_index?.characters?.length) {
     maybePrefillChatSetup(run);
   }
 }
 
 function renderRun(run, options = {}) {
+  setWorkOverviewLoading(false);
   const preserveDialogue = Boolean(options.preserveDialogue);
   const suppressWorkflowUpdate = Boolean(options.suppressWorkflowUpdate);
   setStatus("bookshelf-status", "");
