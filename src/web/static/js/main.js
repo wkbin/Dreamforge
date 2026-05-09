@@ -1074,6 +1074,11 @@ function bindEvents() {
       setStatus("persona-review-status", error.message || "人物档案暂时没有载入。")
     );
   });
+  bind("character-overview-redistill-button", "click", () => {
+    if (typeof openCharacterOverviewIncrementalDistill === "function") {
+      openCharacterOverviewIncrementalDistill();
+    }
+  });
   bind("character-overview-act-button", "click", () => {
     if (typeof openCharacterOverviewSessionMode === "function") {
       openCharacterOverviewSessionMode("act").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
@@ -1092,6 +1097,11 @@ function bindEvents() {
   el("character-overview-key-fields")?.addEventListener("click", (event) => {
     if (typeof handleCharacterOverviewFieldAutofill === "function") {
       handleCharacterOverviewFieldAutofill(event);
+    }
+  });
+  el("character-overview-advanced-groups")?.addEventListener("click", (event) => {
+    if (typeof handleCharacterOverviewAdvancedGroupToggle === "function") {
+      handleCharacterOverviewAdvancedGroupToggle(event);
     }
   });
   window.addEventListener("resize", () => {

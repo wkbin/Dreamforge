@@ -305,11 +305,22 @@
 
     <div class="card-actions">
       <button id="character-overview-review-button" type="button" class="primary-button">校对字段</button>
+      <button id="character-overview-redistill-button" type="button" class="soft-button">继续增量蒸馏</button>
       <button id="character-overview-act-button" type="button" class="soft-button">化身此人</button>
       <button id="character-overview-insert-button" type="button" class="soft-button">以自己入场</button>
       <button id="character-overview-export-button" type="button" class="soft-button">查看原档</button>
     </div>
     <p id="character-overview-status" class="card-note"></p>
+
+    <section class="detail-section">
+      <div class="detail-section-head">
+        <div>
+          <p class="eyebrow">健康度</p>
+          <h4>这一页当前能信到什么程度</h4>
+        </div>
+      </div>
+      <div id="character-overview-health-metrics" class="character-overview-health-metrics"></div>
+    </section>
 
     <div class="character-overview-grid">
       <section class="detail-section">
@@ -341,6 +352,7 @@
           <h4>这些部分可以再慢慢抠细节</h4>
         </div>
       </div>
+      <p class="detail-section-copy">默认先收起，等关键骨架稳了，再逐组展开做细修。</p>
       <div id="character-overview-advanced-groups" class="character-overview-advanced-groups"></div>
     </section>
   </section>

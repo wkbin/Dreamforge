@@ -55,6 +55,8 @@ const CHARACTER_OVERVIEW_FIELD_LABELS = {
   others_impression: "他人观感",
 };
 
+const characterOverviewExpandedGroups = new Set();
+
 function renderRunSummary(run) {
   setValue("redistill-characters", joinCharacters(getRunCharacterNames(run)));
   setText("redistill-status", run.redistill?.summary || "", "");
@@ -264,6 +266,7 @@ function renderWorkSessionPreview(run) {
 async function openCharacterOverview(characterName) {
   if (!currentRunId || !currentRun || !characterName) return;
   const payload = await apiJson(`/api/web/runs/${currentRunId}/personas/${encodeURIComponent(characterName)}`);
+  characterOverviewExpandedGroups.clear();
   currentCharacterOverview = payload;
   characterOverviewOpen = true;
   renderCharacterOverview(payload);
@@ -275,30 +278,82 @@ function renderCharacterOverview(payload) {
   const character = String(payload?.character || "").trim() || "人物";
   const workTitle = runNovelTitle(currentRun);
   const role = String(fields.story_role || fields.core_identity || "这一页会慢慢把他的轮廓立起来").trim();
-  const missingKeyCount = CHARACTER_OVERVIEW_KEY_FIELDS.filter(([field]) => !String(fields[field] || "").trim()).length;
-  const healthText = missingKeyCount <= 0 ? "关键字段已齐" : missingKeyCount >= 4 ? "待校对" : "待补全";
-  const healthTone = missingKeyCount <= 0 ? "stable" : missingKeyCount >= 4 ? "weak" : "warning";
+  const snapshot = buildCharacterOverviewHealthSnapshot(fields);
 
   setText("character-overview-title", `${character} · 人物档案`, "");
   setText("character-overview-work", `出自《${workTitle}》`, "");
   setText("character-overview-name", character, "");
   setText("character-overview-role", role, "");
-  setText("character-overview-health-badge", healthText, "");
+  setText("character-overview-health-badge", snapshot.healthText, "");
   const badge = el("character-overview-health-badge");
   if (badge) {
-    badge.className = `work-character-status is-${healthTone}`;
+    badge.className = `work-character-status is-${snapshot.healthTone}`;
   }
-  setText(
-    "character-overview-health-copy",
-    missingKeyCount <= 0 ? "这个角色的关键骨架已经比较完整，可以直接带进对话。" : `当前还有 ${missingKeyCount} 处关键字段值得继续补稳。`,
-    ""
-  );
+  setText("character-overview-health-copy", snapshot.summaryCopy, "");
   setStatus("character-overview-status", "");
 
+  renderCharacterOverviewHealthMetrics(snapshot);
   renderCharacterOverviewKeyFields(fields);
   renderCharacterOverviewVoiceSummary(fields);
   renderCharacterOverviewRelationSummary(fields);
   renderCharacterOverviewAdvancedGroups(fields);
+}
+
+function buildCharacterOverviewHealthSnapshot(fields) {
+  let filledKeyCount = 0;
+  let weakKeyCount = 0;
+  CHARACTER_OVERVIEW_KEY_FIELDS.forEach(([field]) => {
+    const value = String(fields[field] || "").trim();
+    if (value) {
+      filledKeyCount += 1;
+    }
+    if (isCharacterOverviewFieldWeak(field, value)) {
+      weakKeyCount += 1;
+    }
+  });
+  const advancedFieldNames = CHARACTER_OVERVIEW_ADVANCED_GROUPS.flatMap(([, fieldNames]) => fieldNames);
+  const advancedFilledCount = advancedFieldNames.filter((field) => String(fields[field] || "").trim()).length;
+  const totalFieldCount = CHARACTER_OVERVIEW_KEY_FIELDS.length + advancedFieldNames.length;
+  const filledFieldCount = filledKeyCount + advancedFilledCount;
+  const completeness = totalFieldCount > 0 ? Math.round((filledFieldCount / totalFieldCount) * 100) : 0;
+  const stableKeyCount = Math.max(0, CHARACTER_OVERVIEW_KEY_FIELDS.length - weakKeyCount);
+  const healthTone = weakKeyCount <= 0 ? "stable" : weakKeyCount >= 4 ? "weak" : "warning";
+  const healthText = weakKeyCount <= 0 ? "关键字段已齐" : weakKeyCount >= 4 ? "待校对" : "待补全";
+  const updatedText = formatWeakTime(currentRun?.updated_at || "") || "刚刚";
+  const summaryCopy =
+    weakKeyCount <= 0
+      ? "这个角色的关键骨架已经比较完整，可以直接带进对话；如果还想更像本人，再慢慢抠细调字段。"
+      : `当前还有 ${weakKeyCount} 处关键字段偏薄，建议先补稳骨架，再决定是否继续增量蒸馏。`;
+  return {
+    completeness,
+    stableKeyCount,
+    weakKeyCount,
+    advancedFilledCount,
+    advancedTotalCount: advancedFieldNames.length,
+    updatedText,
+    healthTone,
+    healthText,
+    summaryCopy,
+  };
+}
+
+function renderCharacterOverviewHealthMetrics(snapshot) {
+  const root = el("character-overview-health-metrics");
+  if (!root) return;
+  root.innerHTML = "";
+  const metrics = [
+    ["完整度", `${snapshot.completeness}%`, "按关键字段与细调字段的当前覆盖度估算"],
+    ["稳住的关键字段", `${snapshot.stableKeyCount} / ${CHARACTER_OVERVIEW_KEY_FIELDS.length}`, "这些字段已经足够支撑角色概览与基础对话"],
+    ["待补位置", `${snapshot.weakKeyCount} 处`, snapshot.weakKeyCount > 0 ? "优先补这些地方，人物会更像自己" : "关键骨架已经收住，可以转去细修"],
+    ["细调覆盖", `${snapshot.advancedFilledCount} / ${snapshot.advancedTotalCount}`, "用于抠语气、情绪和更细的人设纹理"],
+    ["最近更新", snapshot.updatedText, "显示这一卷最近一次落盘或校对的大致时间"],
+  ];
+  metrics.forEach(([label, value, hint]) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-health-card";
+    card.innerHTML = `<span>${label}</span><strong>${value}</strong><small>${hint}</small>`;
+    root.appendChild(card);
+  });
 }
 
 function renderCharacterOverviewKeyFields(fields) {
@@ -390,18 +445,46 @@ function renderCharacterOverviewAdvancedGroups(fields) {
     const values = fieldNames
       .map((field) => {
         const value = String(fields[field] || "").trim();
-        return value ? `${CHARACTER_OVERVIEW_FIELD_LABELS[field] || field}：${value}` : "";
+        return value ? { field, label: CHARACTER_OVERVIEW_FIELD_LABELS[field] || field, value } : null;
       })
-      .filter(Boolean)
-      .slice(0, 3);
+      .filter(Boolean);
+    const expanded = characterOverviewExpandedGroups.has(title);
+    const previewText = values
+      .slice(0, 2)
+      .map((item) => `${item.label}：${item.value}`)
+      .join("；");
     const card = document.createElement("article");
     card.className = "character-overview-advanced-group";
     card.innerHTML = `
-      <strong>${title}</strong>
-      <p>${values.join("；") || "这一组还可以继续补更多细节，不必一次写满。"}</p>
+      <button type="button" class="character-overview-advanced-toggle${expanded ? " is-open" : ""}" data-character-overview-group="${title}" aria-expanded="${expanded ? "true" : "false"}">
+        <span class="character-overview-advanced-title">${title}</span>
+        <span class="character-overview-advanced-meta">${values.length > 0 ? `已填 ${values.length} / ${fieldNames.length}` : "这一组还没铺开"}</span>
+        <span class="character-overview-advanced-arrow">${expanded ? "收起" : "展开"}</span>
+      </button>
+      <p class="character-overview-advanced-preview${expanded ? " hidden" : ""}">${previewText || "这一组还可以继续补更多细节，不必一次写满。"}</p>
+      <div class="character-overview-advanced-body${expanded ? "" : " hidden"}">
+        ${
+          values.length
+            ? values.map((item) => `<article class="character-overview-advanced-field"><span>${item.label}</span><p>${item.value}</p></article>`).join("")
+            : `<p class="character-overview-advanced-empty">这一组暂时还没写开，可以先稳住关键字段，再决定要不要继续细修。</p>`
+        }
+      </div>
     `;
     root.appendChild(card);
   });
+}
+
+function handleCharacterOverviewAdvancedGroupToggle(event) {
+  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-character-overview-group]") : null;
+  if (!(trigger instanceof HTMLButtonElement) || !currentCharacterOverview?.fields) return;
+  const groupName = String(trigger.getAttribute("data-character-overview-group") || "").trim();
+  if (!groupName) return;
+  if (characterOverviewExpandedGroups.has(groupName)) {
+    characterOverviewExpandedGroups.delete(groupName);
+  } else {
+    characterOverviewExpandedGroups.add(groupName);
+  }
+  renderCharacterOverviewAdvancedGroups(currentCharacterOverview.fields || {});
 }
 
 async function handleCharacterOverviewFieldAutofill(event) {
@@ -455,6 +538,21 @@ async function handleCharacterOverviewFieldAutofill(event) {
     trigger.disabled = false;
     trigger.textContent = originalText;
   }
+}
+
+function openCharacterOverviewIncrementalDistill() {
+  const character = String(currentCharacterOverview?.character || "").trim();
+  if (!character || !currentRun) return;
+  characterOverviewOpen = false;
+  redistillPanelOpen = true;
+  renderBookshelfDetail(currentRun);
+  updateWorkflowState();
+  const mergedCharacters = joinCharacters([character, ...parseCharacters(valueOf("redistill-characters", ""))]);
+  setValue("redistill-characters", mergedCharacters);
+  syncRedistillPreview();
+  setStatus("redistill-status", `这轮会把「${character}」按增量方式继续补稳。`);
+  el("redistill-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  el("redistill-characters")?.focus();
 }
 
 async function openCharacterOverviewSessionMode(mode) {
