@@ -76,6 +76,7 @@ function renderRunSummary(run) {
   renderRedistillPlan(run);
   renderQualitySnapshot(run);
   renderCharacterReadiness(run);
+  renderWorkPriorityReview(run);
   renderWorkGraphSummary(run);
   renderWorkSessionPreview(run);
   syncRedistillPreview();
@@ -160,6 +161,8 @@ function buildCharacterReadinessItems(run) {
       missingFields,
       statusText,
       statusTone,
+      hasEvidenceGap: qualityMissing.has(item.name),
+      priorityScore: qualityMissing.has(item.name) ? 100 + weakCount : weakCount,
       updatedText: formatWeakTime(run.updated_at || ""),
     };
   });
@@ -197,6 +200,95 @@ function renderCharacterReadiness(run) {
   });
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("run-character-readiness-empty", root.childElementCount === 0);
+}
+
+function buildWorkPriorityReviewItems(run) {
+  return buildCharacterReadinessItems(run)
+    .filter((item) => item.hasEvidenceGap || item.weakCount > 0 || item.statusTone !== "stable")
+    .sort((left, right) => {
+      if (right.priorityScore !== left.priorityScore) {
+        return right.priorityScore - left.priorityScore;
+      }
+      if (right.weakCount !== left.weakCount) {
+        return right.weakCount - left.weakCount;
+      }
+      return String(left.name).localeCompare(String(right.name), "zh-Hans-CN");
+    })
+    .slice(0, 3)
+    .map((item, index) => ({
+      ...item,
+      order: index + 1,
+      headline: buildWorkPriorityHeadline(item),
+      reason: buildWorkPriorityReason(item),
+      actionHint: item.hasEvidenceGap ? "建议换入新书段做增量蒸馏，别只靠字段补全硬补。" : "可以先打开角色页，把关键字段补稳后再决定要不要继续增量蒸馏。",
+    }));
+}
+
+function buildWorkPriorityHeadline(item) {
+  if (item.hasEvidenceGap) {
+    return "正文证据偏薄，优先补素材";
+  }
+  if (item.weakCount >= 3) {
+    return "关键骨架还没站稳，优先校对";
+  }
+  return "还差最后几笔，适合快速补齐";
+}
+
+function buildWorkPriorityReason(item) {
+  if (item.hasEvidenceGap) {
+    return "当前正文里对这个角色的有效片段还偏少，容易出现信息薄、口气虚或关系不稳。";
+  }
+  if (item.missingFields.length) {
+    return `当前最薄的地方是：${item.missingFields.slice(0, 3).join("、")}。`;
+  }
+  return "这个角色已经有轮廓，但还有几处字段偏薄，适合顺手补稳。";
+}
+
+function renderWorkPriorityReview(run) {
+  const root = el("work-priority-review-list");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = buildWorkPriorityReviewItems(run);
+  items.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "work-priority-card";
+    card.innerHTML = `
+      <div class="work-priority-card-head">
+        <span class="work-priority-rank">优先 ${item.order}</span>
+        <span class="work-character-status is-${item.statusTone}">${item.statusText}</span>
+      </div>
+      <div class="work-priority-title">
+        <strong>${item.name}</strong>
+        <small>${item.preview.core_identity || item.preview.story_role || "人物轮廓还在慢慢站稳"}</small>
+      </div>
+      <p class="work-priority-headline">${item.headline}</p>
+      <p class="work-priority-copy">${item.reason}</p>
+      <div class="work-priority-meta">
+        <span>${item.weakCount > 0 ? `待补关键字段 ${item.weakCount}` : "关键字段已齐"}</span>
+        <span>${item.updatedText ? `最近更新 ${item.updatedText}` : "刚刚落成"}</span>
+      </div>
+      <p class="work-priority-hint">${item.actionHint}</p>
+      <div class="work-priority-actions">
+        <button type="button" class="soft-button" data-work-priority-open="${item.name}">打开角色页</button>
+        <button type="button" class="soft-button" data-work-priority-redistill="${item.name}">增量蒸馏</button>
+      </div>
+    `;
+    root.appendChild(card);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("work-priority-review-empty", root.childElementCount === 0);
+  root.querySelectorAll("[data-work-priority-open]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openCharacterOverview(button.getAttribute("data-work-priority-open") || "").catch((error) => {
+        setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
+      });
+    });
+  });
+  root.querySelectorAll("[data-work-priority-redistill]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openIncrementalDistillForCharacter(button.getAttribute("data-work-priority-redistill") || "");
+    });
+  });
 }
 
 function renderWorkGraphSummary(run) {
@@ -542,6 +634,11 @@ async function handleCharacterOverviewFieldAutofill(event) {
 
 function openCharacterOverviewIncrementalDistill() {
   const character = String(currentCharacterOverview?.character || "").trim();
+  openIncrementalDistillForCharacter(character);
+}
+
+function openIncrementalDistillForCharacter(characterName) {
+  const character = String(characterName || "").trim();
   if (!character || !currentRun) return;
   characterOverviewOpen = false;
   redistillPanelOpen = true;
