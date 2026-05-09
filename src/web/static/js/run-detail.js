@@ -135,7 +135,7 @@ function renderWorkSummaryNarrative(run) {
 
 function buildWorkSummaryLine(run) {
   if (!run) {
-    return "先放入一本书，这里才会开始替你归纳整卷状态。";
+    return "先放入一本书，这里会开始归纳整卷状态。";
   }
   const title = runNovelTitle(run);
   const characterCount = getRunCharacterNames(run).length;
@@ -150,15 +150,15 @@ function buildWorkSummaryLine(run) {
     return `《${title}》这轮已经收住，现在适合决定是继续蒸馏还是先校对人物。`;
   }
   if (!characterCount) {
-    return `《${title}》还没有稳定的人物包，先把角色请出来，这页才会真正亮起来。`;
+    return `《${title}》还没有稳定的人物包，先把角色请出来。`;
   }
   if (weakCount > 0) {
     return `《${title}》的人物骨架已经立住一部分，但还有 ${weakCount} 位角色值得优先补稳。`;
   }
   if (!run?.artifact_index?.relation_graph?.relations_file) {
-    return `《${title}》的人物已经基本站稳，关系图谱还没完全落下，但不影响先开聊。`;
+    return `《${title}》的人物已基本站稳，关系图谱还没落下，但不影响先开聊。`;
   }
-  return `《${title}》这卷已经形成比较完整的工作面，可以校对、看关系，也可以直接入场。`;
+    return `《${title}》这卷已形成完整工作面，可以校对、看关系，也能直接入场。`;
 }
 
 function buildWorkSummaryBottleneck(run) {
@@ -166,10 +166,10 @@ function buildWorkSummaryBottleneck(run) {
     return "当前还没有工作对象。";
   }
   if (run.status === "running") {
-    return String(run.progress?.message || "").trim() || "当前瓶颈还在模型整理进度本身，先盯住这一轮往哪里走。";
+    return String(run.progress?.message || "").trim() || "当前瓶颈是流程仍在进行，先盯住这一轮进度。";
   }
   if (run.status === "failed") {
-    return "当前瓶颈是这一轮中断；最稳的接法是继续蒸馏，而不是从零重来。";
+    return "这一轮已中断；最稳的接法是继续蒸馏，而不是从零重来。";
   }
   const priority = buildWorkPriorityReviewItems(run)[0];
   if (priority?.hasEvidenceGap) {
@@ -179,9 +179,9 @@ function buildWorkSummaryBottleneck(run) {
     return `当前最卡的是「${priority.name}」还有 ${priority.weakCount} 处关键字段偏薄，先补这个角色最划算。`;
   }
   if (!run?.artifact_index?.relation_graph?.relations_file) {
-    return "当前瓶颈已经不在人物，而在关系图谱尚未落成；不过这不阻塞聊天与继续校对。";
+    return "当前主要瓶颈是关系图谱尚未落成；不过这不阻塞聊天与校对。";
   }
-  return "当前没有明显卡点，这卷已经可以把重点从整理切到体验。";
+  return "当前没有明显卡点，这卷可以把重点从整理切到体验。";
 }
 
 function renderWorkSummaryEvents(run) {
@@ -209,7 +209,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "开始蒸馏",
       title: "先放入一本书",
-      copy: "没有工作对象时，最值得做的是先新建一卷，把故事请上书架。",
+      copy: "先新建一卷，把故事请上书架。",
       action: "new_run",
       payload: "",
     };
@@ -218,7 +218,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "查看进度",
       title: "先盯住当前整理进度",
-      copy: "这一轮还在跑，先不用切太多动作；等角色再落下几位，判断会更稳。",
+      copy: "这一轮还在跑，先不用切太多动作，等角色再落下几位再判断。",
       action: "focus_timeline",
       payload: "",
     };
@@ -227,7 +227,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "继续蒸馏",
       title: "把这一轮先接上",
-      copy: "当前最值钱的是沿着这卷继续往下走，而不是把已落成的人物重新来一遍。",
+      copy: "沿着这卷继续往下走，比把已落成的人物重做一遍更划算。",
       action: "open_redistill",
       payload: "",
     };
@@ -236,7 +236,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "补这位角色",
       title: `先给「${priority.name}」补正文证据`,
-      copy: "这个角色不是简单字段缺字，而是素材本身偏薄；优先增量蒸馏最有效。",
+      copy: "这个角色不只是字段缺字，而是素材偏薄；优先增量蒸馏更有效。",
       action: "redistill_character",
       payload: priority.name,
     };
@@ -245,7 +245,7 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "打开角色页",
       title: `先补稳「${priority.name}」`,
-      copy: "当前最值钱的动作，是把最薄的角色先补稳；这样整卷对话信任感会涨得最快。",
+      copy: "先把最薄的角色补稳，这样整卷对话信任感提升最快。",
       action: "open_character",
       payload: priority.name,
     };
@@ -254,18 +254,18 @@ function buildWorkRecommendedAction(run) {
     return {
       buttonLabel: "开始聊天",
       title: "人物已经够用，可以先入场",
-      copy: "关系图还没完全落下，但已经不影响体验；可以先开一局，回头再补图谱。",
+      copy: "关系图还没落下，但不影响体验；可以先开一局，回头再补图谱。",
       action: "start_chat",
       payload: "",
     };
   }
   return {
-    buttonLabel: "查看关系",
-    title: "先看整卷关系",
-    copy: "人物和图谱都比较稳了，下一步最值得的是看全局关系，再决定从谁入场。",
-    action: "open_relations",
-    payload: "",
-  };
+      buttonLabel: "查看关系",
+      title: "先看整卷关系",
+      copy: "人物和图谱都已稳定，先看全局关系，再决定从谁入场。",
+      action: "open_relations",
+      payload: "",
+    };
 }
 
 function renderWorkRecommendedAction(run) {
@@ -324,24 +324,24 @@ function handleWorkRecommendedAction(action, payload = "") {
 
 function buildWorkOverviewNextStep(run) {
   if (!run) {
-    return "先放入一本书，人物和关系才会在这里长出来。";
+    return "先放入一本书，人物和关系才会在这里出现。";
   }
   if (run.status === "running") {
-    return "先盯住这一轮的进度，等人物落定后再决定要不要继续补人或开聊。";
+    return "先盯住这轮进度，等人物落定后再决定是否补人或开聊。";
   }
   if (run.status === "failed") {
-    return "这一轮停在半途，最值得做的是继续蒸馏，把人物和关系重新接上。";
+    return "这一轮停在半途，先继续蒸馏把人物和关系接上。";
   }
   if (run.status === "stopped") {
-    return "这卷已经收住，下一步可以继续蒸馏，也可以先回头校对已落成的人物。";
+    return "这卷已经收住，下一步可继续蒸馏，或先校对已落成人物。";
   }
   if (!getRunCharacterNames(run).length) {
-    return "这一卷还没有稳定的人物包，先继续蒸馏，把角色请出来。";
+    return "这一卷还没有稳定人物包，先继续蒸馏把角色请出来。";
   }
   if (!run?.artifact_index?.relation_graph?.relations_file) {
-    return "人物已经开始成形，接下来可以先校对角色，关系图谱补出来后再看全局。";
+    return "人物已开始成形，可先校对角色，关系图谱补出后再看全局。";
   }
-  return "这卷已经可以继续校对人物、查看关系，或者直接进入其中一幕。";
+  return "这卷可以继续校对人物、查看关系，或直接进入其中一幕。";
 }
 
 function buildWorkReviewStatus(run) {

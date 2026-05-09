@@ -419,14 +419,14 @@
 .work-overview-grid {
   display: grid;
   grid-template-columns: minmax(18rem, 1fr) minmax(18rem, 0.95fr) minmax(20rem, 1.08fr);
-  gap: 0.8rem;
+  gap: 0.9rem;
   align-items: start;
 }
 
 .work-overview-panel {
   min-height: 0;
   align-content: start;
-  gap: 0.72rem;
+  gap: 0.8rem;
 }
 
 .quality-section-shell {
@@ -436,7 +436,7 @@
 .work-character-list,
 .work-session-preview {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.55rem;
 }
 
 .work-priority-review-list {
@@ -647,7 +647,7 @@
 .work-graph-card {
   display: grid;
   gap: 0.5rem;
-  padding: 0.82rem 0.86rem;
+  padding: 0.86rem 0.9rem;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(170, 146, 127, 0.1);
   background: rgba(255, 255, 255, 0.74);
@@ -674,15 +674,15 @@
 .work-mode-shortcuts {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.48rem;
-  padding-top: 0.08rem;
+  gap: 0.54rem;
+  padding-top: 0.12rem;
 }
 
 .work-mode-shortcuts .soft-button {
-  flex: 1 1 calc(50% - 0.24rem);
+  flex: 1 1 calc(50% - 0.27rem);
   min-width: 7rem;
   min-height: 2.08rem;
-  padding: 0 0.68rem;
+  padding: 0 0.7rem;
   font-size: 0.71rem;
   line-height: 1.25;
   white-space: nowrap;
