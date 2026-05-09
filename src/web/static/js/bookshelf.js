@@ -9,9 +9,6 @@ function syncBookshelfSelection() {
 
 function renderBookshelfDetail(run) {
   setText("run-stage-title", run ? `《${runNovelTitle(run)}》` : "人物与关系正在慢慢浮现", "");
-  setText("run-novel", run ? runNovelTitle(run) : "", "");
-  setText("run-characters", run ? joinCharacters(getRunCharacterNames(run)) : "", "");
-  setText("run-summary", run ? humanizeSummary(run.summary?.status_text) : "", "");
   setText("progress-copy", run?.progress?.message || "人物会依次显形，关系也会慢慢织起来。", "");
   const isRunning = Boolean(run) && run.status === "running";
   const isStopped = Boolean(run) && run.status === "stopped";
@@ -70,17 +67,27 @@ function renderBookshelfDetail(run) {
     stopButton.classList.toggle("hidden", !isRunning);
     stopButton.textContent = stopRequested ? "正在停止..." : "停止蒸馏";
   }
+  const reviewButton = el("open-persona-review-button");
+  const hasReviewAction = Boolean(run?.artifact_index?.characters?.length);
   const detailActions = el("detail-primary-actions");
   if (detailActions) {
-    detailActions.classList.toggle("hidden", !canEnterChat && !canRedistill && !canStop);
+    detailActions.classList.toggle("hidden", !canEnterChat && !canRedistill && !canStop && !hasReviewAction);
   }
-  const reviewButton = el("open-persona-review-button");
   if (reviewButton) {
-    reviewButton.classList.toggle("hidden", !Boolean(run?.artifact_index?.characters?.length));
+    reviewButton.classList.toggle("hidden", !hasReviewAction);
   }
   const relationButton = el("open-relation-details-button");
   if (relationButton) {
     relationButton.classList.toggle("hidden", !Boolean(run?.artifact_index?.relation_graph?.relations_file));
+  }
+  const exportButton = el("detail-export-summary-button");
+  if (exportButton) {
+    const hasExport =
+      Boolean(run?.file_urls?.manifest) ||
+      Boolean(run?.file_urls?.graph_relations_file) ||
+      Boolean(run?.file_urls?.graph_html) ||
+      Boolean(run?.file_urls?.graph_svg);
+    exportButton.classList.toggle("hidden", !hasExport);
   }
   const graphButton = el("detail-view-graph-button");
   if (graphButton) {
@@ -92,13 +99,7 @@ function renderBookshelfDetail(run) {
       window.open(target, "_blank", "noopener,noreferrer");
     };
   }
-  toggle(
-    "detail-secondary-actions-shell",
-    Boolean(run) &&
-      (Boolean(run?.artifact_index?.characters?.length) ||
-        Boolean(run?.artifact_index?.relation_graph?.relations_file) ||
-        Boolean(run?.file_urls?.graph_html || run?.file_urls?.graph_svg))
-  );
+  toggle("detail-secondary-actions-shell", Boolean(run));
   toggle("detail-action-note", Boolean(run) && (isRunning || isStopped));
   if (stopRequested) {
     setText("detail-action-note", "已收到停止请求，正在把当前这一步收住。", "");

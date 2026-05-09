@@ -1064,6 +1064,11 @@ function bindEvents() {
   bind("detail-stop-run-button", "click", handleStopRun);
   bind("open-persona-review-button", "click", openPersonaReview);
   bind("open-relation-details-button", "click", openRelationDetails);
+  bind("detail-export-summary-button", "click", () => {
+    if (typeof openWorkSummaryExport === "function") {
+      openWorkSummaryExport();
+    }
+  });
   bind("detail-view-timeline-button", "click", () => {
     if (typeof openWorkTimeline === "function") {
       openWorkTimeline();

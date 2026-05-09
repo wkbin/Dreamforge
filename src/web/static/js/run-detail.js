@@ -65,9 +65,8 @@ function getCurrentRunEvents() {
 function renderRunSummary(run) {
   setValue("redistill-characters", joinCharacters(getRunCharacterNames(run)));
   setText("redistill-status", run.redistill?.summary || "", "");
-  setText("run-novel", runNovelTitle(run));
-  setText("run-characters", joinCharacters(getRunCharacterNames(run) || run.locked_characters || []));
-  setText("run-summary", humanizeSummary(run.summary?.status_text));
+  setText("run-progress-import", buildWorkImportStatus(run), "");
+  setText("run-progress-distill", buildWorkDistillStatus(run), "");
   setText("run-progress-latest", formatWeakTime(run.updated_at || "") || "刚刚", "");
   const elapsedText = String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim();
   const progressCopy = String(run.progress?.message || "").trim() || "人物与关系会依次浮现。";
@@ -87,6 +86,33 @@ function renderRunSummary(run) {
   renderWorkGraphSummary(run);
   renderWorkSessionPreview(run);
   syncRedistillPreview();
+}
+
+function buildWorkImportStatus(run) {
+  const source = getCurrentNovelSource(run);
+  const sourceName = String(source?.source_name || "").trim();
+  if (!sourceName) {
+    return "未开始";
+  }
+  return `已完成 · ${sourceName}`;
+}
+
+function buildWorkDistillStatus(run) {
+  const total = Number(run?.progress?.total_characters || run?.locked_characters?.length || 0);
+  const completed = Number(run?.progress?.completed_count || run?.artifact_index?.characters?.length || 0);
+  if (total <= 0 && completed <= 0) {
+    return "未开始";
+  }
+  if (run?.status === "failed" || run?.status === "stopped") {
+    return `已中断 · ${completed}/${Math.max(total, completed)}`;
+  }
+  if (completed >= total && total > 0) {
+    return `已完成 · ${completed}/${total}`;
+  }
+  if (run?.status === "running") {
+    return `进行中 · ${completed}/${Math.max(total, completed)}`;
+  }
+  return `待校对 · ${completed}/${Math.max(total, completed)}`;
 }
 
 function renderWorkHeroMetrics(run) {
@@ -321,22 +347,30 @@ function buildWorkOverviewNextStep(run) {
 function buildWorkReviewStatus(run) {
   const weakCount = countWeakCharacters(run);
   if (!getRunCharacterNames(run).length) {
-    return "还没有人物";
+    return "未开始";
   }
   if (weakCount <= 0) {
-    return "关键字段已齐";
+    return "已完成";
   }
-  return `还有 ${weakCount} 位待补`;
+  return `待校对 · ${weakCount} 位`;
 }
 
 function buildWorkGraphStatus(run) {
-  if (run?.artifact_index?.relation_graph?.relations_file) {
-    return "已可查看";
+  const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
+  const graphFailed = String(run?.summary?.graph_status || "").trim() === "failed" || String(run?.progress?.graph_status || "").trim() === "failed";
+  if (hasGraph) {
+    return "已完成";
+  }
+  if (graphFailed) {
+    return "图谱失败但不影响聊天";
+  }
+  if (run?.status === "failed" || run?.status === "stopped") {
+    return "已中断";
   }
   if (run?.status === "running") {
-    return "正在织就";
+    return "进行中";
   }
-  return "暂未落成";
+  return "未开始";
 }
 
 function countWeakCharacters(run) {
@@ -567,6 +601,20 @@ function renderWorkSessionPreview(run) {
   });
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("work-session-preview-empty", root.childElementCount === 0);
+}
+
+function openWorkSummaryExport() {
+  const target =
+    currentRun?.file_urls?.manifest ||
+    currentRun?.file_urls?.graph_relations_file ||
+    currentRun?.file_urls?.graph_html ||
+    currentRun?.file_urls?.graph_svg ||
+    "";
+  if (!target) {
+    setStatus("bookshelf-status", "当前没有可导出的摘要文件。");
+    return;
+  }
+  window.open(target, "_blank", "noopener,noreferrer");
 }
 
 async function openCharacterOverview(characterName) {

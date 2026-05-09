@@ -123,19 +123,15 @@
 
     <div class="work-progress-strip">
       <article class="work-progress-card">
-        <span>书名</span>
-        <strong id="run-novel">-</strong>
+        <span>正文导入</span>
+        <strong id="run-progress-import">-</strong>
       </article>
       <article class="work-progress-card">
-        <span>人物</span>
-        <strong id="run-characters">-</strong>
+        <span>人物蒸馏</span>
+        <strong id="run-progress-distill">-</strong>
       </article>
       <article class="work-progress-card">
-        <span>当前进度</span>
-        <strong id="run-summary">-</strong>
-      </article>
-      <article class="work-progress-card">
-        <span>校对状态</span>
+        <span>关键字段校对</span>
         <strong id="run-progress-review">-</strong>
       </article>
       <article class="work-progress-card">
@@ -152,16 +148,17 @@
       <div class="work-action-group">
         <span class="work-action-label">主动作</span>
         <div id="detail-primary-actions" class="card-actions">
-          <button id="detail-start-chat-button" type="button" class="primary-button">开始聊天</button>
           <button id="detail-redistill-button" type="button" class="soft-button">继续蒸馏</button>
+          <button id="open-persona-review-button" type="button" class="soft-button hidden">校对人物</button>
+          <button id="detail-start-chat-button" type="button" class="primary-button">开始聊天</button>
           <button id="detail-stop-run-button" type="button" class="soft-button hidden">停止蒸馏</button>
         </div>
       </div>
       <div id="detail-secondary-actions-shell" class="work-action-group">
         <span class="work-action-label">次动作</span>
         <div id="detail-secondary-actions" class="card-actions">
-          <button id="open-persona-review-button" type="button" class="soft-button hidden">校对人物</button>
           <button id="open-relation-details-button" type="button" class="soft-button hidden">关系明细</button>
+          <button id="detail-export-summary-button" type="button" class="soft-button hidden">导出摘要</button>
           <button id="detail-view-graph-button" type="button" class="soft-button hidden">查看关系图</button>
           <button id="detail-view-timeline-button" type="button" class="soft-button">查看时间线</button>
         </div>
