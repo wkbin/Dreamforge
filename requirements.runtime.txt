@@ -1,8 +1,11 @@
 # zaomeng runtime dependencies
 
 # Core
-tiktoken>=0.5.0
 PyYAML>=6.0
+
+# Optional token tooling
+# tiktoken improves token estimation, but the runtime already falls back to a heuristic counter.
+# Keep it out of the default installer so Termux does not need a native build toolchain.
 
 # Text processing
 # Keep runtime dependencies Termux-friendly; heavy scientific stacks stay out of the default Web UI install.

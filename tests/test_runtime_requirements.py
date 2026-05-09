@@ -11,7 +11,9 @@ class RuntimeRequirementsTests(unittest.TestCase):
         requirements = (repo_root / "requirements.runtime.txt").read_text(encoding="utf-8")
 
         self.assertIsNone(re.search(r"(?im)^\s*ebooklib(?:\[.*\])?\s*(?:[<>=!~].*)?$", requirements))
+        self.assertIsNone(re.search(r"(?im)^\s*tiktoken(?:\[.*\])?\s*(?:[<>=!~].*)?$", requirements))
         self.assertIn("Optional input support", requirements)
+        self.assertIn("Optional token tooling", requirements)
         self.assertRegex(requirements, r"(?im)^\s*fastapi>=0\.99\.0,<0\.100\.0\s*$")
         self.assertRegex(requirements, r"(?im)^\s*pydantic>=1\.10\.0,<2\.0\.0\s*$")
 
