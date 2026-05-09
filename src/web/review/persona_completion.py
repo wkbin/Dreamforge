@@ -149,6 +149,7 @@ def build_persona_field_completion_messages(
                 "如果这是常见作品、经典角色、或你对该角色有稳定把握，可以直接给出适合写入人物校对表单的内容。",
                 "如果你拿不准、记忆模糊、或只能靠猜测，请明确拒绝生成。",
                 list_hint,
+                "value 字段只能放最终要写入表单的内容，不能包含“我们要求”“需要从”“已知有”“可以根据”等分析过程。",
                 "不要编造，不要输出剧情摘要，不要伪装成查到网页资料。",
                 "严格返回 JSON：{\"status\":\"filled\"|\"insufficient\",\"value\":\"...\",\"reason\":\"...\"}",
             ]
@@ -156,6 +157,7 @@ def build_persona_field_completion_messages(
         system_content = (
             "你是人物资料补全助手。任务是优先根据模型已有知识，为单个角色字段生成可直接写入表单的短内容。"
             "只有在你对角色有稳定把握时才可填写；只要不确定，就必须返回 insufficient。"
+            "禁止在 value 中复述任务、解释推理、列出要求，value 必须是可直接粘贴进表单的最终中文。"
         )
     else:
         user_prompt = "\n".join(
@@ -174,6 +176,7 @@ def build_persona_field_completion_messages(
                 "如果资料足够，返回一段适合直接写入人物校对表单的内容。",
                 "如果资料不足、互相矛盾、或只能靠脑补，请明确拒绝生成。",
                 list_hint,
+                "value 字段只能放最终要写入表单的内容，不能包含“我们要求”“需要从”“已知有”“可以根据”等分析过程。",
                 "不要编造，不要把剧情长摘要塞进字段。",
                 "严格返回 JSON：{\"status\":\"filled\"|\"insufficient\",\"value\":\"...\",\"reason\":\"...\"}",
             ]
@@ -181,6 +184,7 @@ def build_persona_field_completion_messages(
         system_content = (
             "你是人物资料补全助手。任务是根据给定的网页摘录，为单个角色字段生成可直接写入表单的短内容。"
             "只有在网页摘录能支撑时才可填写；只要证据不足，就必须返回 insufficient。"
+            "禁止在 value 中复述任务、解释推理、列出要求，value 必须是可直接粘贴进表单的最终中文。"
         )
     return [
         {"role": "system", "content": system_content},
@@ -249,8 +253,11 @@ def parse_persona_field_completion_response(text: str) -> dict[str, str]:
     if payload is None:
         return _infer_plaintext_completion(cleaned)
     status = str(payload.get("status", "")).strip().lower()
-    value = str(payload.get("value", "")).strip()
+    raw_value = str(payload.get("value", "")).strip()
+    value = _clean_completion_value(raw_value)
     reason = str(payload.get("reason", "")).strip()
+    if status == "filled" and not value:
+        return {"status": "insufficient", "value": "", "reason": "模型没有返回可直接写入表单的最终内容。"}
     if status != "filled" or not value:
         return {"status": "insufficient", "value": "", "reason": reason or "资料不足，无法可靠补全。"}
     return {"status": "filled", "value": value, "reason": reason}
@@ -603,13 +610,31 @@ def _infer_plaintext_completion(text: str) -> dict[str, str]:
         lines = [line.strip(" -\t") for line in normalized.splitlines() if line.strip()]
         candidate = lines[0] if lines else normalized
 
-    candidate = re.sub(r"^(可以写成|可写成|建议填写|建议写为|可填写)\s*[:：]?\s*", "", candidate).strip()
-    candidate = candidate.strip('"').strip("“”")
-    if _looks_like_meta_reasoning(candidate):
+    candidate = _clean_completion_value(candidate)
+    if not candidate and _looks_like_meta_reasoning(normalized):
         return {"status": "insufficient", "value": "", "reason": "模型返回了思考过程，没有直接给出最终结果。"}
-    if not candidate or not _looks_like_usable_completion_value(candidate):
+    if not candidate:
         return {"status": "insufficient", "value": "", "reason": "模型返回格式不完整。"}
     return {"status": "filled", "value": candidate, "reason": "已从自然语言返回中提取结果。"}
+
+
+def _clean_completion_value(text: str) -> str:
+    candidate = str(text or "").strip()
+    if not candidate:
+        return ""
+    extracted = _extract_completion_candidate_from_meta_text(candidate)
+    if extracted:
+        candidate = extracted
+    candidate = re.sub(r"^(可以写成|可写成|建议填写|建议写为|可填写|可写为|答案|建议)\s*[:：]?\s*", "", candidate).strip()
+    candidate = candidate.strip('"').strip("“”")
+    candidate = re.sub(r"\s+", " ", candidate)
+    if _looks_like_meta_reasoning(candidate):
+        return ""
+    if _looks_like_truncated_completion_value(candidate):
+        return ""
+    if not _looks_like_usable_completion_value(candidate):
+        return ""
+    return candidate
 
 
 def _looks_like_usable_completion_value(value: str) -> bool:
@@ -620,7 +645,22 @@ def _looks_like_usable_completion_value(value: str) -> bool:
         return False
     if _looks_like_broken_json_value_fragment(text):
         return False
+    if _looks_like_truncated_completion_value(text):
+        return False
     return True
+
+
+def _looks_like_truncated_completion_value(value: str) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if text.endswith(("、", "，", ",", "；", ";", "：", ":", "/", "（", "(", "《", "“", "\"")):
+        return True
+    if text.count("（") > text.count("）"):
+        return True
+    if text.count("(") > text.count(")"):
+        return True
+    return False
 
 
 def _looks_like_broken_json_value_fragment(text: str) -> bool:
@@ -638,15 +678,19 @@ def _looks_like_meta_reasoning(text: str) -> bool:
     normalized = str(text or "").strip()
     meta_markers = (
         "我们被要求",
+        "我们要求",
         "我知道",
         "我觉得",
         "我会给出",
         "我认为",
         "需要提取",
+        "需要从",
+        "已知有",
         "既然是",
         "理由：",
         "理由:",
         "可以提供",
+        "可以根据",
         "我对这个角色",
     )
     return any(marker in normalized for marker in meta_markers)
@@ -655,6 +699,7 @@ def _looks_like_meta_reasoning(text: str) -> bool:
 def _extract_completion_candidate_from_meta_text(text: str) -> str:
     normalized = str(text or "").strip()
     patterns = (
+        r"(?:可以根据[^。；\n]{0,60}写|可根据[^。；\n]{0,60}写)\s*[:：]\s*(.+?)(?:。理由[:：]|理由[:：]|$)",
         r"(?:可以给出|可给出|建议写成|建议填写|可写为|可填写)\s*[:：]\s*(.+?)(?:。理由[:：]|理由[:：]|$)",
         r"(?:最终答案|最终可写为|最终建议)\s*[:：]\s*(.+?)(?:。理由[:：]|理由[:：]|$)",
     )
@@ -664,14 +709,22 @@ def _extract_completion_candidate_from_meta_text(text: str) -> str:
             continue
         candidate = match.group(1).strip().strip('"').strip("“”")
         candidate = re.sub(r"\s+", " ", candidate)
-        if _looks_like_usable_completion_value(candidate) and not _looks_like_meta_reasoning(candidate):
+        if (
+            _looks_like_usable_completion_value(candidate)
+            and not _looks_like_meta_reasoning(candidate)
+            and not _looks_like_truncated_completion_value(candidate)
+        ):
             return candidate
 
     list_like_match = re.search(r"([^。；\n]*；[^。]*)(?:。|$)", normalized)
     if list_like_match:
         candidate = list_like_match.group(1).strip()
         candidate = re.sub(r"^(?:我觉得我可以给出|可以给出|我会给出)\s*[:：]?\s*", "", candidate)
-        if _looks_like_usable_completion_value(candidate) and not _looks_like_meta_reasoning(candidate):
+        if (
+            _looks_like_usable_completion_value(candidate)
+            and not _looks_like_meta_reasoning(candidate)
+            and not _looks_like_truncated_completion_value(candidate)
+        ):
             return candidate
     return ""
 
@@ -684,4 +737,5 @@ def _needs_plaintext_retry(parsed: dict[str, str]) -> bool:
         "模型返回格式不完整。",
         "模型没有返回可用内容。",
         "模型返回了思考过程，没有直接给出最终结果。",
+        "模型没有返回可直接写入表单的最终内容。",
     }
