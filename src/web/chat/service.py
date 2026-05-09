@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -503,16 +504,20 @@ class DialogueService:
 
     def _build_file_urls(self, run_id: str, session: dict[str, Any]) -> dict[str, str]:
         session_id = str(session.get("session_id", "")).strip()
-        urls = {
-            "session": self._file_url(run_id, self._session_file(run_id, session_id).relative_to(self.runs_root / run_id)),
-        }
+        urls: dict[str, str] = {}
+        run_dir = self.runs_root / run_id
+        session_relative = self._relative_to_run_dir(self._session_file(run_id, session_id), run_dir)
+        if session_relative is not None:
+            urls["session"] = self._file_url(run_id, session_relative)
         pending_path_text = str(session.get("pending_turn", {}).get("payload_path", "")).strip()
         if pending_path_text:
             pending_path = Path(pending_path_text)
         else:
             pending_path = None
         if pending_path and pending_path.exists():
-            urls["pending_turn_payload"] = self._file_url(run_id, pending_path.relative_to(self.runs_root / run_id))
+            pending_relative = self._relative_to_run_dir(pending_path, run_dir)
+            if pending_relative is not None:
+                urls["pending_turn_payload"] = self._file_url(run_id, pending_relative)
         return urls
 
     def _sessions_root(self, run_id: str) -> Path:
@@ -526,6 +531,21 @@ class DialogueService:
 
     def _file_url(self, run_id: str, relative_path: Path) -> str:
         return f"/api/web/runs/{run_id}/files/{relative_path.as_posix()}"
+
+    @staticmethod
+    def _relative_to_run_dir(path: Path, run_dir: Path) -> Path | None:
+        path_real = os.path.normcase(os.path.realpath(os.fspath(path)))
+        run_real = os.path.normcase(os.path.realpath(os.fspath(run_dir)))
+        try:
+            common = os.path.commonpath([path_real, run_real])
+        except ValueError:
+            return None
+        if common != run_real:
+            return None
+        relative_text = os.path.relpath(path_real, run_real)
+        if relative_text in {".", ""}:
+            return Path()
+        return Path(relative_text)
 
     @staticmethod
     def _read_json(path: Path) -> dict[str, Any]:

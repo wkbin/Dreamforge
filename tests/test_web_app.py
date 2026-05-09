@@ -1011,6 +1011,18 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(refreshed_session["pending_turn_summary"], {})
             self.assertEqual(refreshed_session["status"], "ready")
 
+    def test_dialogue_relative_to_run_dir_accepts_case_or_short_path_variants(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            run_dir = Path(tmp) / "runs" / "run-demo"
+            nested = run_dir / "dialogue" / "dlg-1" / "turns" / "turn-1.payload.json"
+            nested.parent.mkdir(parents=True, exist_ok=True)
+            nested.write_text("{}", encoding="utf-8")
+
+            relative = service.dialogue._relative_to_run_dir(nested, Path(str(run_dir).upper()))
+
+            self.assertEqual(relative, Path("dialogue") / "dlg-1" / "turns" / "turn-1.payload.json")
+
     def test_parse_dialogue_suggestion_rejects_meta_explanation(self):
         with self.assertRaisesRegex(ValueError, "explanation instead of a direct sendable line"):
             parse_dialogue_suggestion(
