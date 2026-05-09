@@ -804,6 +804,11 @@
   background: rgba(255, 255, 255, 0.76);
 }
 
+.character-overview-field-card.is-dirty {
+  border-color: rgba(184, 132, 113, 0.24);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 240, 233, 0.86));
+}
+
 .character-overview-field-card.is-missing {
   border-color: rgba(187, 126, 114, 0.18);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 235, 233, 0.88));
@@ -820,6 +825,26 @@
   font-size: 0.82rem;
   line-height: 1.65;
   font-weight: 600;
+}
+
+.character-overview-field-input {
+  width: 100%;
+  min-height: 5.2rem;
+  border: 1px solid rgba(170, 146, 127, 0.13);
+  border-radius: 0.85rem;
+  padding: 0.55rem 0.62rem;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.62;
+  resize: vertical;
+}
+
+.character-overview-field-input:focus {
+  outline: none;
+  border-color: rgba(184, 132, 113, 0.28);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 0 2px rgba(184, 132, 113, 0.08);
 }
 
 .character-overview-field-head {

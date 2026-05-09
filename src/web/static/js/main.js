@@ -1098,6 +1098,14 @@ function bindEvents() {
     if (typeof handleCharacterOverviewFieldAutofill === "function") {
       handleCharacterOverviewFieldAutofill(event);
     }
+    if (typeof handleCharacterOverviewFieldSave === "function") {
+      handleCharacterOverviewFieldSave(event);
+    }
+  });
+  el("character-overview-key-fields")?.addEventListener("input", (event) => {
+    if (typeof handleCharacterOverviewFieldInput === "function") {
+      handleCharacterOverviewFieldInput(event);
+    }
   });
   el("character-overview-advanced-groups")?.addEventListener("click", (event) => {
     if (typeof handleCharacterOverviewAdvancedGroupToggle === "function") {

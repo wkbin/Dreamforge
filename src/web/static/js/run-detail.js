@@ -874,6 +874,9 @@ function buildCharacterOverviewReviewCopy(reviewEvent) {
       .replace("；", "，")
       .trim();
   }
+  if (reviewSource === "character_overview_inline_edit") {
+    return `${timestampText}在角色页直接保存过字段。${changedCopy}`.trim();
+  }
   return `${timestampText}保存过人物校对。${changedCopy}`.trim();
 }
 
@@ -960,13 +963,55 @@ function renderCharacterOverviewKeyFields(fields) {
         <div class="character-overview-field-actions">
           ${tags.map((tag) => `<span class="character-overview-field-tag is-${tag.tone}">${tag.label}</span>`).join("")}
           ${canAutofill ? `<button type="button" class="character-overview-mini-button" data-character-overview-field="${field}">AI补全</button>` : ""}
+          <button type="button" class="character-overview-mini-button" data-character-overview-save="${field}" disabled>已保存</button>
         </div>
       </div>
-      <strong>${value || "这部分还值得继续补稳"}</strong>
+      <textarea class="character-overview-field-input" data-character-overview-input="${field}" rows="4" placeholder="可以直接在这里修改，然后点保存改动。"></textarea>
       <small class="character-overview-field-hint">${buildCharacterOverviewFieldHint(field, value)}</small>
     `;
+    const input = card.querySelector(`[data-character-overview-input="${field}"]`);
+    if (input instanceof HTMLTextAreaElement) {
+      input.value = value;
+      input.dataset.initialValue = value;
+      syncCharacterOverviewFieldSaveButton(input);
+    }
     root.appendChild(card);
   });
+}
+
+function syncCharacterOverviewFieldSaveButton(inputNode) {
+  if (!(inputNode instanceof HTMLTextAreaElement)) return;
+  const field = String(inputNode.getAttribute("data-character-overview-input") || "").trim();
+  if (!field) return;
+  const card = inputNode.closest(".character-overview-field-card");
+  if (!(card instanceof HTMLElement)) return;
+  const button = card.querySelector(`[data-character-overview-save="${field}"]`);
+  if (!(button instanceof HTMLButtonElement)) return;
+  const initialValue = String(inputNode.dataset.initialValue || "").trim();
+  const currentValue = String(inputNode.value || "").trim();
+  const dirty = currentValue !== initialValue;
+  card.classList.toggle("is-dirty", dirty);
+  if (button.dataset.saving !== "true") {
+    button.disabled = !dirty;
+    button.textContent = dirty ? "保存改动" : "已保存";
+  }
+}
+
+function handleCharacterOverviewFieldInput(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLTextAreaElement)) return;
+  if (!target.hasAttribute("data-character-overview-input")) return;
+  syncCharacterOverviewFieldSaveButton(target);
+}
+
+function buildCharacterOverviewSavePayload(nextFields, reviewSource = "", reviewNote = "") {
+  const payload = {};
+  (PERSONA_REVIEW_FIELD_BINDINGS || []).forEach(([field]) => {
+    payload[field] = String(nextFields?.[field] || "").trim();
+  });
+  payload.review_source = reviewSource;
+  payload.review_note = reviewNote;
+  return payload;
 }
 
 function isCharacterOverviewFieldWeak(field, value) {
@@ -1131,6 +1176,55 @@ async function handleCharacterOverviewFieldAutofill(event) {
   } finally {
     trigger.disabled = false;
     trigger.textContent = originalText;
+  }
+}
+
+async function handleCharacterOverviewFieldSave(event) {
+  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-character-overview-save]") : null;
+  if (!(trigger instanceof HTMLButtonElement) || !currentRunId || !currentCharacterOverview) return;
+  const character = String(currentCharacterOverview.character || "").trim();
+  const field = String(trigger.getAttribute("data-character-overview-save") || "").trim();
+  if (!character || !field) return;
+  const input = el("character-overview-key-fields")?.querySelector(`[data-character-overview-input="${field}"]`);
+  if (!(input instanceof HTMLTextAreaElement)) return;
+  const labelText = CHARACTER_OVERVIEW_FIELD_LABELS[field] || field;
+  const nextValue = String(input.value || "").trim();
+  const currentValue = String(currentCharacterOverview?.fields?.[field] || "").trim();
+  if (nextValue === currentValue) {
+    syncCharacterOverviewFieldSaveButton(input);
+    return;
+  }
+  const previousText = trigger.textContent || "保存改动";
+  trigger.dataset.saving = "true";
+  trigger.disabled = true;
+  trigger.textContent = "保存中...";
+  setStatus("character-overview-status", `正在保存「${labelText}」...`);
+  try {
+    const nextFields = {
+      ...(currentCharacterOverview.fields || {}),
+      [field]: nextValue,
+    };
+    const saved = await apiJson(
+      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildCharacterOverviewSavePayload(nextFields, "character_overview_inline_edit", "field_direct_save")),
+      },
+      "保存人物校对失败。"
+    );
+    currentCharacterOverview = saved;
+    renderCharacterOverview(saved);
+    renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
+    characterOverviewOpen = true;
+    currentCharacterOverview = saved;
+    updateWorkflowState();
+    setStatus("character-overview-status", `「${labelText}」已经写回这一卷。`);
+  } catch (error) {
+    trigger.textContent = previousText;
+    setStatus("character-overview-status", error.message || "这次保存没有成功。");
+  } finally {
+    delete trigger.dataset.saving;
   }
 }
 
