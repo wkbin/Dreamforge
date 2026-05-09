@@ -661,6 +661,28 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertIn("payload_distill", payload["file_urls"])
             self.assertIn("payload_relation", payload["file_urls"])
 
+    def test_list_runs_skips_partially_written_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            broken_dir = Path(tmp) / "runs" / "run-broken"
+            broken_dir.mkdir(parents=True)
+            (broken_dir / "run_manifest.json").write_text("{", encoding="utf-8")
+
+            items = service.list_runs()
+
+            self.assertEqual([item["run_id"] for item in items], [payload["run_id"]])
+
     def test_create_run_auto_run_starts_background_pipeline(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)

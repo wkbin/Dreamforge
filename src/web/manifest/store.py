@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -29,12 +31,35 @@ def ensure_run_exists(runs_root: Path, run_id: str) -> None:
 def load_json_file(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
 
 
 def write_json_file(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    temp_name = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_name = temp_file.name
+            temp_file.write(text)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        os.replace(temp_name, path)
+    finally:
+        if temp_name:
+            temp_path = Path(temp_name)
+            if temp_path.exists():
+                temp_path.unlink()
 
 
 def load_manifest(
@@ -45,7 +70,10 @@ def load_manifest(
 ) -> dict[str, Any] | None:
     if not manifest_path_value.exists():
         return None
-    payload = json.loads(manifest_path_value.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(manifest_path_value.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
     payload, changed = reconcile(manifest_path_value, payload)
     if changed:
         writer(manifest_path_value, payload)
