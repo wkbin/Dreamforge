@@ -375,7 +375,8 @@
 }
 
 .work-overview-panel {
-  min-height: 100%;
+  min-height: 0;
+  align-content: start;
   gap: 0.65rem;
 }
 
@@ -1062,6 +1063,8 @@
 
 .detail-section {
   display: grid;
+  grid-auto-rows: min-content;
+  align-content: start;
   gap: 0.68rem;
   padding: 0.9rem 0.92rem 0.86rem;
   border: 1px solid rgba(170, 146, 127, 0.1);
