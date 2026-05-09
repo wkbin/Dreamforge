@@ -1,15 +1,21 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 
 class CreateRunRequest(BaseModel):
     novel_name: str = Field(..., min_length=1)
     novel_content_base64: str = Field(..., min_length=1)
-    characters: list[str] = Field(default_factory=list, min_length=1)
+    characters: list[str] = Field(default_factory=list)
     max_sentences: int = Field(default=120, ge=20, le=300)
     max_chars: int = Field(default=50_000, ge=2_000, le=200_000)
     auto_run: bool = Field(default=False)
+
+    @validator("characters")
+    def _validate_characters(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("characters must not be empty")
+        return value
 
 
 class RestartRunRequest(BaseModel):
@@ -95,4 +101,10 @@ class DialogueResponseItem(BaseModel):
 
 
 class IngestDialogueTurnRequest(BaseModel):
-    responses: list[DialogueResponseItem] = Field(default_factory=list, min_length=1)
+    responses: list[DialogueResponseItem] = Field(default_factory=list)
+
+    @validator("responses")
+    def _validate_responses(cls, value: list[DialogueResponseItem]) -> list[DialogueResponseItem]:
+        if not value:
+            raise ValueError("responses must not be empty")
+        return value
