@@ -435,6 +435,36 @@
 
 .quality-section-shell {
   display: grid;
+  gap: 0.62rem;
+  padding: 0.7rem 0.74rem 0.72rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(170, 146, 127, 0.1);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.quality-summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  gap: 0.14rem;
+  padding: 0.08rem 0.12rem;
+}
+
+.quality-summary::-webkit-details-marker {
+  display: none;
+}
+
+.quality-summary span {
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.quality-summary small {
+  color: var(--ink-faint);
+  font-size: 0.67rem;
+  line-height: 1.5;
 }
 
 .work-character-list,

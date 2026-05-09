@@ -1465,6 +1465,10 @@ function renderQualitySnapshot(run) {
     standardChunkingVisible;
   toggle("quality-section", shouldShow);
   toggle("quality-empty-copy", !shouldShow);
+  const qualitySection = el("quality-section");
+  if (qualitySection) {
+    qualitySection.open = Boolean(run?.status === "running");
+  }
 }
 
 function renderQualityPills(rootId, values, emptyId) {
