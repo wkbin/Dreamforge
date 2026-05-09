@@ -91,7 +91,9 @@ def _load_epub(path: Path) -> str:
     try:
         from ebooklib import epub
     except ImportError as exc:
-        raise OptionalDependencyError("读取 .epub 需要安装 ebooklib") from exc
+        raise OptionalDependencyError(
+            "读取 .epub 需要额外安装 ebooklib；若当前环境不方便安装，请先转换为 .txt 后再导入。"
+        ) from exc
 
     book = epub.read_epub(str(path))
     chunks: List[str] = []

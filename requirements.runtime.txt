@@ -2,12 +2,15 @@
 
 # Core
 tiktoken>=0.5.0
-ebooklib>=0.18
 PyYAML>=6.0
 
 # Text processing
 # Keep runtime dependencies Termux-friendly; heavy scientific stacks stay out of the default Web UI install.
 jieba>=0.42.1
+
+# Optional input support
+# .epub parsing depends on ebooklib, which can pull in lxml build requirements on Termux.
+# Install ebooklib manually only when you need direct .epub import support.
 
 # Web UI runtime
 fastapi>=0.104.0
