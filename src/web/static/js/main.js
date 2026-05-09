@@ -1089,6 +1089,11 @@ function bindEvents() {
       openCurrentCharacterProfileFile();
     }
   });
+  el("character-overview-key-fields")?.addEventListener("click", (event) => {
+    if (typeof handleCharacterOverviewFieldAutofill === "function") {
+      handleCharacterOverviewFieldAutofill(event);
+    }
+  });
   window.addEventListener("resize", () => {
     if (typeof syncViewportHeightVar === "function") {
       syncViewportHeightVar();

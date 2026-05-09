@@ -293,6 +293,7 @@ function renderCharacterOverview(payload) {
     missingKeyCount <= 0 ? "这个角色的关键骨架已经比较完整，可以直接带进对话。" : `当前还有 ${missingKeyCount} 处关键字段值得继续补稳。`,
     ""
   );
+  setStatus("character-overview-status", "");
 
   renderCharacterOverviewKeyFields(fields);
   renderCharacterOverviewVoiceSummary(fields);
@@ -306,14 +307,45 @@ function renderCharacterOverviewKeyFields(fields) {
   root.innerHTML = "";
   CHARACTER_OVERVIEW_KEY_FIELDS.forEach(([field, label]) => {
     const value = String(fields[field] || "").trim();
+    const weak = isCharacterOverviewFieldWeak(field, value);
     const card = document.createElement("article");
-    card.className = `character-overview-field-card${value ? "" : " is-missing"}`;
+    card.className = `character-overview-field-card${weak ? " is-missing" : ""}`;
+    const canAutofill = weak;
     card.innerHTML = `
-      <span>${label}</span>
+      <div class="character-overview-field-head">
+        <span>${label}</span>
+        <div class="character-overview-field-actions">
+          ${canAutofill ? `<button type="button" class="character-overview-mini-button" data-character-overview-field="${field}">AI补全</button>` : ""}
+        </div>
+      </div>
       <strong>${value || "这部分还值得继续补稳"}</strong>
+      <small class="character-overview-field-hint">${buildCharacterOverviewFieldHint(field, value)}</small>
     `;
     root.appendChild(card);
   });
+}
+
+function isCharacterOverviewFieldWeak(field, value) {
+  const text = String(value || "").trim();
+  if (!text) return true;
+  if (["worldview", "belief_anchor", "moral_bottom_line", "restraint_threshold", "stress_response", "speech_style", "identity_anchor", "soul_goal"].includes(field)) {
+    return text.length < 10;
+  }
+  if (["core_traits", "key_bonds"].includes(field)) {
+    return text.length < 6;
+  }
+  return text.length < 4;
+}
+
+function buildCharacterOverviewFieldHint(field, value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "这块还空着，可以先让 AI 补一版，再进人物校对里细修。";
+  }
+  if (isCharacterOverviewFieldWeak(field, text)) {
+    return "这块已经有轮廓，但还偏薄，适合继续补稳。";
+  }
+  return "这块已经能支撑当前角色概览。";
 }
 
 function renderCharacterOverviewVoiceSummary(fields) {
@@ -370,6 +402,59 @@ function renderCharacterOverviewAdvancedGroups(fields) {
     `;
     root.appendChild(card);
   });
+}
+
+async function handleCharacterOverviewFieldAutofill(event) {
+  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-character-overview-field]") : null;
+  if (!(trigger instanceof HTMLButtonElement) || !currentRunId || !currentCharacterOverview) return;
+  const character = String(currentCharacterOverview.character || "").trim();
+  const field = String(trigger.getAttribute("data-character-overview-field") || "").trim();
+  if (!character || !field) return;
+  const labelText = CHARACTER_OVERVIEW_FIELD_LABELS[field] || field;
+  const originalText = trigger.textContent || "AI补全";
+  trigger.disabled = true;
+  trigger.textContent = "生成中...";
+  setStatus("character-overview-status", `正在补全「${labelText}」...`);
+  try {
+    const payload = await apiJson(
+      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}/suggest-field`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field }),
+      },
+      "人物信息补全失败。"
+    );
+    if (payload?.status !== "filled" || !payload?.value) {
+      setStatus("character-overview-status", payload?.message || payload?.reason || "人物信息补全无法生成。");
+      return;
+    }
+    const nextFields = {
+      ...(currentCharacterOverview.fields || {}),
+      [field]: payload.value,
+    };
+    const saved = await apiJson(
+      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextFields),
+      },
+      "保存人物校对失败。"
+    );
+    currentCharacterOverview = saved;
+    renderCharacterOverview(saved);
+    renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
+    characterOverviewOpen = true;
+    currentCharacterOverview = saved;
+    updateWorkflowState();
+    setStatus("character-overview-status", payload.message || `「${labelText}」已经补上，并写回这一卷。`);
+  } catch (error) {
+    setStatus("character-overview-status", error.message || "人物信息补全无法生成。");
+  } finally {
+    trigger.disabled = false;
+    trigger.textContent = originalText;
+  }
 }
 
 async function openCharacterOverviewSessionMode(mode) {

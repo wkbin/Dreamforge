@@ -523,6 +523,61 @@
   font-weight: 600;
 }
 
+.character-overview-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.character-overview-field-head span {
+  color: var(--ink-faint);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.character-overview-field-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.character-overview-mini-button {
+  min-height: 1.75rem;
+  padding: 0 0.62rem;
+  border-radius: 999px;
+  border: 1px solid rgba(170, 146, 127, 0.14);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  line-height: 1;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.character-overview-mini-button:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 248, 243, 0.96);
+  border-color: rgba(184, 132, 113, 0.24);
+  color: var(--accent-strong);
+}
+
+.character-overview-mini-button:disabled {
+  cursor: default;
+  opacity: 0.66;
+  transform: none;
+}
+
+.character-overview-field-hint {
+  color: var(--ink-faint);
+  font-size: 0.68rem;
+  line-height: 1.55;
+}
+
 .character-overview-summary {
   display: grid;
   gap: 0.65rem;
