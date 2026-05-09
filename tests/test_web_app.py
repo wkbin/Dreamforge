@@ -235,6 +235,53 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertIsNotNone(repaired)
             self.assertGreaterEqual(fake_parts.llm.chat_completion.call_count, 1)
 
+    def test_extract_dialogue_evidence_prioritizes_character_specific_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            payload = {
+                "request": {
+                    "excerpt": "\n".join(
+                        [
+                            "袭人笑道：“今日倒热闹。”",
+                            "麝月道：“且先坐下。”",
+                            "众人都笑了起来。",
+                            "薛宝钗笑道：“这话也太急了些。”",
+                            "宝钗心想此事还得再看一步。",
+                            "探春道：“先把话说清楚。”",
+                        ]
+                    ),
+                    "excerpt_stages": {
+                        "start": "袭人笑道：“今日倒热闹。”\n麝月道：“且先坐下。”",
+                        "mid": "薛宝钗笑道：“这话也太急了些。”\n宝钗心想此事还得再看一步。",
+                        "end": "探春道：“先把话说清楚。”",
+                    },
+                }
+            }
+
+            evidence = service._extract_dialogue_evidence(payload, character="薛宝钗")
+
+            self.assertGreaterEqual(len(evidence), 2)
+            self.assertEqual(evidence[0], "薛宝钗笑道：“这话也太急了些。”")
+            self.assertEqual(evidence[1], "宝钗心想此事还得再看一步。")
+
+    def test_extract_dialogue_evidence_matches_traditional_character_variants(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            payload = {
+                "request": {
+                    "excerpt": "薛寶釵笑道：「你先别急。」\n眾人一时无话。",
+                    "excerpt_stages": {
+                        "start": "薛寶釵笑道：「你先别急。」",
+                        "mid": "",
+                        "end": "",
+                    },
+                }
+            }
+
+            evidence = service._extract_dialogue_evidence(payload, character="薛宝钗")
+
+            self.assertIn("薛寶釵笑道：「你先别急。」", evidence)
+
     def test_model_settings_must_be_configured_before_create_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)

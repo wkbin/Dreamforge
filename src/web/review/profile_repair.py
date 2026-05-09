@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
+
+from src.skill_support.novel_preparation import CHARACTER_VARIANT_MAP, MATCH_IGNORED_PATTERN
+from src.web.review.profile_evidence import looks_like_dialogue_sentence, looks_like_thought_or_evaluation_sentence
 
 
 _SPEECH_LIST_FIELDS = {
@@ -12,6 +16,7 @@ _SPEECH_LIST_FIELDS = {
     "forbidden_fillers",
 }
 _EMOTION_FIELDS = {"anger_style", "joy_style", "grievance_style"}
+_DIALOGUE_EVIDENCE_LIMIT = 12
 
 
 def collect_profile_repair_targets(
@@ -217,18 +222,72 @@ def looks_generic_style_scalar(value: str) -> bool:
 
 def extract_dialogue_evidence(payload: dict[str, Any], *, character: str) -> list[str]:
     request = dict(payload.get("request", {}) or {})
-    lines: list[str] = []
-    for block in [request.get("excerpt", ""), *(dict(request.get("excerpt_stages", {}) or {}).values())]:
+    excerpt_stages = dict(request.get("excerpt_stages", {}) or {})
+    blocks = [
+        excerpt_stages.get("start", ""),
+        excerpt_stages.get("mid", ""),
+        excerpt_stages.get("end", ""),
+        request.get("excerpt", ""),
+    ]
+    ranked_lines: list[tuple[int, int, str]] = []
+    seen: set[str] = set()
+    order = 0
+    for block in blocks:
         for raw_line in str(block or "").splitlines():
             line = raw_line.strip()
-            if not line:
+            if not line or line in seen:
                 continue
-            if character in line or any(token in line for token in ("“", "”", "\"", "道", "说道", "笑道", "问道")):
-                if line not in lines:
-                    lines.append(line)
-            if len(lines) >= 8:
-                return lines
-    return lines
+            seen.add(line)
+            mentions_character = _line_mentions_character(line, character)
+            is_dialogue = looks_like_dialogue_sentence(line)
+            is_thought = looks_like_thought_or_evaluation_sentence(line)
+            if not (mentions_character or is_dialogue or is_thought):
+                continue
+            if mentions_character and is_dialogue:
+                priority = 0
+            elif mentions_character and is_thought:
+                priority = 1
+            elif mentions_character:
+                priority = 2
+            elif is_dialogue:
+                priority = 3
+            else:
+                priority = 4
+            ranked_lines.append((priority, order, line))
+            order += 1
+    ranked_lines.sort(key=lambda item: (item[0], item[1]))
+    return [line for _, _, line in ranked_lines[:_DIALOGUE_EVIDENCE_LIMIT]]
+
+
+def _line_mentions_character(line: str, character: str) -> bool:
+    match_tokens = _character_match_tokens(character)
+    if not match_tokens:
+        return False
+    normalized_line = _normalize_match_text(line)
+    return any(token in normalized_line for token in match_tokens)
+
+
+def _character_match_tokens(character: str) -> tuple[str, ...]:
+    normalized_character = _normalize_match_text(character)
+    if not normalized_character:
+        return ()
+    tokens = [normalized_character]
+    if len(normalized_character) >= 3:
+        tokens.append(normalized_character[1:])
+        tokens.append(normalized_character[-2:])
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        if len(token) < 2 or token in seen:
+            continue
+        seen.add(token)
+        ordered.append(token)
+    return tuple(ordered)
+
+
+def _normalize_match_text(text: str) -> str:
+    sample = unicodedata.normalize("NFKC", str(text or "")).translate(CHARACTER_VARIANT_MAP)
+    return MATCH_IGNORED_PATTERN.sub("", sample).lower()
 
 
 def looks_like_unstable_profile_scalar(value: str) -> bool:
