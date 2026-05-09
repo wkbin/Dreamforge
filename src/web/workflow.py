@@ -19,6 +19,7 @@ from src.web.service_facades import (
     RunPreparationMixin,
     RuntimeSupportMixin,
     RunServiceMixin,
+    UpdateServiceMixin,
 )
 
 
@@ -38,6 +39,7 @@ class RunStoppedError(Exception):
 
 class WebRunService(
     AutomaticPipelineMixin,
+    UpdateServiceMixin,
     RuntimeSupportMixin,
     CoreServiceMixin,
     RunPreparationMixin,
@@ -179,6 +181,26 @@ class WebRunService(
         self.runs_root.mkdir(parents=True, exist_ok=True)
         self.dialogue = DialogueService(self.runs_root)
         self._active_run_threads: dict[str, threading.Thread] = {}
+        self._app_update_lock = threading.Lock()
+        self._app_update_thread: threading.Thread | None = None
+        self._app_update_state: dict[str, object] = {
+            "supported": False,
+            "status": "idle",
+            "message": "",
+            "error": "",
+            "current_version": "",
+            "remote_version": "",
+            "update_available": False,
+            "checked_at": "",
+            "started_at": "",
+            "completed_at": "",
+            "reload_required": False,
+            "launcher_path": "",
+            "repo_slug": "",
+            "repo_ref": "",
+            "last_update_stdout": "",
+        }
+        self._launcher_path_hint = ""
 
     @staticmethod
     def _build_runtime_parts(config):

@@ -154,17 +154,67 @@ BIN_DIR="${BIN_DIR}"
 RC_FILE="${rc_file}"
 RUNTIME_REQUIREMENTS_FILE="${RUNTIME_REQUIREMENTS_FILE}"
 INSTALLER_URL="https://raw.githubusercontent.com/${REPO_SLUG}/${REPO_REF}/scripts/install.sh"
+VERSION_FILE_RELATIVE="src/web/static/version.txt"
 
 if [ ! -x "\${PYTHON_BIN}" ]; then
   echo "zaomeng runtime is missing / 缺少 zaomeng 运行时: \${PYTHON_BIN}" >&2
   exit 1
 fi
 
+current_version() {
+  local version_file="\${INSTALL_ROOT}/\${VERSION_FILE_RELATIVE}"
+  if [ ! -f "\${version_file}" ]; then
+    return 1
+  fi
+  tr -d '\r' < "\${version_file}" | head -n 1
+}
+
+download_text() {
+  local url="\${1:-}"
+  if [ -z "\${url}" ]; then
+    return 1
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    curl --fail --silent --show-error --location "\${url}"
+    return
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    wget -qO- "\${url}"
+    return
+  fi
+  return 1
+}
+
+fetch_remote_version() {
+  local target_ref="\${1:-\${REPO_REF}}"
+  local version_url="https://raw.githubusercontent.com/\${REPO_SLUG}/\${target_ref}/\${VERSION_FILE_RELATIVE}"
+  download_text "\${version_url}" | tr -d '\r' | head -n 1
+}
+
 run_update() {
   local target_ref="\${1:-\${REPO_REF}}"
   local installer_url="https://raw.githubusercontent.com/\${REPO_SLUG}/\${target_ref}/scripts/install.sh"
+  local local_version=""
+  local remote_version=""
 
-  echo "Updating zaomeng / 正在更新 zaomeng: \${REPO_SLUG}@\${target_ref}"
+  local_version="\$(current_version || true)"
+  remote_version="\$(fetch_remote_version "\${target_ref}" || true)"
+
+  if [ -n "\${local_version}" ] && [ -n "\${remote_version}" ]; then
+    echo "Local version / 本地版本:  \${local_version}"
+    echo "Remote version / 远端版本: \${remote_version}"
+    if [ "\${local_version}" = "\${remote_version}" ]; then
+      echo "Update skipped / 跳过更新: zaomeng is already up to date."
+      echo "zaomeng 已是最新版本，无需更新。"
+      return 0
+    fi
+    echo "Update required / 需要更新: \${local_version} -> \${remote_version}"
+    echo "Updating zaomeng / 正在更新 zaomeng: \${local_version} -> \${remote_version} (\${REPO_SLUG}@\${target_ref})"
+  else
+    echo "Updating zaomeng / 正在更新 zaomeng: \${REPO_SLUG}@\${target_ref}"
+    echo "Version check unavailable, proceeding with update. / 暂时无法比对版本，继续执行更新。"
+  fi
+
   if command -v curl >/dev/null 2>&1; then
     curl --fail --silent --show-error --location "\${installer_url}" | \
       env \

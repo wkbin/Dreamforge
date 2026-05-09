@@ -7,6 +7,7 @@ from .review_helpers import ReviewHelpersMixin
 from .run_preparation import RunPreparationMixin
 from .runtime_support import RuntimeSupportMixin
 from .runs import RunServiceMixin
+from .system_update import UpdateServiceMixin
 
 __all__ = [
     "AutomaticPipelineMixin",
@@ -18,4 +19,5 @@ __all__ = [
     "RunPreparationMixin",
     "RuntimeSupportMixin",
     "RunServiceMixin",
+    "UpdateServiceMixin",
 ]

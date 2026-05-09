@@ -36,3 +36,22 @@ def save_model_settings(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/web/settings/update")
+def get_app_update_status(
+    force: bool = False,
+    run_service: WebRunService = Depends(get_run_service),
+) -> dict[str, Any]:
+    try:
+        return run_service.get_app_update_status(force_check=force)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/web/settings/update")
+def start_app_update(run_service: WebRunService = Depends(get_run_service)) -> dict[str, Any]:
+    try:
+        return run_service.start_app_update()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -1,0 +1,25 @@
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+
+class InstallScriptTests(unittest.TestCase):
+    def test_install_launcher_checks_remote_version_before_update(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        script_text = (repo_root / "scripts" / "install.sh").read_text(encoding="utf-8")
+
+        self.assertIn('VERSION_FILE_RELATIVE="src/web/static/version.txt"', script_text)
+        self.assertIn('fetch_remote_version()', script_text)
+        self.assertIn('local_version="\\$(current_version || true)"', script_text)
+        self.assertIn('remote_version="\\$(fetch_remote_version "\\${target_ref}" || true)"', script_text)
+        self.assertIn('Local version / 本地版本:  \\${local_version}', script_text)
+        self.assertIn('Remote version / 远端版本: \\${remote_version}', script_text)
+        self.assertIn('if [ "\\${local_version}" = "\\${remote_version}" ]; then', script_text)
+        self.assertIn('Update skipped / 跳过更新: zaomeng is already up to date.', script_text)
+        self.assertIn('Update required / 需要更新: \\${local_version} -> \\${remote_version}', script_text)
+        self.assertIn('Version check unavailable, proceeding with update.', script_text)
+
+
+if __name__ == "__main__":
+    unittest.main()

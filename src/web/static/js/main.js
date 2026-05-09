@@ -1,3 +1,8 @@
+let appUpdateStatus = null;
+let appUpdatePollTimer = 0;
+
+const APP_UPDATE_DISMISS_PREFIX = "zaomeng:update-dismissed:";
+
 function syncModeFields() {
   const mode = valueOf("dialogue-mode", "observe");
   syncChoiceGroup("dialogue-mode-options", "dialogue-mode");
@@ -335,6 +340,120 @@ async function openRelationDetails() {
   }
 }
 
+function openAppUpdateModal() {
+  toggle("app-update-modal", true);
+  if (typeof syncModalScrollLock === "function") syncModalScrollLock();
+}
+
+function closeAppUpdateModal() {
+  toggle("app-update-modal", false);
+  if (typeof syncModalScrollLock === "function") syncModalScrollLock();
+}
+
+function appUpdateDismissKey(currentVersion, remoteVersion) {
+  return `${APP_UPDATE_DISMISS_PREFIX}${String(currentVersion || "").trim()}->${String(remoteVersion || "").trim()}`;
+}
+
+function rememberDismissedAppUpdate(status = appUpdateStatus) {
+  const currentVersion = String(status?.current_version || "").trim();
+  const remoteVersion = String(status?.remote_version || "").trim();
+  if (!currentVersion || !remoteVersion || !window.localStorage) return;
+  window.localStorage.setItem(appUpdateDismissKey(currentVersion, remoteVersion), "1");
+}
+
+function wasAppUpdateDismissed(status = appUpdateStatus) {
+  const currentVersion = String(status?.current_version || "").trim();
+  const remoteVersion = String(status?.remote_version || "").trim();
+  if (!currentVersion || !remoteVersion || !window.localStorage) return false;
+  return window.localStorage.getItem(appUpdateDismissKey(currentVersion, remoteVersion)) === "1";
+}
+
+function clearAppUpdatePolling() {
+  if (!appUpdatePollTimer) return;
+  window.clearTimeout(appUpdatePollTimer);
+  appUpdatePollTimer = 0;
+}
+
+function renderAppUpdateStatus(status) {
+  appUpdateStatus = status || null;
+  setText("app-update-current-version", status?.current_version || "-", "");
+  setText("app-update-remote-version", status?.remote_version || "-", "");
+  setStatus("app-update-status", status?.message || "");
+  const confirmButton = el("confirm-app-update-button");
+  const closeButton = el("close-app-update-button");
+  const dismissButton = el("dismiss-app-update-button");
+  const updating = String(status?.status || "") === "updating";
+  if (confirmButton) {
+    confirmButton.disabled = updating || !status?.update_available;
+    confirmButton.textContent = updating ? "更新中..." : "现在更新";
+  }
+  if (closeButton) closeButton.disabled = updating;
+  if (dismissButton) dismissButton.disabled = updating;
+}
+
+async function fetchAppUpdateStatus(force = false) {
+  const suffix = force ? "?force=true" : "";
+  const status = await apiJson(`/api/web/settings/update${suffix}`, {}, "检查更新失败。");
+  renderAppUpdateStatus(status);
+  return status;
+}
+
+function scheduleAppUpdatePolling() {
+  clearAppUpdatePolling();
+  appUpdatePollTimer = window.setTimeout(async () => {
+    try {
+      const status = await fetchAppUpdateStatus(false);
+      if (status?.status === "updating") {
+        scheduleAppUpdatePolling();
+        return;
+      }
+      if (status?.status === "completed" && status?.reload_required) {
+        window.setTimeout(() => window.location.reload(), 900);
+      }
+    } catch (error) {
+      setStatus("app-update-status", error.message || "刚才那次更新状态暂时没取到。");
+    }
+  }, 1200);
+}
+
+async function checkAppUpdateOnBoot() {
+  try {
+    const status = await fetchAppUpdateStatus(true);
+    if (!status?.supported || !status?.update_available || wasAppUpdateDismissed(status)) {
+      return;
+    }
+    openAppUpdateModal();
+  } catch (error) {
+    console.warn("checkAppUpdateOnBoot failed", error);
+  }
+}
+
+function dismissAppUpdateModal() {
+  rememberDismissedAppUpdate(appUpdateStatus);
+  closeAppUpdateModal();
+}
+
+async function handleConfirmAppUpdate() {
+  const confirmButton = el("confirm-app-update-button");
+  if (confirmButton) confirmButton.disabled = true;
+  setStatus("app-update-status", "正在替你接上更新...");
+  try {
+    const status = await apiJson(
+      "/api/web/settings/update",
+      {
+        method: "POST",
+      },
+      "开始更新失败。"
+    );
+    renderAppUpdateStatus(status);
+    openAppUpdateModal();
+    scheduleAppUpdatePolling();
+  } catch (error) {
+    if (confirmButton) confirmButton.disabled = false;
+    setStatus("app-update-status", error.message || "这次更新没有接上。");
+  }
+}
+
 const DIALOGUE_PLACEHOLDER_DEFAULT = "写一句你想让他们听见的话";
 const DIALOGUE_PLACEHOLDER_WAITING = "他们正在接住你的话。";
 const DIALOGUE_SUGGESTION_WAITING = "正在生成中...";
@@ -537,6 +656,9 @@ function bindEvents() {
   bind("close-settings-button", "click", closeSettingsModal);
   bind("close-persona-review-button", "click", closePersonaReviewModal);
   bind("close-relation-details-button", "click", closeRelationDetailsModal);
+  bind("close-app-update-button", "click", dismissAppUpdateModal);
+  bind("dismiss-app-update-button", "click", dismissAppUpdateModal);
+  bind("confirm-app-update-button", "click", handleConfirmAppUpdate);
   bind("toggle-sidebar-button", "click", () => {
     sidebarCollapsed = !sidebarCollapsed;
     applySidebarState();
@@ -619,6 +741,8 @@ function bindEvents() {
         closePersonaReviewModal();
       } else if (modalId === "relation-details-modal") {
         closeRelationDetailsModal();
+      } else if (modalId === "app-update-modal") {
+        dismissAppUpdateModal();
       } else {
         closeSettingsModal();
       }
@@ -643,6 +767,7 @@ async function boot() {
     loadRecentSessions().catch((error) => console.warn("loadRecentSessions failed", error)),
     loadRunsOverview().catch((error) => console.warn("loadRunsOverview failed", error)),
   ]);
+  await checkAppUpdateOnBoot();
 }
 
 bindEvents();

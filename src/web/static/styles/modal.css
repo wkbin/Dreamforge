@@ -187,7 +187,8 @@
 
 #settings-modal .panel-copy,
 #persona-review-modal .panel-copy,
-#relation-details-modal .panel-copy {
+#relation-details-modal .panel-copy,
+#app-update-modal .panel-copy {
   font-size: 0.76rem;
   line-height: 1.6;
 }
@@ -248,9 +249,59 @@
 
 #settings-modal .card-note,
 #persona-review-modal .card-note,
-#relation-details-modal .card-note {
+#relation-details-modal .card-note,
+#app-update-modal .card-note {
   font-size: 0.74rem;
   line-height: 1.55;
+}
+
+#app-update-modal .modal-card {
+  width: min(560px, calc(100vw - 28px));
+}
+
+#app-update-modal .card-actions {
+  gap: 0.55rem;
+}
+
+#app-update-modal .soft-button,
+#app-update-modal .primary-button {
+  min-height: 2rem;
+  padding: 0 0.78rem;
+  font-size: 0.76rem;
+}
+
+.update-modal-card {
+  gap: 0.8rem;
+}
+
+.update-version-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.72rem;
+}
+
+.update-version-card {
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.8rem 0.88rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(170, 146, 127, 0.12);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 8px 18px rgba(126, 92, 70, 0.035);
+}
+
+.update-version-card span {
+  color: var(--ink-faint);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.update-version-card strong {
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.4;
 }
 
 #settings-modal .choice-card {

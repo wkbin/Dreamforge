@@ -286,3 +286,34 @@
     </div>
   </div>
 </div>
+
+<div id="app-update-modal" class="modal hidden">
+  <div class="modal-backdrop" data-close-modal="true" data-modal-id="app-update-modal"></div>
+  <div class="modal-card update-modal-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">版本提醒</p>
+        <h3>造梦有新版本了</h3>
+        <p class="panel-copy">不打断这一页，只轻轻提醒你一下。想现在更新也可以，完成后会自动刷新网页。</p>
+      </div>
+      <button id="close-app-update-button" type="button" class="soft-button">稍后</button>
+    </div>
+    <div class="modal-scroll">
+      <div class="update-version-pair">
+        <div class="update-version-card">
+          <span>当前版本</span>
+          <strong id="app-update-current-version">-</strong>
+        </div>
+        <div class="update-version-card">
+          <span>远端版本</span>
+          <strong id="app-update-remote-version">-</strong>
+        </div>
+      </div>
+      <p id="app-update-status" class="card-note"></p>
+      <div class="card-actions">
+        <button id="dismiss-app-update-button" type="button" class="soft-button">稍后再说</button>
+        <button id="confirm-app-update-button" type="button" class="primary-button">现在更新</button>
+      </div>
+    </div>
+  </div>
+</div>

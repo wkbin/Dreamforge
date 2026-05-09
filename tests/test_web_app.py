@@ -300,6 +300,60 @@ class WebRunServiceTests(unittest.TestCase):
             )
             self.assertTrue(settings["configured"])
 
+    def test_get_app_update_status_reports_available_update(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            with patch.object(
+                service,
+                "_discover_launcher_metadata",
+                return_value={
+                    "launcher_path": "/home/test/.local/bin/zaomeng",
+                    "repo_slug": "wkbin/zaomeng",
+                    "repo_ref": "main",
+                },
+            ), patch.object(service, "_read_local_app_version", return_value="20260508100000"), patch.object(
+                service,
+                "_fetch_remote_app_version",
+                return_value="20260510120000",
+            ):
+                status = service.get_app_update_status(force_check=True)
+
+            self.assertTrue(status["supported"])
+            self.assertTrue(status["update_available"])
+            self.assertEqual(status["current_version"], "20260508100000")
+            self.assertEqual(status["remote_version"], "20260510120000")
+
+    def test_start_app_update_runs_in_background_and_marks_reload_required(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            with patch.object(
+                service,
+                "_discover_launcher_metadata",
+                return_value={
+                    "launcher_path": "/home/test/.local/bin/zaomeng",
+                    "repo_slug": "wkbin/zaomeng",
+                    "repo_ref": "main",
+                },
+            ), patch.object(
+                service,
+                "_read_local_app_version",
+                side_effect=["20260508100000", "20260510120000"],
+            ), patch.object(
+                service,
+                "_fetch_remote_app_version",
+                side_effect=["20260510120000", "20260510120000"],
+            ), patch("src.web.service_facades.system_update.subprocess.run") as run_update:
+                run_update.return_value = Mock(returncode=0, stdout="updated", stderr="")
+                started = service.start_app_update()
+                self.assertEqual(started["status"], "updating")
+                self.assertIsNotNone(service._app_update_thread)
+                service._app_update_thread.join(timeout=2)
+                finished = service.get_app_update_status()
+
+            self.assertEqual(finished["status"], "completed")
+            self.assertTrue(finished["reload_required"])
+            self.assertFalse(finished["update_available"])
+
     def test_create_run_builds_manifest_and_payloads(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
