@@ -567,6 +567,7 @@ function renderCharacterOverview(payload) {
   const workTitle = runNovelTitle(currentRun);
   const role = String(fields.story_role || fields.core_identity || "这一页会慢慢把他的轮廓立起来").trim();
   const snapshot = buildCharacterOverviewHealthSnapshot(fields);
+  const evidenceSnapshot = buildCharacterOverviewEvidenceSnapshot(character);
 
   setText("character-overview-title", `${character} · 人物档案`, "");
   setText("character-overview-work", `出自《${workTitle}》`, "");
@@ -581,6 +582,7 @@ function renderCharacterOverview(payload) {
   setStatus("character-overview-status", "");
 
   renderCharacterOverviewHealthMetrics(snapshot);
+  renderCharacterOverviewEvidenceMetrics(evidenceSnapshot);
   renderCharacterOverviewKeyFields(fields);
   renderCharacterOverviewVoiceSummary(fields);
   renderCharacterOverviewRelationSummary(fields);
@@ -639,6 +641,71 @@ function renderCharacterOverviewHealthMetrics(snapshot) {
   metrics.forEach(([label, value, hint]) => {
     const card = document.createElement("article");
     card.className = "character-overview-health-card";
+    card.innerHTML = `<span>${label}</span><strong>${value}</strong><small>${hint}</small>`;
+    root.appendChild(card);
+  });
+}
+
+function buildCharacterOverviewEvidenceSnapshot(character) {
+  const name = String(character || "").trim();
+  const focus = currentRun?.quality?.excerpt_focus || {};
+  const missing = new Set(Array.isArray(focus.missing_characters) ? focus.missing_characters : []);
+  const matched = new Set(Array.isArray(focus.matched_characters) ? focus.matched_characters : []);
+  const currentSource = getCurrentNovelSource(currentRun);
+  const allSources = Array.isArray(currentRun?.novel_sources) ? currentRun.novel_sources : [];
+  const currentSourceName = String(currentSource?.source_name || "").trim() || "当前书页";
+  const currentSourceKind = currentSource?.kind === "incremental_update" ? "增量书段" : "初始正文";
+  const currentSourceStats = formatSourceStats(currentSource);
+  const updatedText = formatWeakTime(currentRun?.updated_at || "") || "刚刚";
+  if (missing.has(name)) {
+    return {
+      evidenceLabel: "证据偏薄",
+      evidenceCopy: "这位角色在当前正文里的有效命中还偏少，字段补全可以救急，但更稳的办法仍然是补更贴近他的书段。",
+      sourceLabel: currentSourceName,
+      sourceCopy: [currentSourceKind, currentSourceStats].filter(Boolean).join(" · ") || "当前整理基于这份书段继续往下走。",
+      traceLabel: `${allSources.length || 1} 段来源`,
+      traceCopy: `最近更新 ${updatedText}。这轮更适合做增量蒸馏，而不是只补字段。`,
+      recommendationLabel: "建议动作",
+      recommendationCopy: "优先换入更贴近这个角色的正文片段，然后继续增量蒸馏。",
+    };
+  }
+  if (matched.has(name)) {
+    return {
+      evidenceLabel: "命中稳定",
+      evidenceCopy: "这位角色在当前正文中已经被稳定命中，当前更适合继续补关键字段或做细修。",
+      sourceLabel: currentSourceName,
+      sourceCopy: [currentSourceKind, currentSourceStats].filter(Boolean).join(" · ") || "当前整理基于这份书段继续往下走。",
+      traceLabel: `${allSources.length || 1} 段来源`,
+      traceCopy: `最近更新 ${updatedText}。如果字段已经够用，可以直接带进对话测试。`,
+      recommendationLabel: "建议动作",
+      recommendationCopy: "先补最薄的关键字段；若骨架已稳，就直接带进聊天里验证说话是否像本人。",
+    };
+  }
+  return {
+    evidenceLabel: currentRun?.status === "running" ? "仍在整理" : "等待更多证据",
+    evidenceCopy: currentRun?.status === "running" ? "这一轮还在继续，人物证据可能还会再长出来。" : "这位角色暂时没有明确命中或缺证据标记，先结合字段薄弱程度判断是否要继续补。",
+    sourceLabel: currentSourceName,
+    sourceCopy: [currentSourceKind, currentSourceStats].filter(Boolean).join(" · ") || "当前整理基于这份书段继续往下走。",
+    traceLabel: `${allSources.length || 1} 段来源`,
+    traceCopy: `最近更新 ${updatedText}。你可以先在角色页补字段，再决定要不要换入新书段。`,
+    recommendationLabel: "建议动作",
+    recommendationCopy: "如果说话方式和灵魂目标还薄，先补字段；如果整个人都虚，再考虑增量蒸馏。",
+  };
+}
+
+function renderCharacterOverviewEvidenceMetrics(snapshot) {
+  const root = el("character-overview-evidence-metrics");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = [
+    ["证据判断", snapshot.evidenceLabel, snapshot.evidenceCopy],
+    ["当前依据书段", snapshot.sourceLabel, snapshot.sourceCopy],
+    ["来源足迹", snapshot.traceLabel, snapshot.traceCopy],
+    [snapshot.recommendationLabel, "下一步", snapshot.recommendationCopy],
+  ];
+  items.forEach(([label, value, hint]) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-evidence-card";
     card.innerHTML = `<span>${label}</span><strong>${value}</strong><small>${hint}</small>`;
     root.appendChild(card);
   });
