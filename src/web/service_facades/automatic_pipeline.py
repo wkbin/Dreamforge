@@ -42,16 +42,7 @@ class AutomaticPipelineMixin:
         novel_id = str(manifest.get("novel_id", "")).strip() or run_dir.name
         config = self._build_runtime_config_for_run(run_dir=run_dir)
         parts = self._build_runtime_parts(config)
-        redistill = dict(manifest.get("redistill", {}) or {})
-        used_new_source = bool(redistill.get("used_new_source", False))
-        resume_completed = [
-            str(item).strip()
-            for item in list(redistill.get("resume_completed_characters", []))
-            if str(item).strip()
-        ]
         pending_characters = list(locked_characters)
-        if redistill and not used_new_source:
-            pending_characters = [name for name in locked_characters if name not in set(resume_completed)]
         graph_cast = self._normalize_characters(relation_characters or locked_characters)
         stopped_error_type = self.STOPPED_ERROR_TYPE
 

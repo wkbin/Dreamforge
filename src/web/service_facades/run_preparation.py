@@ -198,14 +198,12 @@ class RunPreparationMixin:
         using_new_source = bool(source_update["using_new_source"])
         novel_path = source_update["novel_path"]
         raw_bytes = source_update["raw_bytes"]
-        resume_completed_characters = existing_requested if not using_new_source else []
-        pending_characters = [name for name in locked_characters if name not in resume_completed_characters]
+        resume_completed_characters: list[str] = []
+        pending_characters = list(locked_characters)
         if using_new_source:
             redistill_summary = f"继续蒸馏：新增 {len(new_requested)} 人，增量 {len(existing_requested)} 人"
-        elif pending_characters and resume_completed_characters:
-            redistill_summary = f"继续蒸馏：待完成 {len(pending_characters)} 人，已完成 {len(resume_completed_characters)} 人"
         elif pending_characters:
-            redistill_summary = f"继续蒸馏：待完成 {len(pending_characters)} 人"
+            redistill_summary = f"继续蒸馏：重新整理 {len(pending_characters)} 人"
         else:
             redistill_summary = "继续蒸馏：人物档案已完成，准备继续关系图谱"
         novel_source_entry = None
