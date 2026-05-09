@@ -74,6 +74,31 @@ function renderBookshelfDetail(run) {
   if (detailActions) {
     detailActions.classList.toggle("hidden", !canEnterChat && !canRedistill && !canStop);
   }
+  const reviewButton = el("open-persona-review-button");
+  if (reviewButton) {
+    reviewButton.classList.toggle("hidden", !Boolean(run?.artifact_index?.characters?.length));
+  }
+  const relationButton = el("open-relation-details-button");
+  if (relationButton) {
+    relationButton.classList.toggle("hidden", !Boolean(run?.artifact_index?.relation_graph?.relations_file));
+  }
+  const graphButton = el("detail-view-graph-button");
+  if (graphButton) {
+    const hasGraphLink = Boolean(run?.file_urls?.graph_html || run?.file_urls?.graph_svg);
+    graphButton.classList.toggle("hidden", !hasGraphLink);
+    graphButton.onclick = () => {
+      const target = run?.file_urls?.graph_html || run?.file_urls?.graph_svg || "";
+      if (!target) return;
+      window.open(target, "_blank", "noopener,noreferrer");
+    };
+  }
+  toggle(
+    "detail-secondary-actions-shell",
+    Boolean(run) &&
+      (Boolean(run?.artifact_index?.characters?.length) ||
+        Boolean(run?.artifact_index?.relation_graph?.relations_file) ||
+        Boolean(run?.file_urls?.graph_html || run?.file_urls?.graph_svg))
+  );
   toggle("detail-action-note", Boolean(run) && (isRunning || isStopped));
   if (stopRequested) {
     setText("detail-action-note", "已收到停止请求，正在把当前这一步收住。", "");

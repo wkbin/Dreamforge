@@ -102,6 +102,24 @@
         <p id="run-status-description" class="run-status-description">这一卷还在慢慢成形，先看它往哪里走。</p>
       </section>
     </section>
+    <div class="work-hero-metrics">
+      <article class="work-hero-metric">
+        <span>当前书段</span>
+        <strong id="run-hero-source">-</strong>
+      </article>
+      <article class="work-hero-metric">
+        <span>角色总数</span>
+        <strong id="run-hero-character-total">-</strong>
+      </article>
+      <article class="work-hero-metric">
+        <span>总状态</span>
+        <strong id="run-hero-status">-</strong>
+      </article>
+      <article class="work-hero-metric">
+        <span>累计耗时</span>
+        <strong id="run-hero-elapsed">-</strong>
+      </article>
+    </div>
 
     <div class="work-progress-strip">
       <article class="work-progress-card">
@@ -130,11 +148,25 @@
       </article>
     </div>
 
-    <div id="detail-primary-actions" class="card-actions">
-      <button id="detail-start-chat-button" type="button" class="primary-button">开始聊天</button>
-      <button id="detail-redistill-button" type="button" class="soft-button">继续蒸馏</button>
-      <button id="detail-stop-run-button" type="button" class="soft-button hidden">停止蒸馏</button>
-    </div>
+    <section class="work-action-groups">
+      <div class="work-action-group">
+        <span class="work-action-label">主动作</span>
+        <div id="detail-primary-actions" class="card-actions">
+          <button id="detail-start-chat-button" type="button" class="primary-button">开始聊天</button>
+          <button id="detail-redistill-button" type="button" class="soft-button">继续蒸馏</button>
+          <button id="detail-stop-run-button" type="button" class="soft-button hidden">停止蒸馏</button>
+        </div>
+      </div>
+      <div id="detail-secondary-actions-shell" class="work-action-group">
+        <span class="work-action-label">次动作</span>
+        <div id="detail-secondary-actions" class="card-actions">
+          <button id="open-persona-review-button" type="button" class="soft-button hidden">校对人物</button>
+          <button id="open-relation-details-button" type="button" class="soft-button hidden">关系明细</button>
+          <button id="detail-view-graph-button" type="button" class="soft-button hidden">查看关系图</button>
+          <button id="detail-view-timeline-button" type="button" class="soft-button">查看时间线</button>
+        </div>
+      </div>
+    </section>
     <p id="detail-action-note" class="card-note hidden">这一卷还在整理中，先看进度继续往前走。</p>
 
     <div class="work-overview-grid">
@@ -144,7 +176,6 @@
             <p class="eyebrow">角色</p>
             <h4>这一卷里谁已经站稳了</h4>
           </div>
-          <button id="open-persona-review-button" type="button" class="soft-button hidden">校对人物</button>
         </div>
         <p class="detail-section-copy">先看谁已经成形、谁还缺关键笔触，再决定下一刀落在哪个角色上。</p>
         <div id="run-character-readiness" class="work-character-list"></div>
@@ -216,7 +247,6 @@
             <p class="eyebrow">入口</p>
             <h4>这一卷可以从哪里继续</h4>
           </div>
-          <button id="open-relation-details-button" type="button" class="soft-button hidden">关系明细</button>
         </div>
         <p id="run-graph-status-copy" class="detail-section-copy">先看关系与会话，再决定如何走进这一幕。</p>
         <div id="graph-links" class="link-row hidden"></div>

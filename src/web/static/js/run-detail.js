@@ -77,6 +77,7 @@ function renderRunSummary(run) {
   setText("work-overview-next-step", buildWorkOverviewNextStep(run), "");
   setText("run-progress-review", buildWorkReviewStatus(run), "");
   setText("run-progress-graph", buildWorkGraphStatus(run), "");
+  renderWorkHeroMetrics(run);
   renderWorkSummaryNarrative(run);
   renderSourceHistory(run);
   renderRedistillPlan(run);
@@ -86,6 +87,17 @@ function renderRunSummary(run) {
   renderWorkGraphSummary(run);
   renderWorkSessionPreview(run);
   syncRedistillPreview();
+}
+
+function renderWorkHeroMetrics(run) {
+  const sourceName = String(getCurrentNovelSource(run)?.source_name || "").trim() || "当前书页";
+  const characterTotal = getRunCharacterNames(run).length;
+  const statusText = humanizeSummary(run?.summary?.status_text);
+  const elapsedText = String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim() || "进行中";
+  setText("run-hero-source", sourceName, "");
+  setText("run-hero-character-total", characterTotal > 0 ? `${characterTotal} 位` : "0 位", "");
+  setText("run-hero-status", statusText || "未开始", "");
+  setText("run-hero-elapsed", elapsedText, "");
 }
 
 function renderWorkSummaryNarrative(run) {
@@ -878,6 +890,10 @@ function buildCharacterOverviewReviewCopy(reviewEvent) {
     return `${timestampText}在角色页直接保存过字段。${changedCopy}`.trim();
   }
   return `${timestampText}保存过人物校对。${changedCopy}`.trim();
+}
+
+function openWorkTimeline() {
+  el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function buildCharacterOverviewRedistillSignal(character) {

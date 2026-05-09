@@ -336,10 +336,55 @@
   line-height: 1.7;
 }
 
+.work-hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.68rem;
+}
+
+.work-hero-metric {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.76rem 0.82rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(170, 146, 127, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.work-hero-metric span {
+  color: var(--ink-faint);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.work-hero-metric strong {
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
 .work-progress-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.8rem;
+}
+
+.work-action-groups {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.work-action-group {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.work-action-label {
+  color: var(--ink-faint);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  padding-left: var(--text-inset);
 }
 
 .work-progress-card {
@@ -1759,6 +1804,10 @@ textarea::placeholder {
 
 @media (max-width: 900px) {
   .insert-self-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .work-hero-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
