@@ -25,6 +25,7 @@
 
 ## 版本说明
 
+- `4.1.6`：升级 skill 包版本，补齐当前发布 tag 到 `v2026.05.09`，让 `SKILL.md`、`.metadata.json`、示例文件与发布元数据继续保持一致。
 - `4.1.5`：同步当前 skill 包版本元数据与中英文文档，补齐发布说明，确保打包与示例版本号一致。
 - `4.1.4`：整理 skill 打包产物，确保从 `zaomeng-skill/` 目录生成的 `zaomeng-<version>.skill.zip` 不混入 `__pycache__`、`.pytest_cache`、`.mypy_cache` 等缓存目录，同时收紧 stdout 输出格式，避免 JSON 以外内容干扰 Windows CI，并尽量保持 ASCII-safe，降低 GitHub Actions 在 `cp1252` 环境下的编码问题。
 - `4.1.3`：增强关系图谱导出，优先生成静态 SVG 并在 HTML 中直接内嵌，降低本地 `file://` 打开时 Mermaid 脚本受限导致图谱空白的概率，同时修正明细表布局挤压问题。

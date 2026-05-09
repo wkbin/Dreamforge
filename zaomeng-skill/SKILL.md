@@ -2,11 +2,12 @@
 name: zaomeng-skill
 description: 用于中文小说人物蒸馏、关系抽取、关系图谱导出与角色对话准备；当宿主需要基于小说内容生成结构化人物档案、关系结果或多角色对话上下文时使用。
 license: MIT-0
-compatibility: 需要宿主支持 Markdown skill 目录、YAML frontmatter，以及本 skill 内置 Python helper scripts 所需的本地 Python 运行环境。
+compatibility: 需要宿主支持 Markdown skill 目录、YAML frontmatter，以及本 skill 内置 Python helper
+  scripts 所需的本地 Python 运行环境。
 metadata:
-  version: 4.1.5
+  version: 4.1.6
   hostMode: llm-first
-  releaseTag: v2026.05.08
+  releaseTag: v2026.05.09
 ---
 
 # zaomeng-skill
