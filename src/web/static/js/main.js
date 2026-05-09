@@ -458,6 +458,9 @@ const DIALOGUE_PLACEHOLDER_DEFAULT = "写一句你想让他们听见的话";
 const DIALOGUE_PLACEHOLDER_WAITING = "他们正在接住你的话。";
 const DIALOGUE_SUGGESTION_WAITING = "正在生成中...";
 const DIALOGUE_SUGGESTION_BUSY_LABEL = "…";
+const DIALOGUE_RETRY_FEEDBACK_DELAY_MS = 2200;
+const DIALOGUE_SEND_RETRY_MESSAGE = "这次声源有点慢，正在自动重试...";
+const DIALOGUE_SUGGEST_RETRY_MESSAGE = "这次生成有点慢，正在自动重试...";
 const OBSERVE_QUICK_REPLIES = [
   { label: "……", value: "……" },
   { label: "继续聊", value: "继续聊。" },
@@ -571,6 +574,9 @@ async function handleSendTurn(messageOverride = "") {
   }
 
   const sessionSnapshot = currentDialogueSession ? JSON.parse(JSON.stringify(currentDialogueSession)) : null;
+  const retryFeedbackTimer = window.setTimeout(() => {
+    setComposerWaiting(true, DIALOGUE_SEND_RETRY_MESSAGE);
+  }, DIALOGUE_RETRY_FEEDBACK_DELAY_MS);
   setComposerWaiting(true, DIALOGUE_PLACEHOLDER_WAITING);
 
   if (currentDialogueSession) {
@@ -593,8 +599,10 @@ async function handleSendTurn(messageOverride = "") {
         "发送失败。"
       )
     );
+    window.clearTimeout(retryFeedbackTimer);
     setComposerWaiting(false, "");
   } catch (error) {
+    window.clearTimeout(retryFeedbackTimer);
     if (sessionSnapshot) {
       currentDialogueSession = sessionSnapshot;
       renderDialogueTranscript(sessionSnapshot);
@@ -623,6 +631,10 @@ async function handleSuggestTurn(event) {
   area.value = DIALOGUE_SUGGESTION_WAITING;
   resizeComposer();
   setSuggestingState(true);
+  const retryFeedbackTimer = window.setTimeout(() => {
+    area.value = DIALOGUE_SUGGEST_RETRY_MESSAGE;
+    resizeComposer();
+  }, DIALOGUE_RETRY_FEEDBACK_DELAY_MS);
 
   try {
     console.log("[dialogue suggest] request", { seedText });
@@ -636,12 +648,14 @@ async function handleSuggestTurn(event) {
       "续写建议生成失败。"
     );
     console.log("[dialogue suggest] success", payload);
+    window.clearTimeout(retryFeedbackTimer);
     area.value = payload.suggestion || "";
     area.focus();
     area.setSelectionRange(area.value.length, area.value.length);
     resizeComposer();
   } catch (error) {
     console.log("[dialogue suggest] error", error);
+    window.clearTimeout(retryFeedbackTimer);
     area.value = draftText;
     resizeComposer();
   } finally {
