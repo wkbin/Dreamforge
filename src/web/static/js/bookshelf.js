@@ -74,11 +74,13 @@ function renderBookshelfDetail(run) {
     detailActions.classList.toggle("hidden", !canEnterChat && !canRedistill && !canStop && !hasReviewAction);
   }
   if (reviewButton) {
-    reviewButton.classList.toggle("hidden", !hasReviewAction);
+    reviewButton.classList.remove("hidden");
+    reviewButton.disabled = !hasReviewAction;
   }
   const relationButton = el("open-relation-details-button");
   if (relationButton) {
-    relationButton.classList.toggle("hidden", !Boolean(run?.artifact_index?.relation_graph?.relations_file));
+    relationButton.classList.remove("hidden");
+    relationButton.disabled = !Boolean(run?.artifact_index?.relation_graph?.relations_file);
   }
   const exportButton = el("detail-export-summary-button");
   if (exportButton) {
@@ -87,12 +89,14 @@ function renderBookshelfDetail(run) {
       Boolean(run?.file_urls?.graph_relations_file) ||
       Boolean(run?.file_urls?.graph_html) ||
       Boolean(run?.file_urls?.graph_svg);
-    exportButton.classList.toggle("hidden", !hasExport);
+    exportButton.classList.remove("hidden");
+    exportButton.disabled = !hasExport;
   }
   const graphButton = el("detail-view-graph-button");
   if (graphButton) {
     const hasGraphLink = Boolean(run?.file_urls?.graph_html || run?.file_urls?.graph_svg);
-    graphButton.classList.toggle("hidden", !hasGraphLink);
+    graphButton.classList.remove("hidden");
+    graphButton.disabled = !hasGraphLink;
     graphButton.onclick = () => {
       const target = run?.file_urls?.graph_html || run?.file_urls?.graph_svg || "";
       if (!target) return;
@@ -263,9 +267,15 @@ function getBookshelfCardState(run) {
 }
 
 async function loadRunsOverview() {
+  if (!allRuns.length && typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(true, "正在载入作品列表...");
+  }
   const data = await apiJson("/api/web/runs");
   allRuns = Array.isArray(data.items) ? data.items : [];
   renderBookshelf(allRuns);
+  if (typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(false);
+  }
   return allRuns;
 }
 

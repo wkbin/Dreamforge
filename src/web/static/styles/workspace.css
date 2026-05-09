@@ -1281,6 +1281,14 @@
   display: none !important;
 }
 
+#step-progress.is-loading-work .detail-section,
+#step-progress.is-loading-work .work-hero-metrics,
+#step-progress.is-loading-work .work-progress-strip,
+#step-progress.is-loading-work .work-action-groups {
+  opacity: 0.58;
+  pointer-events: none;
+}
+
 .detail-section-timeline .timeline {
   margin-top: 0.15rem;
   max-height: min(16.5rem, 34vh);

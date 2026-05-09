@@ -62,6 +62,19 @@ function getCurrentRunEvents() {
   return Array.isArray(currentRun?.events) ? currentRun.events : [];
 }
 
+function setWorkOverviewLoading(loading, message = "") {
+  const progressRoot = el("step-progress");
+  if (progressRoot) {
+    progressRoot.classList.toggle("is-loading-work", Boolean(loading));
+  }
+  if (loading) {
+    setText("detail-action-note", message || "正在载入这一卷...", "");
+    toggle("detail-action-note", true);
+  } else if (currentRun?.status !== "running" && currentRun?.status !== "stopped" && currentRun?.status !== "failed") {
+    toggle("detail-action-note", false);
+  }
+}
+
 function renderRunSummary(run) {
   setValue("redistill-characters", joinCharacters(getRunCharacterNames(run)));
   setText("redistill-status", run.redistill?.summary || "", "");
@@ -1505,19 +1518,28 @@ function renderRunGraphLinks(run) {
     });
   graphLinksRoot.classList.toggle("hidden", graphLinksRoot.childElementCount === 0);
   toggle("graph-empty-note", graphLinksRoot.childElementCount === 0);
-  toggle("open-relation-details-button", Boolean(run?.artifact_index?.relation_graph?.relations_file));
+  const relationButton = el("open-relation-details-button");
+  if (relationButton) {
+    relationButton.classList.remove("hidden");
+    relationButton.disabled = !Boolean(run?.artifact_index?.relation_graph?.relations_file);
+  }
 }
 
 function syncRunArtifacts(run) {
   renderCharacterPills(run);
   renderRedistillPills(run);
-  toggle("open-persona-review-button", Boolean(run?.artifact_index?.characters?.length));
+  const reviewButton = el("open-persona-review-button");
+  if (reviewButton) {
+    reviewButton.classList.remove("hidden");
+    reviewButton.disabled = !Boolean(run?.artifact_index?.characters?.length);
+  }
   if (run.artifact_index?.characters?.length) {
     maybePrefillChatSetup(run);
   }
 }
 
 function renderRun(run, options = {}) {
+  setWorkOverviewLoading(false);
   const preserveDialogue = Boolean(options.preserveDialogue);
   const suppressWorkflowUpdate = Boolean(options.suppressWorkflowUpdate);
   setStatus("bookshelf-status", "");
