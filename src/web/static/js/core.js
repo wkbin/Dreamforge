@@ -639,6 +639,33 @@ function humanizeSummary(summary) {
   return mapping[summary] || summary || "未开始";
 }
 
+function humanizeRunEventStage(stage) {
+  const mapping = {
+    characters_locked: "角色已锁定",
+    text_loaded: "正文已载入",
+    characters_ready: "角色名单就绪",
+    distill_payload_ready: "蒸馏任务已就绪",
+    relation_payload_ready: "关系任务已就绪",
+    drafting_character: "正在蒸馏角色",
+    materializing_character: "正在落盘角色",
+    chunking_character: "正在分批蒸馏",
+    merging_character: "正在汇总角色",
+    character_done: "角色蒸馏完成",
+    rendering_graph: "正在生成关系图",
+    chunking_graph: "正在分批抽取关系",
+    merging_graph: "正在汇总关系",
+    graph_done: "关系图已生成",
+    graph_failed: "关系图生成失败",
+    persona_review_saved: "人物稿已写回",
+    workflow_complete: "这一卷已完成",
+    stopped: "已停止",
+    stopped_timing: "已停止（含耗时）",
+    failed: "已中断",
+    failed_timing: "已中断（含耗时）",
+  };
+  return mapping[stage] || stage || "进展";
+}
+
 function humanizeSessionStatus(status) {
   const mapping = {
     ready: "仍可续写",

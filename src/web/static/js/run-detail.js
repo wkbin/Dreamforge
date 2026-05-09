@@ -152,10 +152,11 @@ function renderWorkSummaryEvents(run) {
   root.innerHTML = "";
   const events = Array.isArray(run?.events) ? run.events.slice(-3).reverse() : [];
   events.forEach((item) => {
+    const stageLabel = humanizeRunEventStage(String(item?.stage || "").trim());
     const row = document.createElement("div");
     row.className = "work-summary-event";
     row.innerHTML = `
-      <strong>${String(item.stage || "进展").trim() || "进展"}</strong>
+      <strong>${escapeHtml(stageLabel)}</strong>
       <p>${String(item.message || "").trim() || "这一轮有新的变化落在这里。"}</p>
     `;
     root.appendChild(row);
@@ -1297,8 +1298,10 @@ function renderRunEvents(run) {
   if (!eventsRoot) return;
   eventsRoot.innerHTML = "";
   (run.events || []).slice(-8).forEach((event) => {
+    const stageLabel = humanizeRunEventStage(String(event?.stage || "").trim());
+    const message = String(event?.message || "").trim();
     const item = document.createElement("li");
-    item.textContent = event.message || event.stage || "";
+    item.textContent = message || stageLabel;
     eventsRoot.appendChild(item);
   });
   toggle("timeline-empty-note", eventsRoot.childElementCount === 0);
