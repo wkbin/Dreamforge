@@ -561,10 +561,14 @@ async function handleDeleteSelfCard(event) {
   }
 }
 
-async function openPersonaReview() {
+async function openPersonaReviewForCharacter(characterName = "") {
   if (!currentRunId || !currentRun) return;
   fillPersonaReviewCharacterOptions(currentRun);
-  const character = valueOf("persona-review-character", getRunCharacterNames(currentRun)[0] || "");
+  const fallbackCharacter = getRunCharacterNames(currentRun)[0] || "";
+  const character = String(characterName || "").trim() || valueOf("persona-review-character", fallbackCharacter) || fallbackCharacter;
+  if (character && el("persona-review-character")) {
+    setValue("persona-review-character", character);
+  }
   if (!character) {
     setStatus("persona-review-status", "这一卷里还没有可校对的人物。");
     return;
@@ -578,6 +582,18 @@ async function openPersonaReview() {
   } catch (error) {
     setStatus("persona-review-status", error.message || "人物档案暂时没有载入。");
   }
+}
+
+async function openPersonaReview() {
+  await openPersonaReviewForCharacter("");
+}
+
+async function openQuickDialogueMode(mode) {
+  await openNewDialogueSession();
+  if (!currentRun || !el("dialogue-mode")) return;
+  setValue("dialogue-mode", mode);
+  syncModeFields();
+  updateCharacterPillState();
 }
 
 async function handlePersonaCharacterChange() {
@@ -1036,9 +1052,43 @@ function bindEvents() {
   bind("bookshelf-new-run-button", "click", startNewRunFlow);
   bind("back-from-distill-button", "click", showBookshelfHome);
   bind("detail-start-chat-button", "click", openNewDialogueSession);
+  bind("quick-open-observe-button", "click", () => {
+    openQuickDialogueMode("observe").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+  });
+  bind("quick-open-act-button", "click", () => {
+    openQuickDialogueMode("act").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+  });
+  bind("quick-open-insert-button", "click", () => {
+    openQuickDialogueMode("insert").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+  });
   bind("detail-stop-run-button", "click", handleStopRun);
   bind("open-persona-review-button", "click", openPersonaReview);
   bind("open-relation-details-button", "click", openRelationDetails);
+  bind("back-to-work-overview-button", "click", () => {
+    characterOverviewOpen = false;
+    updateWorkflowState();
+  });
+  bind("character-overview-review-button", "click", () => {
+    if (!currentCharacterOverview?.character) return;
+    openPersonaReviewForCharacter(currentCharacterOverview.character).catch((error) =>
+      setStatus("persona-review-status", error.message || "人物档案暂时没有载入。")
+    );
+  });
+  bind("character-overview-act-button", "click", () => {
+    if (typeof openCharacterOverviewSessionMode === "function") {
+      openCharacterOverviewSessionMode("act").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+    }
+  });
+  bind("character-overview-insert-button", "click", () => {
+    if (typeof openCharacterOverviewSessionMode === "function") {
+      openCharacterOverviewSessionMode("insert").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+    }
+  });
+  bind("character-overview-export-button", "click", () => {
+    if (typeof openCurrentCharacterProfileFile === "function") {
+      openCurrentCharacterProfileFile();
+    }
+  });
   window.addEventListener("resize", () => {
     if (typeof syncViewportHeightVar === "function") {
       syncViewportHeightVar();

@@ -1,18 +1,398 @@
+const CHARACTER_OVERVIEW_KEY_FIELDS = [
+  ["core_identity", "核心身份"],
+  ["story_role", "故事位置"],
+  ["identity_anchor", "身份锚点"],
+  ["temperament_type", "气质底色"],
+  ["soul_goal", "灵魂目标"],
+  ["core_traits", "核心特质"],
+  ["key_bonds", "重要牵系"],
+  ["speech_style", "说话方式"],
+  ["worldview", "世界观"],
+  ["belief_anchor", "信念支点"],
+  ["moral_bottom_line", "道德底线"],
+  ["restraint_threshold", "失控阈值"],
+  ["stress_response", "应激反应"],
+];
+
+const CHARACTER_OVERVIEW_ADVANCED_GROUPS = [
+  ["内核细调", ["hidden_desire", "inner_conflict", "self_cognition", "private_self", "social_mode", "thinking_style", "decision_rules", "reward_logic", "others_impression"]],
+  ["对白细调", ["cadence", "typical_lines", "signature_phrases", "sentence_openers", "sentence_endings"]],
+  ["情绪细调", ["forbidden_behaviors", "emotion_model", "anger_style", "joy_style", "grievance_style"]],
+];
+
+const CHARACTER_OVERVIEW_FIELD_LABELS = {
+  core_identity: "核心身份",
+  story_role: "故事位置",
+  identity_anchor: "身份锚点",
+  temperament_type: "气质底色",
+  soul_goal: "灵魂目标",
+  hidden_desire: "隐秘渴望",
+  inner_conflict: "内在冲突",
+  self_cognition: "自我认知",
+  private_self: "私下的一面",
+  speech_style: "说话方式",
+  cadence: "语句节奏",
+  typical_lines: "代表句",
+  signature_phrases: "口头禅",
+  sentence_openers: "起句习惯",
+  sentence_endings: "句尾习惯",
+  social_mode: "社交模式",
+  thinking_style: "思考方式",
+  decision_rules: "决策规则",
+  reward_logic: "回报逻辑",
+  worldview: "世界观",
+  belief_anchor: "信念支点",
+  moral_bottom_line: "道德底线",
+  restraint_threshold: "失控阈值",
+  core_traits: "核心特质",
+  key_bonds: "重要牵系",
+  forbidden_behaviors: "不会做的事",
+  stress_response: "应激反应",
+  emotion_model: "情绪底模",
+  anger_style: "发怒方式",
+  joy_style: "开心方式",
+  grievance_style: "委屈方式",
+  others_impression: "他人观感",
+};
+
 function renderRunSummary(run) {
   setValue("redistill-characters", joinCharacters(getRunCharacterNames(run)));
   setText("redistill-status", run.redistill?.summary || "", "");
   setText("run-novel", runNovelTitle(run));
   setText("run-characters", joinCharacters(getRunCharacterNames(run) || run.locked_characters || []));
   setText("run-summary", humanizeSummary(run.summary?.status_text));
+  setText("run-progress-latest", formatWeakTime(run.updated_at || "") || "刚刚", "");
   const elapsedText = String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim();
   const progressCopy = String(run.progress?.message || "").trim() || "人物与关系会依次浮现。";
   const enrichedCopy =
     elapsedText && run.summary?.status_text === "workflow_complete" ? `${progressCopy} · 本次用时 ${elapsedText}` : progressCopy;
   setText("progress-copy", enrichedCopy, "");
+  setText("work-overview-next-step", buildWorkOverviewNextStep(run), "");
+  setText("run-progress-review", buildWorkReviewStatus(run), "");
+  setText("run-progress-graph", buildWorkGraphStatus(run), "");
   renderSourceHistory(run);
   renderRedistillPlan(run);
   renderQualitySnapshot(run);
+  renderCharacterReadiness(run);
+  renderWorkGraphSummary(run);
+  renderWorkSessionPreview(run);
   syncRedistillPreview();
+}
+
+function buildWorkOverviewNextStep(run) {
+  if (!run) {
+    return "先放入一本书，人物和关系才会在这里长出来。";
+  }
+  if (run.status === "running") {
+    return "先盯住这一轮的进度，等人物落定后再决定要不要继续补人或开聊。";
+  }
+  if (run.status === "failed") {
+    return "这一轮停在半途，最值得做的是继续蒸馏，把人物和关系重新接上。";
+  }
+  if (run.status === "stopped") {
+    return "这卷已经收住，下一步可以继续蒸馏，也可以先回头校对已落成的人物。";
+  }
+  if (!getRunCharacterNames(run).length) {
+    return "这一卷还没有稳定的人物包，先继续蒸馏，把角色请出来。";
+  }
+  if (!run?.artifact_index?.relation_graph?.relations_file) {
+    return "人物已经开始成形，接下来可以先校对角色，关系图谱补出来后再看全局。";
+  }
+  return "这卷已经可以继续校对人物、查看关系，或者直接进入其中一幕。";
+}
+
+function buildWorkReviewStatus(run) {
+  const weakCount = countWeakCharacters(run);
+  if (!getRunCharacterNames(run).length) {
+    return "还没有人物";
+  }
+  if (weakCount <= 0) {
+    return "关键字段已齐";
+  }
+  return `还有 ${weakCount} 位待补`;
+}
+
+function buildWorkGraphStatus(run) {
+  if (run?.artifact_index?.relation_graph?.relations_file) {
+    return "已可查看";
+  }
+  if (run?.status === "running") {
+    return "正在织就";
+  }
+  return "暂未落成";
+}
+
+function countWeakCharacters(run) {
+  return buildCharacterReadinessItems(run).filter((item) => item.weakCount > 0 || item.statusTone !== "stable").length;
+}
+
+function buildCharacterReadinessItems(run) {
+  const qualityMissing = new Set(Array.isArray(run?.quality?.excerpt_focus?.missing_characters) ? run.quality.excerpt_focus.missing_characters : []);
+  const cards = Array.isArray(run?.artifact_index?.characters) ? run.artifact_index.characters : [];
+  return cards.map((item) => {
+    const preview = item?.preview || {};
+    const missingFields = [
+      !String(preview.core_identity || "").trim() ? "核心身份" : "",
+      !String(preview.story_role || "").trim() ? "故事位置" : "",
+      !String(preview.soul_goal || "").trim() ? "灵魂目标" : "",
+      !String(preview.speech_style || "").trim() ? "说话方式" : "",
+      !String(preview.temperament_type || "").trim() ? "气质底色" : "",
+    ].filter(Boolean);
+    const weakCount = missingFields.length;
+    let statusText = "稳定";
+    let statusTone = "stable";
+    if (qualityMissing.has(item.name)) {
+      statusText = "证据偏薄";
+      statusTone = "weak";
+    } else if (weakCount >= 3) {
+      statusText = "待校对";
+      statusTone = "weak";
+    } else if (weakCount > 0) {
+      statusText = "待补全";
+      statusTone = "warning";
+    }
+    return {
+      name: item.name,
+      preview,
+      weakCount,
+      missingFields,
+      statusText,
+      statusTone,
+      updatedText: formatWeakTime(run.updated_at || ""),
+    };
+  });
+}
+
+function renderCharacterReadiness(run) {
+  const root = el("run-character-readiness");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = buildCharacterReadinessItems(run);
+  items.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "work-character-card";
+    button.innerHTML = `
+      <div class="work-character-head">
+        <div class="work-character-title">
+          <strong>${item.name}</strong>
+          <small>${item.preview.core_identity || item.preview.story_role || "人物包已经落地，可继续补细节"}</small>
+        </div>
+        <span class="work-character-status is-${item.statusTone}">${item.statusText}</span>
+      </div>
+      <p class="work-character-copy">${item.preview.speech_style || item.preview.soul_goal || "说话方式或灵魂目标还可以继续补得更稳。"}</p>
+      <div class="work-character-meta">
+        <span>${item.weakCount > 0 ? `待补关键字段 ${item.weakCount}` : "关键字段已齐"}</span>
+        <span>${item.updatedText ? `最近更新 ${item.updatedText}` : "刚刚落成"}</span>
+      </div>
+    `;
+    button.addEventListener("click", () => {
+      openCharacterOverview(item.name).catch((error) => {
+        setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
+      });
+    });
+    root.appendChild(button);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("run-character-readiness-empty", root.childElementCount === 0);
+}
+
+function renderWorkGraphSummary(run) {
+  const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
+  const hasCharacters = getRunCharacterNames(run).length > 0;
+  if (hasGraph) {
+    setText("run-graph-status-copy", "关系线已经能看，先看牵系和张力，再决定从哪种方式入场。", "");
+    return;
+  }
+  if (run?.status === "running") {
+    setText("run-graph-status-copy", "关系网还在织，但不妨先盯住人物进度；图谱落下后会自动接到这里。", "");
+    return;
+  }
+  if (hasCharacters) {
+    setText("run-graph-status-copy", "关系图暂时还没落成，但人物已经可以继续校对，也不影响你先进入聊天。", "");
+    return;
+  }
+  setText("run-graph-status-copy", "先把人物请出来，关系网才会在这里慢慢织成。", "");
+}
+
+function renderWorkSessionPreview(run) {
+  const root = el("work-session-preview");
+  if (!root) return;
+  root.innerHTML = "";
+  const novelTitle = runNovelTitle(run);
+  const sessions = (recentSessionsCache || [])
+    .filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle)
+    .slice(0, 3);
+  sessions.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "work-session-card";
+    button.innerHTML = `
+      <div class="work-session-head">
+        <div class="work-session-title">
+          <strong>${joinCharacters(item.participants || []) || "未命名会话"}</strong>
+          <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"}</small>
+        </div>
+      </div>
+      <div class="work-session-meta">
+        <span>${humanizeSessionStatus(item.status)}</span>
+        <span>${formatWeakTime(item.updated_at) || "刚刚"}</span>
+      </div>
+    `;
+    button.addEventListener("click", async () => {
+      currentRunId = item.run_id || currentRunId;
+      currentDialogueSessionId = item.session_id || "";
+      currentDialogueSession = null;
+      sessionBooting = true;
+      setComposerEnabled(false);
+      setSessionBadge("入场中");
+      renderSessionBooting(item.mode, item.participants || []);
+      updateWorkflowState();
+      const [freshRun, session] = await Promise.all([
+        apiJson(`/api/web/runs/${item.run_id}`),
+        apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
+      ]);
+      renderRun(freshRun, { preserveDialogue: true, suppressWorkflowUpdate: true });
+      await renderDialogueSession(session);
+    });
+    root.appendChild(button);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("work-session-preview-empty", root.childElementCount === 0);
+}
+
+async function openCharacterOverview(characterName) {
+  if (!currentRunId || !currentRun || !characterName) return;
+  const payload = await apiJson(`/api/web/runs/${currentRunId}/personas/${encodeURIComponent(characterName)}`);
+  currentCharacterOverview = payload;
+  characterOverviewOpen = true;
+  renderCharacterOverview(payload);
+  updateWorkflowState();
+}
+
+function renderCharacterOverview(payload) {
+  const fields = payload?.fields || {};
+  const character = String(payload?.character || "").trim() || "人物";
+  const workTitle = runNovelTitle(currentRun);
+  const role = String(fields.story_role || fields.core_identity || "这一页会慢慢把他的轮廓立起来").trim();
+  const missingKeyCount = CHARACTER_OVERVIEW_KEY_FIELDS.filter(([field]) => !String(fields[field] || "").trim()).length;
+  const healthText = missingKeyCount <= 0 ? "关键字段已齐" : missingKeyCount >= 4 ? "待校对" : "待补全";
+  const healthTone = missingKeyCount <= 0 ? "stable" : missingKeyCount >= 4 ? "weak" : "warning";
+
+  setText("character-overview-title", `${character} · 人物档案`, "");
+  setText("character-overview-work", `出自《${workTitle}》`, "");
+  setText("character-overview-name", character, "");
+  setText("character-overview-role", role, "");
+  setText("character-overview-health-badge", healthText, "");
+  const badge = el("character-overview-health-badge");
+  if (badge) {
+    badge.className = `work-character-status is-${healthTone}`;
+  }
+  setText(
+    "character-overview-health-copy",
+    missingKeyCount <= 0 ? "这个角色的关键骨架已经比较完整，可以直接带进对话。" : `当前还有 ${missingKeyCount} 处关键字段值得继续补稳。`,
+    ""
+  );
+
+  renderCharacterOverviewKeyFields(fields);
+  renderCharacterOverviewVoiceSummary(fields);
+  renderCharacterOverviewRelationSummary(fields);
+  renderCharacterOverviewAdvancedGroups(fields);
+}
+
+function renderCharacterOverviewKeyFields(fields) {
+  const root = el("character-overview-key-fields");
+  if (!root) return;
+  root.innerHTML = "";
+  CHARACTER_OVERVIEW_KEY_FIELDS.forEach(([field, label]) => {
+    const value = String(fields[field] || "").trim();
+    const card = document.createElement("article");
+    card.className = `character-overview-field-card${value ? "" : " is-missing"}`;
+    card.innerHTML = `
+      <span>${label}</span>
+      <strong>${value || "这部分还值得继续补稳"}</strong>
+    `;
+    root.appendChild(card);
+  });
+}
+
+function renderCharacterOverviewVoiceSummary(fields) {
+  const root = el("character-overview-voice-summary");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = [
+    ["说话方式", fields.speech_style || "这部分还可以继续抠细。"],
+    ["代表句", fields.typical_lines || fields.signature_phrases || "人物口气还没有完全落稳。"],
+    ["句子习惯", [fields.sentence_openers, fields.sentence_endings].filter(Boolean).join(" / ") || "起句和句尾还可以继续补。"],
+  ];
+  items.forEach(([label, value]) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-summary-card";
+    card.innerHTML = `<span>${label}</span><p>${value}</p>`;
+    root.appendChild(card);
+  });
+}
+
+function renderCharacterOverviewRelationSummary(fields) {
+  const root = el("character-overview-relation-summary");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = [
+    ["重要牵系", fields.key_bonds || "这部分还没有完全落下来。"],
+    ["气质底色", fields.temperament_type || "气质底色还可以继续补稳。"],
+    ["世界观", fields.worldview || "世界观还没有完全成形。"],
+  ];
+  items.forEach(([label, value]) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-summary-card";
+    card.innerHTML = `<span>${label}</span><p>${value}</p>`;
+    root.appendChild(card);
+  });
+}
+
+function renderCharacterOverviewAdvancedGroups(fields) {
+  const root = el("character-overview-advanced-groups");
+  if (!root) return;
+  root.innerHTML = "";
+  CHARACTER_OVERVIEW_ADVANCED_GROUPS.forEach(([title, fieldNames]) => {
+    const values = fieldNames
+      .map((field) => {
+        const value = String(fields[field] || "").trim();
+        return value ? `${CHARACTER_OVERVIEW_FIELD_LABELS[field] || field}：${value}` : "";
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+    const card = document.createElement("article");
+    card.className = "character-overview-advanced-group";
+    card.innerHTML = `
+      <strong>${title}</strong>
+      <p>${values.join("；") || "这一组还可以继续补更多细节，不必一次写满。"}</p>
+    `;
+    root.appendChild(card);
+  });
+}
+
+async function openCharacterOverviewSessionMode(mode) {
+  const character = String(currentCharacterOverview?.character || "").trim();
+  if (!character || !currentRun) return;
+  await openNewDialogueSession();
+  const characters = getRunCharacterNames(currentRun);
+  setValue("dialogue-participants", joinCharacters(characters));
+  setValue("dialogue-mode", mode);
+  if (mode === "act") {
+    setValue("dialogue-controlled", character);
+  }
+  syncModeFields();
+  updateCharacterPillState();
+}
+
+function openCurrentCharacterProfileFile() {
+  const character = String(currentCharacterOverview?.character || "").trim();
+  if (!character || !currentRun?.file_urls) return;
+  const url = currentRun.file_urls[`character_${character}`];
+  if (url) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 }
 
 function renderQualitySnapshot(run) {
@@ -115,6 +495,7 @@ function renderQualitySnapshot(run) {
     relationChunked ||
     standardChunkingVisible;
   toggle("quality-section", shouldShow);
+  toggle("quality-empty-copy", !shouldShow);
 }
 
 function renderQualityPills(rootId, values, emptyId) {
@@ -181,6 +562,8 @@ function renderRun(run, options = {}) {
   currentRun = run;
   newRunFlowOpen = false;
   chatModePickerOpen = false;
+  characterOverviewOpen = false;
+  currentCharacterOverview = null;
   redistillPanelOpen = false;
   sourceHistoryExpanded = false;
   runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";

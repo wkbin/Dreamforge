@@ -70,13 +70,15 @@ function updateWorkflowState() {
   const showModel = !configured;
   const showBookshelf = configured && !newRunFlowOpen && !hasRun && !hasSession && !sessionBooting;
   const showDistill = configured && newRunFlowOpen && !hasRun && !hasSession && !sessionBooting;
-  const showProgress = configured && hasRun && !chatModePickerOpen && !hasSession && !sessionBooting;
+  const showCharacterOverview = configured && hasRun && characterOverviewOpen && !hasSession && !sessionBooting;
+  const showProgress = configured && hasRun && !chatModePickerOpen && !showCharacterOverview && !hasSession && !sessionBooting;
   const showChatSetup = configured && hasCharacters && chatModePickerOpen && !hasSession && !sessionBooting;
 
   toggle("step-model", showModel);
   toggle("bookshelf-section", showBookshelf);
   toggle("step-distill", showDistill);
   toggle("step-progress", showProgress);
+  toggle("step-character-overview", showCharacterOverview);
   toggle("redistill-panel", showProgress && redistillPanelOpen);
   toggle("step-chat-setup", showChatSetup);
   toggle("turn-stage", configured && hasSession && !sessionBooting);
@@ -86,7 +88,7 @@ function updateWorkflowState() {
 
   const workflowStrip = el("workflow-strip");
   if (workflowStrip) {
-    const visibleCount = ["bookshelf-section", "step-model", "step-distill", "step-progress", "step-chat-setup"].filter(
+    const visibleCount = ["bookshelf-section", "step-model", "step-distill", "step-progress", "step-character-overview", "step-chat-setup"].filter(
       (id) => !el(id)?.classList.contains("hidden")
     ).length;
     const showSingleStage = visibleCount <= 1;
@@ -125,6 +127,7 @@ async function openNewDialogueSession() {
 
   resetDialogueView();
   chatModePickerOpen = true;
+  characterOverviewOpen = false;
   maybePrefillChatSetup(run);
   updateWorkflowState();
   el("dialogue-participants")?.focus();
@@ -144,6 +147,8 @@ function resetDialogueView() {
   currentDialogueSession = null;
   sessionBooting = false;
   chatModePickerOpen = false;
+  characterOverviewOpen = false;
+  currentCharacterOverview = null;
   setSessionBadge("未启幕");
   if (el("dialogue-transcript")) el("dialogue-transcript").innerHTML = "";
   if (el("dialogue-message")) el("dialogue-message").value = "";

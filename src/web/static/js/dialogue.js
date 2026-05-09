@@ -179,6 +179,10 @@ async function loadRecentSessions() {
     seen.add(key);
     deduped.push(item);
   }
+  recentSessionsCache = deduped;
+  if (currentRun && typeof renderWorkSessionPreview === "function") {
+    renderWorkSessionPreview(currentRun);
+  }
 
   root.innerHTML = "";
   if (!deduped.length) {
