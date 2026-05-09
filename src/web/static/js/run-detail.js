@@ -934,8 +934,6 @@ function buildCharacterOverviewFieldTags(field, value, evidenceSnapshot) {
   }
   if (!text) {
     tags.push({ label: "待补", tone: "weak" });
-  } else if (isCharacterOverviewFieldWeak(field, text)) {
-    tags.push({ label: "需复核", tone: "warning" });
   } else if (!recentAutofill) {
     tags.push({ label: currentCharacterOverview?.editable_profile_path ? "校对稿" : "蒸馏稿", tone: "neutral" });
   }
