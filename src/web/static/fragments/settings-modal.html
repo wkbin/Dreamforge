@@ -335,6 +335,232 @@
   </div>
 </div>
 
+<div id="self-card-modal" class="modal hidden">
+  <div class="modal-backdrop" data-close-modal="true" data-modal-id="self-card-modal"></div>
+  <div class="modal-card inspector-modal-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">角色卡</p>
+        <h3>先替自己捏一个入场人设</h3>
+        <p class="panel-copy">这些设定会直接带进“以自己入场”的聊天里。关键字段必填，剩下的可慢慢细调。</p>
+      </div>
+      <button id="close-self-card-button" type="button" class="soft-button">先放一放</button>
+    </div>
+    <div class="modal-scroll">
+      <form id="self-card-form" class="stack-form">
+        <input id="self-card-id" type="hidden" value="" />
+
+        <div class="card-actions">
+          <button id="generate-self-card-button" type="button" class="soft-button">AI随机生成</button>
+        </div>
+
+        <section class="review-group">
+          <div class="review-group-head">
+            <strong>入场信息</strong>
+            <p>先决定他们如何称呼你、你以什么身份走进场景，以及你想要的互动气氛。</p>
+          </div>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>角色名</span>
+              <input id="self-card-display-name" type="text" />
+            </label>
+            <label class="field-card">
+              <span>入场身份</span>
+              <input id="self-card-scene-identity" type="text" placeholder="例如：借住府中的远亲；误入夜宴的来客" />
+            </label>
+          </div>
+          <label class="field-card">
+            <span>互动气氛</span>
+            <input id="self-card-interaction-style" type="text" placeholder="例如：初见试探；夜谈；久别重逢；局中搅局" />
+          </label>
+        </section>
+
+        <section class="review-group">
+          <div class="review-group-head">
+            <strong>关键字段</strong>
+            <p>这部分最直接影响你入场后的说话方式和人物存在感。</p>
+          </div>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>核心身份</span>
+              <input id="self-card-core-identity" type="text" />
+            </label>
+            <label class="field-card">
+              <span>故事位置</span>
+              <input id="self-card-story-role" type="text" />
+            </label>
+          </div>
+          <div class="mini-grid">
+            <label class="field-card">
+              <span>身份锚点</span>
+              <input id="self-card-identity-anchor" type="text" />
+            </label>
+            <label class="field-card">
+              <span>气质底色</span>
+              <input id="self-card-temperament-type" type="text" />
+            </label>
+          </div>
+          <label class="field-card">
+            <span>灵魂目标</span>
+            <textarea id="self-card-soul-goal" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>核心特质</span>
+            <textarea id="self-card-core-traits" rows="2" placeholder="用；分开"></textarea>
+          </label>
+          <label class="field-card">
+            <span>重要牵系</span>
+            <textarea id="self-card-key-bonds" rows="2" placeholder="用；分开"></textarea>
+          </label>
+          <label class="field-card">
+            <span>说话方式</span>
+            <textarea id="self-card-speech-style" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>世界观</span>
+            <textarea id="self-card-worldview" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>信念支点</span>
+            <textarea id="self-card-belief-anchor" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>道德底线</span>
+            <textarea id="self-card-moral-bottom-line" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>失控阈值</span>
+            <textarea id="self-card-restraint-threshold" rows="2"></textarea>
+          </label>
+          <label class="field-card">
+            <span>应激反应</span>
+            <textarea id="self-card-stress-response" rows="2"></textarea>
+          </label>
+        </section>
+
+        <details class="review-advanced-shell">
+          <summary class="review-advanced-trigger">
+            <span>继续细调完整角色卡</span>
+            <small>打开后可把更多心理、对白和情绪细节一起写满</small>
+          </summary>
+
+          <section class="review-group review-advanced-panel">
+            <div class="review-group-head">
+              <strong>内核细调</strong>
+              <p>补齐更细的欲望、矛盾、判断方式和他人观感。</p>
+            </div>
+            <label class="field-card">
+              <span>隐秘渴望</span>
+              <textarea id="self-card-hidden-desire" rows="2"></textarea>
+            </label>
+            <div class="mini-grid">
+              <label class="field-card">
+                <span>内在冲突</span>
+                <textarea id="self-card-inner-conflict" rows="2"></textarea>
+              </label>
+              <label class="field-card">
+                <span>自我认知</span>
+                <textarea id="self-card-self-cognition" rows="2"></textarea>
+              </label>
+            </div>
+            <label class="field-card">
+              <span>私下的一面</span>
+              <textarea id="self-card-private-self" rows="2"></textarea>
+            </label>
+            <label class="field-card">
+              <span>思考方式</span>
+              <textarea id="self-card-thinking-style" rows="2"></textarea>
+            </label>
+            <label class="field-card">
+              <span>社交模式</span>
+              <textarea id="self-card-social-mode" rows="2"></textarea>
+            </label>
+            <label class="field-card">
+              <span>决策规则</span>
+              <textarea id="self-card-decision-rules" rows="2" placeholder="用；分开"></textarea>
+            </label>
+            <label class="field-card">
+              <span>回报逻辑</span>
+              <textarea id="self-card-reward-logic" rows="2"></textarea>
+            </label>
+            <label class="field-card">
+              <span>他人观感</span>
+              <textarea id="self-card-others-impression" rows="2"></textarea>
+            </label>
+          </section>
+
+          <section class="review-group review-advanced-panel">
+            <div class="review-group-head">
+              <strong>对白细调</strong>
+              <p>这一层更适合手修，也能让“以自己入场”更像真的有声音。</p>
+            </div>
+            <div class="mini-grid">
+              <label class="field-card">
+                <span>语句节奏</span>
+                <input id="self-card-cadence" type="text" />
+              </label>
+              <label class="field-card">
+                <span>句尾习惯</span>
+                <input id="self-card-sentence-endings" type="text" placeholder="用；分开" />
+              </label>
+            </div>
+            <div class="mini-grid">
+              <label class="field-card">
+                <span>起句习惯</span>
+                <input id="self-card-sentence-openers" type="text" placeholder="用；分开" />
+              </label>
+              <label class="field-card">
+                <span>口头禅</span>
+                <input id="self-card-signature-phrases" type="text" placeholder="用；分开" />
+              </label>
+            </div>
+            <label class="field-card">
+              <span>代表句</span>
+              <textarea id="self-card-typical-lines" rows="3" placeholder="用；分开"></textarea>
+            </label>
+          </section>
+
+          <section class="review-group review-advanced-panel">
+            <div class="review-group-head">
+              <strong>情绪细调</strong>
+              <p>这部分决定你在故事里的情绪展开方式。</p>
+            </div>
+            <label class="field-card">
+              <span>不会做的事</span>
+              <textarea id="self-card-forbidden-behaviors" rows="2" placeholder="用；分开"></textarea>
+            </label>
+            <label class="field-card">
+              <span>情绪底模</span>
+              <textarea id="self-card-emotion-model" rows="2"></textarea>
+            </label>
+            <div class="mini-grid">
+              <label class="field-card">
+                <span>发怒方式</span>
+                <textarea id="self-card-anger-style" rows="2"></textarea>
+              </label>
+              <label class="field-card">
+                <span>开心方式</span>
+                <textarea id="self-card-joy-style" rows="2"></textarea>
+              </label>
+            </div>
+            <label class="field-card">
+              <span>委屈方式</span>
+              <textarea id="self-card-grievance-style" rows="2"></textarea>
+            </label>
+          </section>
+        </details>
+
+        <div class="card-actions">
+          <button id="delete-self-card-button" type="button" class="soft-button hidden">删除这张卡</button>
+          <button id="save-self-card-button" type="submit" class="primary-button">保存角色卡</button>
+        </div>
+      </form>
+
+      <p id="self-card-status" class="card-note"></p>
+    </div>
+  </div>
+</div>
+
 <div id="relation-details-modal" class="modal hidden">
   <div class="modal-backdrop" data-close-modal="true" data-modal-id="relation-details-modal"></div>
   <div class="modal-card inspector-modal-card">

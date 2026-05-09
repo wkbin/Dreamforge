@@ -1,5 +1,5 @@
 from .deps import get_run_service
-from .routes import ROUTERS, dialogue_router, runs_router, settings_router
+from .routes import ROUTERS, dialogue_router, runs_router, self_cards_router, settings_router
 from .schemas import (
     CreateDialogueSessionRequest,
     CreateRunRequest,
@@ -11,6 +11,7 @@ from .schemas import (
     RestartRunRequest,
     SaveModelSettingsRequest,
     SavePersonaReviewRequest,
+    SaveSelfCardRequest,
 )
 
 __all__ = [
@@ -26,7 +27,9 @@ __all__ = [
     "PrepareDialogueTurnRequest",
     "RestartRunRequest",
     "runs_router",
+    "self_cards_router",
     "SaveModelSettingsRequest",
     "SavePersonaReviewRequest",
+    "SaveSelfCardRequest",
     "settings_router",
 ]

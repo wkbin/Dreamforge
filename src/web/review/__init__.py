@@ -17,6 +17,20 @@ from .persona_completion import (
     suggest_persona_field_payload,
 )
 from .persona_service import get_persona_review_payload, save_persona_review_payload
+from .self_cards import (
+    SELF_CARD_EXTRA_FIELDS,
+    SELF_CARD_FIELDS,
+    SELF_CARD_FIELD_LABELS,
+    SELF_CARD_REQUIRED_FIELDS,
+    blank_self_card_fields,
+    build_random_self_card_messages,
+    delete_self_card_payload,
+    list_self_cards_payload,
+    load_self_card_payload,
+    normalize_self_card_fields,
+    parse_random_self_card_response,
+    save_self_card_payload,
+)
 from .profile_evidence import (
     finalize_generated_profile_source,
     looks_like_dialogue_sentence,
@@ -72,6 +86,18 @@ __all__ = [
     "read_persona_review_fields",
     "resolve_persona_review_source",
     "save_persona_review_payload",
+    "SELF_CARD_EXTRA_FIELDS",
+    "SELF_CARD_FIELDS",
+    "SELF_CARD_FIELD_LABELS",
+    "SELF_CARD_REQUIRED_FIELDS",
+    "blank_self_card_fields",
+    "build_random_self_card_messages",
+    "delete_self_card_payload",
+    "list_self_cards_payload",
+    "load_self_card_payload",
+    "normalize_self_card_fields",
+    "parse_random_self_card_response",
+    "save_self_card_payload",
     "split_profile_list_value",
     "suggest_persona_field_payload",
 ]

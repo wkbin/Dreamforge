@@ -7,6 +7,7 @@ from .review_helpers import ReviewHelpersMixin
 from .run_preparation import RunPreparationMixin
 from .runtime_support import RuntimeSupportMixin
 from .runs import RunServiceMixin
+from .self_cards import SelfCardServiceMixin
 from .system_update import UpdateServiceMixin
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "RunPreparationMixin",
     "RuntimeSupportMixin",
     "RunServiceMixin",
+    "SelfCardServiceMixin",
     "UpdateServiceMixin",
 ]

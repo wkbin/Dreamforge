@@ -65,6 +65,7 @@ class DialogueService:
             "participants": selected,
             "controlled_character": controlled_character if mode == "act" else "",
             "self_insert": dict(self_profile or {}) if mode == "insert" else {},
+            "self_card_id": str((self_profile or {}).get("self_card_id", "")).strip() if mode == "insert" else "",
             "history": [],
             "pending_turn": {},
             "created_at": _utc_now(),
@@ -315,7 +316,7 @@ class DialogueService:
             card = session.get("self_insert", {})
             return (
                 f"Treat the user message as spoken by {card.get('display_name', '你')} "
-                f"who enters the scene as {card.get('scene_identity', '访客')}."
+                f"who enters the scene as {card.get('scene_identity', card.get('core_identity', '访客'))}."
             )
         return "Treat the user message as a scene steering hint. Characters reply in-world."
 
@@ -369,12 +370,8 @@ class DialogueService:
                 "mode": "insert",
                 "speaker": str(card.get("display_name", "")).strip() or "你",
                 "source": "self_insert_profile",
-                "must_follow": "Write as the self-insert user, keeping their chosen identity and vibe consistent.",
-                "profile": {
-                    "display_name": str(card.get("display_name", "")).strip(),
-                    "scene_identity": str(card.get("scene_identity", "")).strip(),
-                    "interaction_style": str(card.get("interaction_style", "")).strip(),
-                },
+                "must_follow": "Write as the self-insert user, keeping their full role card, identity, motives, and speaking flavor consistent.",
+                "profile": dict(card),
             }
         return {
             "mode": "observe",
@@ -485,6 +482,7 @@ class DialogueService:
             "mode_display": self._mode_display(mode),
             "participants": list(session.get("participants", [])),
             "controlled_character": str(session.get("controlled_character", "")).strip(),
+            "self_card_id": str(session.get("self_card_id", "")).strip(),
             "self_insert": dict(session.get("self_insert", {})),
         }
         return card

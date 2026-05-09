@@ -28,6 +28,9 @@ var sourceHistoryExpanded = false;
 var currentPersonaReview = null;
 var currentPersonaAutofill = null;
 var currentRelationDetails = null;
+var selfCards = [];
+var currentSelfCard = null;
+var selectedSelfCardId = "";
 var samplingSuggestion = null;
 const DISTILL_CHUNK_MAX_CHARS = 9000;
 const DISTILL_CHUNK_MAX_SENTENCES = 70;
@@ -748,6 +751,16 @@ function openRelationDetailsModal() {
 
 function closeRelationDetailsModal() {
   toggle("relation-details-modal", false);
+  syncModalScrollLock();
+}
+
+function openSelfCardModal() {
+  toggle("self-card-modal", true);
+  syncModalScrollLock();
+}
+
+function closeSelfCardModal() {
+  toggle("self-card-modal", false);
   syncModalScrollLock();
 }
 

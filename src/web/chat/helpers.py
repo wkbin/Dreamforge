@@ -17,7 +17,7 @@ def build_dialogue_opening_message(session: dict[str, Any]) -> str:
     if mode == "insert":
         self_profile = dict(session.get("self_insert", {}) or {})
         display_name = str(self_profile.get("display_name", "")).strip() or "我"
-        scene_identity = str(self_profile.get("scene_identity", "")).strip()
+        scene_identity = str(self_profile.get("scene_identity", "")).strip() or str(self_profile.get("core_identity", "")).strip()
         identity_suffix = f"，身份是{scene_identity}" if scene_identity else ""
         return (
             f"请先为 {display_name}{identity_suffix} 与 {cast} 生成一个自然开场。"
@@ -104,7 +104,9 @@ def build_dialogue_suggestion_llm_messages(
         str(instructions.get("response_style", "")).strip(),
         str(host_action.get("output_rule", "")).strip(),
         "必须优先参考 user_persona：这代表当前应该由“你”如何说话。",
-        "如果 mode=insert，就按 self-insert 的身份、称呼和 interaction_style 来说。",
+        "如果 mode=insert，就按 self-insert 的完整角色卡来写，不只参考上下文和别人刚才的回复。",
+        "优先服从 self-insert 的核心身份、故事位置、灵魂目标、气质底色、世界观、信念支点、说话方式、应激反应和 interaction_style。",
+        "如果上下文允许多种接法，优先选更符合 user_persona 的那一种，而不是只做一个泛用接话。",
         "如果 mode=act，就按 controlled character 的 persona profile、speech_style、temperament 和典型说话习惯来写。",
         "如果 mode=observe，就把这句话写成推动剧情的场景提示：让局势往前走，而不是复述、总结或劝说。",
         "只输出一句最终可发送的成品台词，不要解释上下文，不要总结历史，不要提供建议理由，不要写“作为/当前场景/我们可以/你可以/建议/回复：”这类分析话术。",

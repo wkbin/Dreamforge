@@ -578,6 +578,86 @@
   line-height: 1.55;
 }
 
+.custom-select {
+  position: relative;
+}
+
+.custom-select-trigger {
+  width: 100%;
+  justify-content: space-between;
+  min-height: 2.7rem;
+  padding: 0.72rem 0.9rem;
+  border-radius: 1.02rem;
+  border: 1px solid rgba(170, 146, 127, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(251, 246, 240, 0.82));
+  color: var(--ink-soft);
+  text-align: left;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 6px 16px rgba(126, 92, 70, 0.03);
+}
+
+.custom-select-trigger::after {
+  content: "▾";
+  color: var(--ink-faint);
+  font-size: 0.72rem;
+}
+
+.custom-select-trigger:disabled {
+  cursor: default;
+  color: var(--ink-faint);
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.custom-select-menu {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  right: 0;
+  z-index: 8;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 0.45rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(170, 146, 127, 0.14);
+  background: rgba(255, 252, 248, 0.98);
+  box-shadow: 0 18px 38px rgba(126, 92, 70, 0.12);
+}
+
+.custom-select-option {
+  width: 100%;
+  min-height: 2.3rem;
+  padding: 0.62rem 0.72rem;
+  border-radius: 0.82rem;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--ink);
+  text-align: left;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.custom-select-option:hover,
+.custom-select-option.active {
+  border-color: rgba(184, 132, 113, 0.2);
+  background: rgba(255, 245, 239, 0.95);
+}
+
+.custom-select.open .custom-select-trigger {
+  border-color: rgba(184, 132, 113, 0.24);
+  background: rgba(255, 252, 248, 0.94);
+}
+
+.insert-self-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
 .upload-card strong {
   font-size: 1rem;
   font-weight: 600;
@@ -793,6 +873,13 @@ textarea::placeholder {
   border-top: 1px solid rgba(170, 146, 127, 0.12);
 }
 
+#self-card-preview-shell .bookshelf-links span {
+  background: rgba(255, 249, 244, 0.92);
+  color: var(--accent-strong);
+  border-color: rgba(184, 132, 113, 0.16);
+  font-size: 0.72rem;
+}
+
 .link-row a {
   min-height: 36px;
   padding: 0 14px;
@@ -816,11 +903,21 @@ textarea::placeholder {
 }
 
 @media (max-width: 900px) {
+  .insert-self-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .quality-grid {
     grid-template-columns: 1fr;
   }
 
   .detail-section-timeline .timeline {
     max-height: 13.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .insert-self-grid {
+    grid-template-columns: 1fr;
   }
 }

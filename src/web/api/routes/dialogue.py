@@ -37,6 +37,7 @@ def create_dialogue_session(
             mode=payload.mode,
             participants=payload.participants,
             controlled_character=payload.controlled_character,
+            self_card_id=payload.self_card_id,
             self_profile=payload.self_profile,
         )
     except FileNotFoundError as exc:

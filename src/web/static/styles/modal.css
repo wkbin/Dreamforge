@@ -371,12 +371,14 @@
 
 #settings-modal .panel-head,
 #persona-review-modal .panel-head,
+#self-card-modal .panel-head,
 #relation-details-modal .panel-head {
   gap: 0.7rem;
 }
 
 #settings-modal .panel-copy,
 #persona-review-modal .panel-copy,
+#self-card-modal .panel-copy,
 #relation-details-modal .panel-copy,
 #app-update-modal .panel-copy {
   font-size: 0.76rem;
@@ -384,18 +386,21 @@
 }
 
 #settings-modal .field-card,
-#persona-review-modal .field-card {
+#persona-review-modal .field-card,
+#self-card-modal .field-card {
   gap: 0.5rem;
   padding: 0.82rem 0.88rem 0.8rem;
 }
 
 #settings-modal .field-card span,
-#persona-review-modal .field-card span {
+#persona-review-modal .field-card span,
+#self-card-modal .field-card span {
   font-size: 11px;
 }
 
 #settings-modal .field-card small,
-#persona-review-modal .field-card small {
+#persona-review-modal .field-card small,
+#self-card-modal .field-card small {
   font-size: 0.66rem;
   line-height: 1.45;
 }
@@ -404,26 +409,32 @@
   font-size: 0.78rem;
 }
 
-#persona-review-modal .review-group-head p {
+#persona-review-modal .review-group-head p,
+#self-card-modal .review-group-head strong,
+#self-card-modal .review-group-head p {
   font-size: 0.68rem;
 }
 
 #settings-modal input,
 #settings-modal textarea,
 #persona-review-modal input,
-#persona-review-modal textarea {
+#persona-review-modal textarea,
+#self-card-modal input,
+#self-card-modal textarea {
   font-size: 0.84rem;
   line-height: 1.55;
 }
 
 #settings-modal .mini-grid,
-#persona-review-modal .mini-grid {
+#persona-review-modal .mini-grid,
+#self-card-modal .mini-grid {
   gap: 0.72rem;
 }
 
 #settings-modal .modal-actions,
 #settings-modal .card-actions,
-#persona-review-modal .card-actions {
+#persona-review-modal .card-actions,
+#self-card-modal .card-actions {
   gap: 0.55rem;
 }
 
@@ -431,6 +442,8 @@
 #settings-modal .primary-button,
 #persona-review-modal .soft-button,
 #persona-review-modal .primary-button,
+#self-card-modal .soft-button,
+#self-card-modal .primary-button,
 #relation-details-modal .soft-button {
   min-height: 2rem;
   padding: 0 0.78rem;
@@ -439,6 +452,7 @@
 
 #settings-modal .card-note,
 #persona-review-modal .card-note,
+#self-card-modal .card-note,
 #relation-details-modal .card-note,
 #app-update-modal .card-note {
   font-size: 0.74rem;

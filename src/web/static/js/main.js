@@ -7,13 +7,16 @@ function syncModeFields() {
   const mode = valueOf("dialogue-mode", "observe");
   syncChoiceGroup("dialogue-mode-options", "dialogue-mode");
   if (el("dialogue-controlled")) el("dialogue-controlled").disabled = mode !== "act";
+  if (el("dialogue-self-card")) el("dialogue-self-card").disabled = mode !== "insert";
   if (el("dialogue-self-name")) el("dialogue-self-name").disabled = mode !== "insert";
   if (el("dialogue-self-identity")) el("dialogue-self-identity").disabled = mode !== "insert";
   if (el("dialogue-self-style")) el("dialogue-self-style").disabled = mode !== "insert";
   toggle("controlled-field", mode === "act");
-  toggle("self-name-field", mode === "insert");
-  toggle("self-identity-field", mode === "insert");
-  toggle("self-style-field", mode === "insert");
+  toggle("self-card-field", mode === "insert");
+  toggle("insert-self-fields", mode === "insert");
+  toggle("self-card-preview-shell", mode === "insert");
+  syncCustomSelect("dialogue-self-card");
+  renderSelectedSelfCardPreview();
 }
 
 async function handleModelSettingsSubmit(event) {
@@ -218,11 +221,16 @@ async function handleDialogueSessionSubmit(event) {
             mode,
             participants,
             controlled_character: controlledCharacter,
-            self_profile: {
-              display_name: trimmedValue("dialogue-self-name", ""),
-              scene_identity: trimmedValue("dialogue-self-identity", ""),
-              interaction_style: trimmedValue("dialogue-self-style", ""),
-            },
+            self_card_id: mode === "insert" ? selectedSelfCardId : "",
+            self_profile:
+              mode === "insert"
+                ? {
+                    ...(currentSelfCard?.fields || {}),
+                    display_name: trimmedValue("dialogue-self-name", ""),
+                    scene_identity: trimmedValue("dialogue-self-identity", ""),
+                    interaction_style: trimmedValue("dialogue-self-style", ""),
+                  }
+                : {},
           }),
         },
         "进入聊天失败。"
@@ -234,6 +242,322 @@ async function handleDialogueSessionSubmit(event) {
     setComposerEnabled(Boolean(currentDialogueSessionId));
     updateWorkflowState();
     setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
+  }
+}
+
+const SELF_CARD_FIELD_BINDINGS = [
+  ["display_name", "self-card-display-name"],
+  ["scene_identity", "self-card-scene-identity"],
+  ["interaction_style", "self-card-interaction-style"],
+  ["core_identity", "self-card-core-identity"],
+  ["story_role", "self-card-story-role"],
+  ["identity_anchor", "self-card-identity-anchor"],
+  ["temperament_type", "self-card-temperament-type"],
+  ["soul_goal", "self-card-soul-goal"],
+  ["hidden_desire", "self-card-hidden-desire"],
+  ["inner_conflict", "self-card-inner-conflict"],
+  ["self_cognition", "self-card-self-cognition"],
+  ["private_self", "self-card-private-self"],
+  ["speech_style", "self-card-speech-style"],
+  ["cadence", "self-card-cadence"],
+  ["typical_lines", "self-card-typical-lines"],
+  ["signature_phrases", "self-card-signature-phrases"],
+  ["sentence_openers", "self-card-sentence-openers"],
+  ["sentence_endings", "self-card-sentence-endings"],
+  ["social_mode", "self-card-social-mode"],
+  ["thinking_style", "self-card-thinking-style"],
+  ["decision_rules", "self-card-decision-rules"],
+  ["reward_logic", "self-card-reward-logic"],
+  ["worldview", "self-card-worldview"],
+  ["belief_anchor", "self-card-belief-anchor"],
+  ["moral_bottom_line", "self-card-moral-bottom-line"],
+  ["restraint_threshold", "self-card-restraint-threshold"],
+  ["core_traits", "self-card-core-traits"],
+  ["key_bonds", "self-card-key-bonds"],
+  ["forbidden_behaviors", "self-card-forbidden-behaviors"],
+  ["stress_response", "self-card-stress-response"],
+  ["emotion_model", "self-card-emotion-model"],
+  ["anger_style", "self-card-anger-style"],
+  ["joy_style", "self-card-joy-style"],
+  ["grievance_style", "self-card-grievance-style"],
+  ["others_impression", "self-card-others-impression"],
+];
+
+const SELF_CARD_REQUIRED_FIELDS = [
+  "display_name",
+  "core_identity",
+  "story_role",
+  "identity_anchor",
+  "temperament_type",
+  "soul_goal",
+  "core_traits",
+  "key_bonds",
+  "speech_style",
+  "worldview",
+  "belief_anchor",
+  "moral_bottom_line",
+  "restraint_threshold",
+  "stress_response",
+];
+
+function selfCardFieldId(field) {
+  const item = SELF_CARD_FIELD_BINDINGS.find(([key]) => key === field);
+  return item ? item[1] : "";
+}
+
+function collectSelfCardPayload() {
+  return Object.fromEntries(SELF_CARD_FIELD_BINDINGS.map(([field, id]) => [field, trimmedValue(id, "")]));
+}
+
+function validateSelfCardPayload(fields) {
+  const missing = SELF_CARD_REQUIRED_FIELDS.filter((field) => !String(fields?.[field] || "").trim());
+  if (!missing.length) return "";
+  const labels = missing.map((field) => {
+    const span = el(selfCardFieldId(field))?.closest(".field-card")?.querySelector("span");
+    return span?.textContent?.trim() || field;
+  });
+  return `请先补全这些必填项：${labels.join("、")}`;
+}
+
+function fillSelfCardFields(fields = {}) {
+  SELF_CARD_FIELD_BINDINGS.forEach(([field, id]) => {
+    setValue(id, fields?.[field] || "");
+  });
+}
+
+function updateSelfCardDeleteButton() {
+  const hasCard = Boolean(trimmedValue("self-card-id", ""));
+  toggle("delete-self-card-button", hasCard);
+}
+
+function startSelfCardDraft(fields = {}) {
+  currentSelfCard = { card_id: "", fields: { ...fields } };
+  setValue("self-card-id", "");
+  fillSelfCardFields(fields);
+  updateSelfCardDeleteButton();
+}
+
+function openNewSelfCard() {
+  startSelfCardDraft({
+    display_name: trimmedValue("dialogue-self-name", "") || "你",
+    scene_identity: trimmedValue("dialogue-self-identity", ""),
+    interaction_style: trimmedValue("dialogue-self-style", ""),
+  });
+  setStatus("self-card-status", "你可以手写，也可以让 AI 先随机捏一张。");
+  openSelfCardModal();
+}
+
+async function openExistingSelfCard(cardId) {
+  if (!cardId) {
+    openNewSelfCard();
+    return;
+  }
+  setStatus("self-card-status", "正在载入角色卡...");
+  try {
+    const payload = await apiJson(`/api/web/self-cards/${encodeURIComponent(cardId)}`, {}, "角色卡载入失败。");
+    currentSelfCard = payload;
+    setValue("self-card-id", payload.card_id || "");
+    fillSelfCardFields(payload.fields || {});
+    updateSelfCardDeleteButton();
+    setStatus("self-card-status", "");
+    openSelfCardModal();
+  } catch (error) {
+    setStatus("dialogue-session-status", error.message || "角色卡载入失败。");
+  }
+}
+
+function renderSelfCardOptions(items = selfCards) {
+  const select = el("dialogue-self-card");
+  if (!(select instanceof HTMLSelectElement)) return;
+  const trigger = el("dialogue-self-card-trigger");
+  const hint = el("dialogue-self-card-hint");
+  const previous = select.value || selectedSelfCardId || "";
+  select.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = items.length ? "先挑一张角色卡" : "还没有角色卡，先新建一张";
+  select.appendChild(blank);
+  (items || []).forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.card_id || "";
+    const displayName = item?.preview?.display_name || item?.fields?.display_name || item.card_id || "未命名角色卡";
+    const sceneIdentity = item?.preview?.scene_identity || item?.fields?.scene_identity || "";
+    option.textContent = sceneIdentity ? `${displayName} · ${sceneIdentity}` : displayName;
+    select.appendChild(option);
+  });
+  if ((items || []).some((item) => item.card_id === previous)) {
+    select.value = previous;
+  } else {
+    select.value = "";
+  }
+  if (trigger instanceof HTMLButtonElement) {
+    trigger.disabled = items.length === 0;
+  }
+  if (hint) {
+    hint.textContent = items.length
+      ? "不选也能手动写，但选卡后会把完整人设一起带进场景。"
+      : "你还没有角色卡。先新建一张，后面就能直接选卡入场。";
+  }
+  selectedSelfCardId = select.value;
+  syncCustomSelect("dialogue-self-card");
+  syncSelectedSelfCardFromSelect();
+}
+
+async function loadSelfCards() {
+  const payload = await apiJson("/api/web/self-cards", {}, "角色卡列表载入失败。");
+  selfCards = Array.isArray(payload?.items) ? payload.items : [];
+  renderSelfCardOptions(selfCards);
+  return selfCards;
+}
+
+function syncSelectedSelfCardFromSelect() {
+  const select = el("dialogue-self-card");
+  const nextId = select?.value || "";
+  selectedSelfCardId = nextId;
+  currentSelfCard = selfCards.find((item) => item.card_id === nextId) || null;
+  if (currentSelfCard?.fields) {
+    if (el("dialogue-self-name")) setValue("dialogue-self-name", currentSelfCard.fields.display_name || "");
+    if (el("dialogue-self-identity")) {
+      setValue("dialogue-self-identity", currentSelfCard.fields.scene_identity || currentSelfCard.fields.core_identity || "");
+    }
+    if (el("dialogue-self-style")) setValue("dialogue-self-style", currentSelfCard.fields.interaction_style || "");
+  }
+  renderSelectedSelfCardPreview();
+}
+
+function renderSelectedSelfCardPreview() {
+  const card = currentSelfCard;
+  const hasCards = selfCards.length > 0;
+  const title = card?.preview?.display_name || card?.fields?.display_name || "";
+  const copy =
+    card?.preview?.scene_identity || card?.fields?.scene_identity || card?.fields?.core_identity || "";
+  setText("self-card-preview-title", title || (hasCards ? "还没有选中角色卡" : "你还没有角色卡"), "");
+  setText(
+    "self-card-preview-copy",
+    card
+      ? copy || "这张卡已经接上，会把完整人设带进这场聊天。"
+      : hasCards
+        ? "选一张卡后，你的身份、气质和说话方式都会一起带进这场聊天。"
+        : "先新建一张角色卡，后面就可以直接把完整人设带进场景。",
+    ""
+  );
+  const root = el("self-card-preview-pills");
+  if (!root) return;
+  root.innerHTML = "";
+  const preview = card?.preview || {};
+  [preview.core_identity, preview.story_role, preview.temperament_type, preview.speech_style, preview.soul_goal]
+    .filter(Boolean)
+    .slice(0, 5)
+    .forEach((value) => {
+      const chip = document.createElement("span");
+      chip.textContent = value;
+      root.appendChild(chip);
+    });
+  const editButton = el("edit-self-card-button");
+  if (editButton) {
+    editButton.disabled = !card;
+    editButton.classList.toggle("hidden", !card);
+  }
+}
+
+async function handleSelfCardSelectionChange() {
+  syncSelectedSelfCardFromSelect();
+}
+
+async function handleOpenNewSelfCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  openNewSelfCard();
+}
+
+async function handleEditCurrentSelfCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (!selectedSelfCardId) {
+    openNewSelfCard();
+    return;
+  }
+  await openExistingSelfCard(selectedSelfCardId);
+}
+
+async function handleGenerateSelfCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  const button = el("generate-self-card-button");
+  if (button) button.disabled = true;
+  setStatus("self-card-status", "正在随机生成一张角色卡...");
+  try {
+    const payload = await apiJson(
+      "/api/web/self-cards/generate",
+      { method: "POST" },
+      "角色卡生成失败。"
+    );
+    fillSelfCardFields(payload.fields || {});
+    setStatus("self-card-status", "AI 已经把整张卡先填好了，你可以直接保存，也可以再手修。");
+  } catch (error) {
+    setStatus("self-card-status", error.message || "角色卡生成失败。");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function handleSelfCardSubmit(event) {
+  event.preventDefault();
+  const cardId = trimmedValue("self-card-id", "");
+  const fields = collectSelfCardPayload();
+  const validationMessage = validateSelfCardPayload(fields);
+  if (validationMessage) {
+    setStatus("self-card-status", validationMessage);
+    return;
+  }
+  setStatus("self-card-status", "正在保存角色卡...");
+  try {
+    const payload = await apiJson(
+      cardId ? `/api/web/self-cards/${encodeURIComponent(cardId)}` : "/api/web/self-cards",
+      {
+        method: cardId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      },
+      "角色卡保存失败。"
+    );
+    await loadSelfCards();
+    selectedSelfCardId = payload.card_id || "";
+    const select = el("dialogue-self-card");
+    if (select) {
+      select.value = selectedSelfCardId;
+      syncCustomSelect("dialogue-self-card");
+    }
+    syncSelectedSelfCardFromSelect();
+    setStatus("dialogue-session-status", "角色卡已经接好，现在可以直接带它入场。");
+    setStatus("self-card-status", "角色卡已保存。");
+    closeSelfCardModal();
+  } catch (error) {
+    setStatus("self-card-status", error.message || "角色卡保存失败。");
+  }
+}
+
+async function handleDeleteSelfCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  const cardId = trimmedValue("self-card-id", "");
+  if (!cardId) return;
+  if (!window.confirm("确定删除这张角色卡吗？")) {
+    return;
+  }
+  setStatus("self-card-status", "正在删除角色卡...");
+  try {
+    await apiJson(
+      `/api/web/self-cards/${encodeURIComponent(cardId)}`,
+      { method: "DELETE" },
+      "角色卡删除失败。"
+    );
+    if (selectedSelfCardId === cardId) {
+      selectedSelfCardId = "";
+    }
+    await loadSelfCards();
+    currentSelfCard = null;
+    renderSelectedSelfCardPreview();
+    setStatus("dialogue-session-status", "角色卡已经删掉了。");
+    closeSelfCardModal();
+  } catch (error) {
+    setStatus("self-card-status", error.message || "角色卡删除失败。");
   }
 }
 
@@ -700,6 +1024,7 @@ function bindEvents() {
   bind("close-settings-button", "click", closeSettingsModal);
   bind("close-persona-review-button", "click", closePersonaReviewModal);
   bind("close-relation-details-button", "click", closeRelationDetailsModal);
+  bind("close-self-card-button", "click", closeSelfCardModal);
   bind("close-app-update-button", "click", dismissAppUpdateModal);
   bind("dismiss-app-update-button", "click", dismissAppUpdateModal);
   bind("confirm-app-update-button", "click", handleConfirmAppUpdate);
@@ -746,15 +1071,21 @@ function bindEvents() {
 
   bind("model-settings-form", "submit", handleModelSettingsSubmit);
   bind("persona-review-form", "submit", handlePersonaReviewSubmit);
+  bind("self-card-form", "submit", handleSelfCardSubmit);
   bind("create-run-form", "submit", handleCreateRunSubmit);
   bind("redistill-button", "click", handleRedistill);
   bind("redistill-add-button", "click", handleRedistillAdd);
   bind("redistill-refresh-button", "click", handleRedistillRefresh);
   bind("dialogue-session-form", "submit", handleDialogueSessionSubmit);
+  bind("create-self-card-button", "click", handleOpenNewSelfCard);
+  bind("edit-self-card-button", "click", handleEditCurrentSelfCard);
+  bind("generate-self-card-button", "click", handleGenerateSelfCard);
+  bind("delete-self-card-button", "click", handleDeleteSelfCard);
   bind("suggest-turn-button", "click", handleSuggestTurn);
   bind("prepare-turn-button", "click", handleSendTurn);
 
   bind("dialogue-mode", "change", syncModeFields);
+  bind("dialogue-self-card", "change", handleSelfCardSelectionChange);
   bind("persona-review-character", "change", handlePersonaCharacterChange);
   el("persona-review-form")?.addEventListener("input", (event) => {
     const target = event.target;
@@ -795,6 +1126,8 @@ function bindEvents() {
       const modalId = target.dataset.modalId || "settings-modal";
       if (modalId === "persona-review-modal") {
         closePersonaReviewModal();
+      } else if (modalId === "self-card-modal") {
+        closeSelfCardModal();
       } else if (modalId === "relation-details-modal") {
         closeRelationDetailsModal();
       } else if (modalId === "app-update-modal") {
@@ -818,8 +1151,10 @@ async function boot() {
   updateRedistillFileView();
   resizeComposer();
   applySidebarState();
+  initCustomSelect("dialogue-self-card");
   await Promise.all([
     loadModelSettings().catch((error) => console.warn("loadModelSettings failed", error)),
+    loadSelfCards().catch((error) => console.warn("loadSelfCards failed", error)),
     loadRecentSessions().catch((error) => console.warn("loadRecentSessions failed", error)),
     loadRunsOverview().catch((error) => console.warn("loadRunsOverview failed", error)),
   ]);

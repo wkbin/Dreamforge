@@ -32,9 +32,21 @@ class DialogueServiceMixin:
         mode: str,
         participants: list[str],
         controlled_character: str = "",
+        self_card_id: str = "",
         self_profile: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         manifest = self._require_manifest(run_id)
+        resolved_self_profile = dict(self_profile or {})
+        if mode == "insert" and self_card_id:
+            try:
+                card = self.get_self_card(self_card_id)
+            except FileNotFoundError as exc:
+                raise ValueError("所选角色卡不存在。") from exc
+            resolved_self_profile = {
+                **dict(card.get("fields", {}) or {}),
+                **resolved_self_profile,
+                "self_card_id": str(card.get("card_id", "")).strip(),
+            }
         return create_dialogue_session_payload(
             run_id=run_id,
             manifest=manifest,
@@ -42,7 +54,7 @@ class DialogueServiceMixin:
             mode=mode,
             participants=participants,
             controlled_character=controlled_character,
-            self_profile=self_profile,
+            self_profile=resolved_self_profile,
             build_dialogue_opening_message=build_dialogue_opening_message,
             load_pending_turn_payload=self._load_pending_turn_payload,
             generate_dialogue_responses=self._generate_dialogue_responses,

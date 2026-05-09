@@ -20,6 +20,7 @@ from src.web.service_facades import (
     RunPreparationMixin,
     RuntimeSupportMixin,
     RunServiceMixin,
+    SelfCardServiceMixin,
     UpdateServiceMixin,
 )
 
@@ -46,6 +47,7 @@ class WebRunService(
     RunPreparationMixin,
     RunServiceMixin,
     ArtifactServiceMixin,
+    SelfCardServiceMixin,
     DialogueServiceMixin,
     ReviewHelpersMixin,
     PipelineHelpersMixin,
@@ -185,8 +187,10 @@ class WebRunService(
             resolved_storage_root = self.project_root / ".zaomeng-web"
         self.storage_root = resolved_storage_root
         self.runs_root = self.storage_root / "runs"
+        self.self_cards_root = self.storage_root / "self-cards"
         self.settings_path = self.storage_root / "model_settings.json"
         self.runs_root.mkdir(parents=True, exist_ok=True)
+        self.self_cards_root.mkdir(parents=True, exist_ok=True)
         self.dialogue = DialogueService(self.runs_root)
         self._active_run_threads: dict[str, threading.Thread] = {}
         self._app_update_lock = threading.Lock()
