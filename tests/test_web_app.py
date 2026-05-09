@@ -473,7 +473,7 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(refreshed["status"], "running")
             self.assertEqual(refreshed["locked_characters"], ["林黛玉", "王熙凤"])
             self.assertEqual(refreshed["progress"]["stage"], "characters_locked")
-            self.assertIn("重新整理 2 人", refreshed["redistill"]["summary"])
+            self.assertIn("增量蒸馏 2 人", refreshed["redistill"]["summary"])
             start_background_run.assert_called_once()
 
     def test_restart_run_distill_accepts_new_source_segment_for_incremental_update(self):
@@ -549,7 +549,8 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(refreshed["progress"]["completed_characters"], [])
             self.assertEqual(refreshed["progress"]["completed_count"], 0)
             self.assertEqual(refreshed["summary"]["characters_completed"], 0)
-            self.assertIn("重新整理 2 人", refreshed["redistill"]["summary"])
+            self.assertIn("增量蒸馏 2 人", refreshed["redistill"]["summary"])
+            self.assertEqual(refreshed["capabilities"]["distill"]["outputs"]["update_mode"], "incremental")
             start_background_run.assert_called_once()
 
     def test_restart_run_distill_requeues_single_existing_character_for_incremental_redistill(self):
@@ -583,7 +584,7 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(refreshed["redistill"]["existing_characters"], ["林黛玉"])
             self.assertEqual(refreshed["redistill"]["pending_characters"], ["林黛玉"])
             self.assertEqual(refreshed["redistill"]["resume_completed_characters"], [])
-            self.assertIn("重新整理 1 人", refreshed["redistill"]["summary"])
+            self.assertIn("增量蒸馏 1 人", refreshed["redistill"]["summary"])
             start_background_run.assert_called_once()
 
     def test_delete_run_group_removes_same_novel_runs_and_dialogue(self):
@@ -909,6 +910,9 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertTrue(result["success"])
             self.assertTrue((run_dir / "payloads" / "distill_林黛玉.json").exists())
             self.assertTrue((run_dir / "payloads" / "distill_薛宝钗.json").exists())
+            first_payload = json.loads((run_dir / "payloads" / "distill_林黛玉.json").read_text(encoding="utf-8"))
+            self.assertEqual(first_payload["request"]["update_mode"], "incremental")
+            self.assertIn("林黛玉", first_payload["request"]["existing_profiles"])
             self.assertEqual(result["summary"]["characters_completed"], 2)
             self.assertCountEqual(
                 [item["name"] for item in result["artifact_index"]["characters"]],

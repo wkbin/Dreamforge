@@ -203,7 +203,7 @@ class RunPreparationMixin:
         if using_new_source:
             redistill_summary = f"继续蒸馏：新增 {len(new_requested)} 人，增量 {len(existing_requested)} 人"
         elif pending_characters:
-            redistill_summary = f"继续蒸馏：重新整理 {len(pending_characters)} 人"
+            redistill_summary = f"继续蒸馏：增量蒸馏 {len(pending_characters)} 人"
         else:
             redistill_summary = "继续蒸馏：人物档案已完成，准备继续关系图谱"
         novel_source_entry = None
