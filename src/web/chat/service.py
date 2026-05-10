@@ -437,6 +437,7 @@ class DialogueService:
         session["file_urls"] = self._build_file_urls(run_id, session)
         session["mode_display"] = self._mode_display(str(session.get("mode", "")).strip())
         session["transcript"] = self._serialize_transcript(session)
+        session["last_entry_preview"] = self._build_last_entry_preview(session)
         session["session_card"] = self._build_session_card(session)
         session["pending_turn_summary"] = self._build_pending_turn_summary(session)
         return session
@@ -499,6 +500,21 @@ class DialogueService:
             "participants": list(pending.get("participants", [])),
             "response_limit_hint": int(pending.get("response_limit_hint", 0) or 0),
         }
+
+    @staticmethod
+    def _build_last_entry_preview(session: dict[str, Any]) -> str:
+        history = list(session.get("history", []) or [])
+        for entry in reversed(history):
+            message = str(entry.get("message", "")).strip()
+            if not message:
+                continue
+            normalized = " ".join(message.split())
+            return normalized[:180]
+        pending = dict(session.get("pending_turn", {}) or {})
+        pending_message = str(pending.get("transcript_message", "")).strip()
+        if pending_message:
+            return " ".join(pending_message.split())[:180]
+        return ""
 
     def _build_file_urls(self, run_id: str, session: dict[str, Any]) -> dict[str, str]:
         session_id = str(session.get("session_id", "")).strip()

@@ -2875,6 +2875,9 @@ class WebAppRouteTests(unittest.TestCase):
             sessions_response = client.get("/api/web/sessions")
             self.assertEqual(sessions_response.status_code, 200)
             self.assertEqual(len(sessions_response.json()["items"]), 1)
+            first = sessions_response.json()["items"][0]
+            self.assertIn("last_entry_preview", first)
+            self.assertTrue(str(first["last_entry_preview"]).strip())
 
     def test_delete_dialogue_session_route_removes_session(self):
         with tempfile.TemporaryDirectory() as tmp:

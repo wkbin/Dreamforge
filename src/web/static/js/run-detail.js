@@ -628,7 +628,8 @@ function renderWorkSessionPreview(run) {
     button.type = "button";
     button.className = "work-session-card";
     const participantCount = Array.isArray(item.participants) ? item.participants.length : 0;
-    const snippet = readRecentSessionSnippet(item.run_id, item.session_id);
+    const serverSnippet = String(item.last_entry_preview || "").trim();
+    const snippet = serverSnippet || readRecentSessionSnippet(item.run_id, item.session_id);
     button.innerHTML = `
       <div class="work-session-head">
         <div class="work-session-title">
