@@ -59,6 +59,20 @@
     max-height: none;
   }
 
+  .experience-shell.dialogue-layout .library-rail {
+    grid-template-rows: auto;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .experience-shell.dialogue-layout .rail-sessions {
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    align-self: auto;
+  }
+
   .app-shell.sidebar-collapsed .library-rail {
     display: none;
   }
