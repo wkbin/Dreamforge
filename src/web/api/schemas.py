@@ -86,6 +86,17 @@ class SuggestPersonaFieldRequest(BaseModel):
     field: str = Field(..., min_length=1)
 
 
+class UpdateRelationDetailRequest(BaseModel):
+    trust: int | None = Field(default=None, ge=0, le=10)
+    affection: int | None = Field(default=None, ge=0, le=10)
+    hostility: int | None = Field(default=None, ge=0, le=10)
+    ambiguity: int | None = Field(default=None, ge=0, le=10)
+    relationship_type: str = Field(default="")
+    relation_change: str = Field(default="")
+    conflict_point: str = Field(default="")
+    typical_interaction: str = Field(default="")
+
+
 class CreateDialogueSessionRequest(BaseModel):
     mode: str = Field(...)
     participants: list[str] = Field(default_factory=list)

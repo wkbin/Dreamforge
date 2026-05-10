@@ -23,6 +23,7 @@ from .operations import (
     ingest_relation_result,
     list_relation_details,
     resolve_run_file,
+    update_relation_detail,
 )
 
 __all__ = [
@@ -44,5 +45,6 @@ __all__ = [
     "resolve_relations_file",
     "resolve_run_file",
     "split_relation_pair",
+    "update_relation_detail",
     "write_persona_profile",
 ]

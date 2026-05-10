@@ -36,6 +36,36 @@ class RelationStoreTests(unittest.TestCase):
             self.assertEqual(default_payload["relations"]["刘备_关羽"]["trust"], 9)
             self.assertEqual(exported_payload["relations"]["刘备_关羽"]["affection"], 8)
 
+    def test_relation_store_supports_dynamic_update_and_conflict_detection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = Config()
+            config.update({"paths": {"relations": str(root / "relations")}})
+            store = MarkdownRelationStore(PathProvider(config))
+            relations = {
+                "林黛玉_贾宝玉": {
+                    "trust": 8,
+                    "affection": 8,
+                    "hostility": 2,
+                    "ambiguity": 3,
+                }
+            }
+            store.save_relations("hongloumeng", relations)
+
+            updated = store.apply_dialogue_update(
+                "hongloumeng",
+                pair_key="林黛玉_贾宝玉",
+                message="我理解你，但我也恨你这么轻慢。",
+                speaker="林黛玉",
+                target="贾宝玉",
+            )
+            self.assertIn("trust", updated)
+            self.assertIn("hostility", updated)
+
+            payload = store.load_relations("hongloumeng", default={})
+            self.assertIn("conflicts", payload)
+            self.assertIsInstance(payload.get("conflicts", []), list)
+
 
 if __name__ == "__main__":
     unittest.main()
