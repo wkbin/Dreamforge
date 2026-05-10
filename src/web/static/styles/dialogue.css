@@ -335,6 +335,9 @@
 .composer-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "kind kind"
+    "input actions";
   gap: 10px;
   align-items: end;
   padding: 8px 8px 8px 14px;
@@ -342,13 +345,43 @@
   background: rgba(255, 255, 255, 0.84);
 }
 
+.composer-kind-toggle {
+  grid-area: kind;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.kind-chip {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(188, 154, 135, 0.16);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--ink-faint);
+  border-radius: 999px;
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.kind-chip.active {
+  border-color: rgba(184, 132, 113, 0.36);
+  background: rgba(191, 143, 123, 0.14);
+  color: var(--accent-strong);
+}
+
 .composer-actions {
+  grid-area: actions;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 #dialogue-message {
+  grid-area: input;
   min-height: 28px;
   max-height: 148px;
   resize: none;

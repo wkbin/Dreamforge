@@ -52,13 +52,21 @@ def reply_dialogue_turn_payload(
     run_id: str,
     session_id: str,
     message: str,
+    message_kind: str,
     manifest: dict[str, Any],
     dialogue: Any,
     load_pending_turn_payload: Callable[[str, str], dict[str, Any]],
     generate_dialogue_responses: Callable[[str, dict[str, Any]], list[dict[str, str]]],
     friendly_dialogue_llm_error: Callable[[Exception], str],
 ) -> dict[str, Any]:
-    dialogue.prepare_turn(manifest, session_id=session_id, message=message)
+    speaker_override = "场景提示" if str(message_kind or "").strip() == "narration" else ""
+    dialogue.prepare_turn(
+        manifest,
+        session_id=session_id,
+        message=message,
+        message_kind=message_kind,
+        speaker_override=speaker_override,
+    )
     pending_payload = load_pending_turn_payload(run_id, session_id)
     try:
         responses = generate_dialogue_responses(run_id, pending_payload)

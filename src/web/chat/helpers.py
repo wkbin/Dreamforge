@@ -165,7 +165,9 @@ def _trim_text(text: str, limit: int) -> str:
 def build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool = False) -> list[dict[str, str]]:
     input_block = dict(payload.get("input", {}) or {})
     session_mode = str(payload.get("mode", "")).strip() or "observe"
+    message_kind = str(input_block.get("message_kind", "dialogue")).strip() or "dialogue"
     participants = [str(item).strip() for item in input_block.get("participants", []) if str(item).strip()]
+    active_participants = [str(item).strip() for item in input_block.get("active_participants", []) if str(item).strip()]
     persona_contexts = payload.get("persona_contexts", [])
     relation_excerpt = str(payload.get("relation_context", {}).get("relations_excerpt", "")).strip()
     history = payload.get("history", [])
@@ -179,6 +181,7 @@ def build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool
         str(instructions.get("mode_rule", "")).strip(),
         str(instructions.get("speaker_rule", "")).strip(),
         str(instructions.get("response_style", "")).strip(),
+        str(instructions.get("response_count_rule", "")).strip(),
         str(host_action.get("output_rule", "")).strip(),
         "只返回 JSON 数组，每项必须包含 speaker 和 message。",
     ]
@@ -188,9 +191,11 @@ def build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool
 
     user_payload = {
         "mode": session_mode,
+        "message_kind": message_kind,
         "speaker": str(input_block.get("speaker", "")).strip(),
         "message": str(input_block.get("message", "")).strip(),
         "participants": participants,
+        "active_participants": active_participants,
         "response_limit": response_limit,
         "persona_contexts": persona_contexts,
         "history": history,
@@ -421,7 +426,11 @@ def generate_dialogue_responses(
                 continue
             break
         try:
-            return parse_responses(content, allowed_speakers)
+            responses = parse_responses(content, allowed_speakers)
+            return _normalize_dialogue_responses(
+                responses,
+                response_limit=int(dict(payload.get("host_action", {}) or {}).get("response_limit_hint", 0) or 0),
+            )
         except ValueError as exc:
             last_error = exc
             if index + 1 < len(attempts):
@@ -460,3 +469,30 @@ def generate_dialogue_suggestion(
                 continue
             raise
     raise ValueError("模型没有返回可用的续写建议。") from last_error
+
+
+def _normalize_dialogue_responses(
+    responses: list[dict[str, str]],
+    *,
+    response_limit: int,
+) -> list[dict[str, str]]:
+    # Keep only one line per character speaker per turn (except narration/meta speakers),
+    # then cap to the turn hint so noisy outputs do not flood the transcript.
+    cleaned: list[dict[str, str]] = []
+    seen_character_speakers: set[str] = set()
+    for item in responses:
+        speaker = str(item.get("speaker", "")).strip()
+        message = str(item.get("message", "")).strip()
+        if not speaker or not message:
+            continue
+        if speaker not in {"旁白", "场景提示"}:
+            if speaker in seen_character_speakers:
+                continue
+            seen_character_speakers.add(speaker)
+        cleaned.append({"speaker": speaker, "message": message})
+
+    if not cleaned:
+        raise ValueError("Model reply did not contain usable character responses.")
+    if response_limit > 0:
+        return cleaned[:response_limit]
+    return cleaned

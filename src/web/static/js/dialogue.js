@@ -93,15 +93,17 @@ function buildDialogueMemorySnapshot(session) {
   const summaryModeLabel = String(summary.mode_display || "").trim();
   const summaryRecap = String(summary.recap || "").trim();
   const summaryCast = String(summary.cast || "").trim();
+  const summaryRelation = String(summary.relation_drift || "").trim();
   const summaryPerspective = String(summary.perspective || "").trim();
   const summaryWorld = String(summary.world || "").trim();
   const summaryUpdated = String(summary.updated_at || "").trim();
 
-  if (summaryRecap || summaryCast || summaryPerspective || summaryWorld) {
+  if (summaryRecap || summaryCast || summaryRelation || summaryPerspective || summaryWorld) {
     return {
       modeLabel: summaryModeLabel || humanizeMode(summaryMode || session?.mode || session?.session_card?.mode || "observe"),
       recap: summaryRecap || "这局刚开场，回顾会在这里滚动更新。",
       cast: summaryCast || "人物发言次序会在这里收住。",
+      relation: summaryRelation || "关系线会在这里滚动提示。",
       perspective: summaryPerspective || "你当前的入场方式会在这里提示。",
       world: summaryWorld || "当前局势里的动作与情绪线会在这里提醒你。",
       updated: formatWeakTime(summaryUpdated) || formatWeakTime(session?.updated_at) || "刚刚更新",
@@ -141,6 +143,19 @@ function buildDialogueMemorySnapshot(session) {
     cast = `${lastCharacter.speaker} 刚刚接话：${trimInlineMessage(lastCharacter.message)}`;
   }
 
+  let relation = "关系线会在这里滚动提示。";
+  if (castRows.length >= 2) {
+    const recent = castRows
+      .slice(-4)
+      .map((item) => String(item?.speaker || "").trim())
+      .filter(Boolean);
+    if (recent.length >= 2) {
+      relation = `最近接话链：${recent.join(" → ")}`;
+    }
+  } else if (speakerOrder.length) {
+    relation = `本局关键人物：${speakerOrder.slice(0, 4).join("、")}`;
+  }
+
   let perspective = "你当前的入场方式会在这里提示。";
   if (mode === "act") {
     const controlled = String(session?.session_card?.controlled_character || "").trim() || "该角色";
@@ -164,6 +179,7 @@ function buildDialogueMemorySnapshot(session) {
     modeLabel,
     recap,
     cast,
+    relation,
     perspective,
     world,
     updated: formatWeakTime(session?.updated_at) || "刚刚更新",
@@ -182,6 +198,7 @@ function renderDialogueMemory(session) {
   root.classList.remove("hidden");
   setText("dialogue-memory-recap", snapshot.recap, "");
   setText("dialogue-memory-cast", snapshot.cast, "");
+  setText("dialogue-memory-relation", snapshot.relation, "");
   setText("dialogue-memory-perspective", snapshot.perspective, "");
   setText("dialogue-memory-world", snapshot.world, "");
   setText("dialogue-memory-mode", `模式：${snapshot.modeLabel}`, "");
@@ -207,6 +224,7 @@ function buildDialogueMemoryClipboardText(session) {
     `同席：${participantText}`,
     `场景回顾：${snapshot.recap}`,
     `人物动向：${snapshot.cast}`,
+    `关系变化：${snapshot.relation}`,
     `你的位置：${snapshot.perspective}`,
     `世界状态：${snapshot.world}`,
     `更新时间：${snapshot.updated}`,
@@ -316,17 +334,19 @@ function renderSessionBooting(mode, participants) {
   renderTranscript(items);
 }
 
-function buildOptimisticTranscript(session, message) {
+function buildOptimisticTranscript(session, message, messageKind = "dialogue") {
   const transcript = Array.isArray(session?.transcript) ? [...session.transcript] : [];
   const mode = session?.mode || session?.session_card?.mode || "observe";
   const selfInsert = session?.session_card?.self_insert || {};
-  const speaker =
-    mode === "act"
+  const isNarration = String(messageKind || "").trim() === "narration";
+  const speaker = isNarration
+    ? "场景提示"
+    : mode === "act"
       ? session?.session_card?.controlled_character || "你"
       : mode === "insert"
         ? selfInsert.display_name || "你"
         : "你";
-  const role = mode === "observe" ? "director" : "user";
+  const role = isNarration ? "scene" : mode === "observe" ? "director" : "user";
   transcript.push({ speaker, message, role });
   transcript.push({ speaker: "", message: "正在生成回复...", role: "loading" });
   return transcript;

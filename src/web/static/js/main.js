@@ -194,6 +194,7 @@ async function handleDialogueSessionSubmit(event) {
     return;
   }
   try {
+    setDialogueMessageKind("dialogue");
     const mode = valueOf("dialogue-mode", "observe");
     const controlledCharacter = trimmedValue("dialogue-controlled", "");
     let participants = charactersOf("dialogue-participants");
@@ -853,6 +854,7 @@ async function handleConfirmAppUpdate() {
 }
 
 const DIALOGUE_PLACEHOLDER_DEFAULT = "写一句你想让他们听见的话";
+const DIALOGUE_PLACEHOLDER_NARRATION = "写一句推进剧情的场景提示";
 const DIALOGUE_PLACEHOLDER_WAITING = "他们正在接住你的话。";
 const DIALOGUE_SUGGESTION_WAITING = "正在生成中...";
 const DIALOGUE_SUGGESTION_BUSY_LABEL = "…";
@@ -866,6 +868,36 @@ const OBSERVE_QUICK_REPLIES = [
   { label: "有人打断", value: "门外忽然传来一点动静，屋里的人都顿了一下。" },
   { label: "再逼近点", value: "这句话落下去以后，气氛反而更近了一步。" },
 ];
+let currentDialogueMessageKind = "dialogue";
+
+function normalizeDialogueMessageKind(kind) {
+  const value = String(kind || "").trim().toLowerCase();
+  return value === "narration" ? "narration" : "dialogue";
+}
+
+function readDialogueMessageKind() {
+  const active = document.querySelector("#dialogue-message-kind .kind-chip.active");
+  if (active instanceof HTMLElement) {
+    return normalizeDialogueMessageKind(active.dataset.kind);
+  }
+  return normalizeDialogueMessageKind(currentDialogueMessageKind);
+}
+
+function updateDialogueMessagePlaceholder() {
+  const area = el("dialogue-message");
+  if (!area) return;
+  const kind = readDialogueMessageKind();
+  area.placeholder = kind === "narration" ? DIALOGUE_PLACEHOLDER_NARRATION : DIALOGUE_PLACEHOLDER_DEFAULT;
+}
+
+function setDialogueMessageKind(kind) {
+  currentDialogueMessageKind = normalizeDialogueMessageKind(kind);
+  document.querySelectorAll("#dialogue-message-kind .kind-chip").forEach((node) => {
+    if (!(node instanceof HTMLElement)) return;
+    node.classList.toggle("active", normalizeDialogueMessageKind(node.dataset.kind) === currentDialogueMessageKind);
+  });
+  updateDialogueMessagePlaceholder();
+}
 
 function setQuickRepliesEnabled(enabled) {
   document.querySelectorAll("#observe-quick-replies .quick-reply-chip").forEach((node) => {
@@ -899,7 +931,7 @@ function setComposerWaiting(waiting, message = "") {
     if (sendButton) sendButton.disabled = false;
     if (suggestButton) suggestButton.disabled = false;
     area.value = message || "";
-    area.placeholder = DIALOGUE_PLACEHOLDER_DEFAULT;
+    updateDialogueMessagePlaceholder();
   }
   setQuickRepliesEnabled(!waiting);
   resizeComposer();
@@ -948,7 +980,7 @@ async function applyQuickReply(value) {
   const message = String(value || "").trim();
   const area = el("dialogue-message");
   if (!message || !area || area.disabled) return;
-  await handleSendTurn(message);
+  await handleSendTurn(message, "narration");
 }
 
 function coerceMessageOverride(value) {
@@ -960,14 +992,15 @@ function coerceMessageOverride(value) {
   return String(value || "");
 }
 
-async function handleSendTurn(messageOverride = "") {
+async function handleSendTurn(messageOverride = "", messageKindOverride = "") {
   if (!currentRunId || !currentDialogueSessionId) {
     setComposerWaiting(false, "先进入这一幕，再把话递出去。");
     return;
   }
   const message = coerceMessageOverride(messageOverride).trim() || trimmedValue("dialogue-message", "");
+  const messageKind = normalizeDialogueMessageKind(messageKindOverride || readDialogueMessageKind());
   if (!message) {
-    setComposerWaiting(false, "先写一句你想让他们听见的话。");
+    setComposerWaiting(false, messageKind === "narration" ? "先写一句剧情推动提示。" : "先写一句你想让他们听见的话。");
     return;
   }
 
@@ -980,7 +1013,7 @@ async function handleSendTurn(messageOverride = "") {
   if (currentDialogueSession) {
     currentDialogueSession = {
       ...currentDialogueSession,
-      transcript: buildOptimisticTranscript(currentDialogueSession, message),
+      transcript: buildOptimisticTranscript(currentDialogueSession, message, messageKind),
     };
     renderDialogueTranscript(currentDialogueSession);
   }
@@ -992,7 +1025,7 @@ async function handleSendTurn(messageOverride = "") {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ message, message_kind: messageKind }),
         },
         "发送失败。"
       )
@@ -1210,6 +1243,12 @@ function bindEvents() {
   bind("delete-self-card-button", "click", handleDeleteSelfCard);
   bind("suggest-turn-button", "click", handleSuggestTurn);
   bind("prepare-turn-button", "click", handleSendTurn);
+  el("dialogue-message-kind")?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!target.classList.contains("kind-chip")) return;
+    setDialogueMessageKind(target.dataset.kind || "dialogue");
+  });
   bind("dialogue-memory-copy-button", "click", () => {
     if (typeof copyDialogueMemorySummary === "function") {
       copyDialogueMemorySummary();
@@ -1287,6 +1326,7 @@ async function boot() {
   updateNovelFileView();
   updateRedistillFileView();
   resizeComposer();
+  setDialogueMessageKind(currentDialogueMessageKind);
   applySidebarState();
   initCustomSelect("dialogue-self-card");
   await Promise.all([

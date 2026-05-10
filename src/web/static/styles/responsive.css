@@ -139,6 +139,10 @@
 
   .composer-main {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "kind"
+      "input"
+      "actions";
     border-radius: 28px;
   }
 
