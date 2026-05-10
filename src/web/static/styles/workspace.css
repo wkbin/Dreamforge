@@ -1411,6 +1411,10 @@
   pointer-events: none;
 }
 
+#step-progress.is-loading-work > :not(#detail-action-note):not(#work-overview-loading) {
+  display: none !important;
+}
+
 .detail-section-timeline .timeline {
   margin-top: 0.15rem;
   max-height: min(16.5rem, 34vh);

@@ -80,7 +80,9 @@
   .studio-grid,
   .mini-grid,
   .choice-deck,
-  .info-row {
+  .info-row,
+  .work-loading-grid,
+  .work-loading-grid-2 {
     grid-template-columns: 1fr;
   }
 
