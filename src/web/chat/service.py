@@ -436,9 +436,12 @@ class DialogueService:
         session = dict(payload)
         session["file_urls"] = self._build_file_urls(run_id, session)
         session["mode_display"] = self._mode_display(str(session.get("mode", "")).strip())
-        session["transcript"] = self._serialize_transcript(session)
+        transcript = self._serialize_transcript(session)
+        session["transcript"] = transcript
+        session["last_entry_preview"] = self._build_last_entry_preview(session)
         session["session_card"] = self._build_session_card(session)
         session["pending_turn_summary"] = self._build_pending_turn_summary(session)
+        session["session_memory_summary"] = self._build_session_memory_summary(session, transcript)
         return session
 
     def _serialize_transcript(self, session: dict[str, Any]) -> list[dict[str, Any]]:
@@ -499,6 +502,104 @@ class DialogueService:
             "participants": list(pending.get("participants", [])),
             "response_limit_hint": int(pending.get("response_limit_hint", 0) or 0),
         }
+
+    def _build_session_memory_summary(self, session: dict[str, Any], transcript: list[dict[str, Any]]) -> dict[str, str]:
+        mode = str(session.get("mode", "observe")).strip() or "observe"
+        mode_display = self._mode_display(mode)
+        participants = [str(item).strip() for item in session.get("participants", []) if str(item).strip()]
+        history = list(session.get("history", []) or [])
+
+        cast_speakers: list[str] = []
+        seen: set[str] = set()
+        for item in transcript:
+            if str(item.get("role", "")).strip() != "character":
+                continue
+            speaker = str(item.get("speaker", "")).strip()
+            if not speaker or speaker in seen:
+                continue
+            seen.add(speaker)
+            cast_speakers.append(speaker)
+
+        last_messages: list[str] = []
+        for item in history[-6:]:
+            text = str(item.get("message", "")).strip()
+            if not text:
+                continue
+            last_messages.append(self._trim_summary_text(text, 88))
+        last_messages = last_messages[-3:]
+
+        recap = "这局刚开场，回顾会在这里滚动更新。"
+        if last_messages:
+            recap = f"最近一拍：{' / '.join(last_messages)}"
+
+        cast = "人物发言次序会在这里收住。"
+        if cast_speakers:
+            suffix = "..." if len(cast_speakers) > 5 else ""
+            cast = f"当前主要在场：{'、'.join(cast_speakers[:5])}{suffix}"
+        elif participants:
+            cast = f"本局参与角色：{'、'.join(participants[:5])}{'...' if len(participants) > 5 else ''}"
+
+        if mode == "act":
+            controlled = str(session.get("controlled_character", "")).strip() or "该角色"
+            perspective = f"你正以「{controlled}」发言，其他人会按角色关系回应。"
+        elif mode == "insert":
+            self_insert = dict(session.get("self_insert", {}) or {})
+            self_name = str(self_insert.get("display_name", "")).strip() or "你"
+            identity = str(self_insert.get("scene_identity", "")).strip()
+            perspective = f"你以「{self_name}」入场（{identity}）。" if identity else f"你以「{self_name}」入场，直接参与这幕。"
+        else:
+            perspective = "你在旁观推进模式里，主要作用是推动局势进入下一拍。"
+
+        world = "当前局势里的动作与情绪线会在这里提醒你。"
+        for item in reversed(transcript):
+            role = str(item.get("role", "")).strip()
+            text = str(item.get("message", "")).strip()
+            if not text:
+                continue
+            if role in {"scene", "director"}:
+                world = self._trim_summary_text(text, 88)
+                break
+        if world == "当前局势里的动作与情绪线会在这里提醒你。":
+            for item in reversed(transcript):
+                role = str(item.get("role", "")).strip()
+                text = str(item.get("message", "")).strip()
+                if role == "character" and text:
+                    world = f"人物最新情绪线：{self._trim_summary_text(text, 78)}"
+                    break
+
+        return {
+            "mode": mode,
+            "mode_display": mode_display,
+            "recap": recap,
+            "cast": cast,
+            "perspective": perspective,
+            "world": world,
+            "updated_at": str(session.get("updated_at", "")).strip(),
+        }
+
+    @staticmethod
+    def _trim_summary_text(value: str, limit: int) -> str:
+        text = " ".join(str(value or "").split()).strip()
+        if not text:
+            return ""
+        if len(text) <= limit:
+            return text
+        return f"{text[:limit]}..."
+
+    @staticmethod
+    def _build_last_entry_preview(session: dict[str, Any]) -> str:
+        history = list(session.get("history", []) or [])
+        for entry in reversed(history):
+            message = str(entry.get("message", "")).strip()
+            if not message:
+                continue
+            normalized = " ".join(message.split())
+            return normalized[:180]
+        pending = dict(session.get("pending_turn", {}) or {})
+        pending_message = str(pending.get("transcript_message", "")).strip()
+        if pending_message:
+            return " ".join(pending_message.split())[:180]
+        return ""
 
     def _build_file_urls(self, run_id: str, session: dict[str, Any]) -> dict[str, str]:
         session_id = str(session.get("session_id", "")).strip()

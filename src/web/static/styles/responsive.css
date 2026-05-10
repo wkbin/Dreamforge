@@ -48,11 +48,29 @@
     overflow: visible;
   }
 
+  .experience-shell.dialogue-layout .chat-shell {
+    display: block;
+  }
+
   .library-rail {
     grid-template-rows: auto;
     width: 100%;
     height: auto;
     max-height: none;
+  }
+
+  .experience-shell.dialogue-layout .library-rail {
+    grid-template-rows: auto;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .experience-shell.dialogue-layout .rail-sessions {
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    align-self: auto;
   }
 
   .app-shell.sidebar-collapsed .library-rail {
@@ -62,7 +80,9 @@
   .studio-grid,
   .mini-grid,
   .choice-deck,
-  .info-row {
+  .info-row,
+  .work-loading-grid,
+  .work-loading-grid-2 {
     grid-template-columns: 1fr;
   }
 
@@ -90,6 +110,15 @@
     padding: 24px 16px 20px;
     max-height: min(56vh, 32rem);
     min-height: 18rem;
+    height: auto;
+  }
+
+  .dialogue-memory {
+    padding: 0.78rem 0.86rem 0.62rem;
+  }
+
+  .dialogue-memory-grid {
+    grid-template-columns: 1fr;
   }
 
   .chat-detail {

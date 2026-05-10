@@ -81,6 +81,193 @@ function renderDialogueTranscript(session) {
   renderTranscript(items);
 }
 
+function trimInlineMessage(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return text.length > 88 ? `${text.slice(0, 88)}...` : text;
+}
+
+function buildDialogueMemorySnapshot(session) {
+  const summary = session?.session_memory_summary || {};
+  const summaryMode = String(summary.mode || "").trim();
+  const summaryModeLabel = String(summary.mode_display || "").trim();
+  const summaryRecap = String(summary.recap || "").trim();
+  const summaryCast = String(summary.cast || "").trim();
+  const summaryPerspective = String(summary.perspective || "").trim();
+  const summaryWorld = String(summary.world || "").trim();
+  const summaryUpdated = String(summary.updated_at || "").trim();
+
+  if (summaryRecap || summaryCast || summaryPerspective || summaryWorld) {
+    return {
+      modeLabel: summaryModeLabel || humanizeMode(summaryMode || session?.mode || session?.session_card?.mode || "observe"),
+      recap: summaryRecap || "这局刚开场，回顾会在这里滚动更新。",
+      cast: summaryCast || "人物发言次序会在这里收住。",
+      perspective: summaryPerspective || "你当前的入场方式会在这里提示。",
+      world: summaryWorld || "当前局势里的动作与情绪线会在这里提醒你。",
+      updated: formatWeakTime(summaryUpdated) || formatWeakTime(session?.updated_at) || "刚刚更新",
+    };
+  }
+
+  const mode = String(session?.mode || session?.session_card?.mode || "observe").trim() || "observe";
+  const modeLabel = humanizeMode(mode) || mode;
+  const transcript = Array.isArray(session?.transcript) ? session.transcript : [];
+  const castRows = transcript.filter((item) => item?.role === "character");
+  const worldRows = transcript.filter((item) => item?.role === "scene" || item?.role === "director");
+  const lastRows = transcript.slice(-6);
+  const lastCharacter = castRows.length ? castRows[castRows.length - 1] : null;
+  const lastWorld = worldRows.length ? worldRows[worldRows.length - 1] : null;
+  const speakerOrder = [];
+  const seen = new Set();
+  castRows.forEach((item) => {
+    const speaker = String(item?.speaker || "").trim();
+    if (!speaker || seen.has(speaker)) return;
+    seen.add(speaker);
+    speakerOrder.push(speaker);
+  });
+  const lastBeatMessages = lastRows
+    .filter((item) => String(item?.message || "").trim())
+    .map((item) => trimInlineMessage(item.message))
+    .slice(-3);
+
+  let recap = "这局刚开场，回顾会在这里滚动更新。";
+  if (lastBeatMessages.length) {
+    recap = `最近一拍：${lastBeatMessages.join(" / ")}`;
+  }
+
+  let cast = "人物发言次序会在这里收住。";
+  if (speakerOrder.length) {
+    cast = `当前主要在场：${speakerOrder.slice(0, 5).join("、")}${speakerOrder.length > 5 ? "..." : ""}`;
+  } else if (lastCharacter?.speaker) {
+    cast = `${lastCharacter.speaker} 刚刚接话：${trimInlineMessage(lastCharacter.message)}`;
+  }
+
+  let perspective = "你当前的入场方式会在这里提示。";
+  if (mode === "act") {
+    const controlled = String(session?.session_card?.controlled_character || "").trim() || "该角色";
+    perspective = `你正以「${controlled}」发言，其他人会按角色关系回应。`;
+  } else if (mode === "insert") {
+    const selfName = String(session?.session_card?.self_insert?.display_name || "").trim() || "你";
+    const identity = String(session?.session_card?.self_insert?.scene_identity || "").trim();
+    perspective = identity ? `你以「${selfName}」入场（${identity}）。` : `你以「${selfName}」入场，直接参与这幕。`;
+  } else {
+    perspective = "你在旁观推进模式里，主要作用是推动局势进入下一拍。";
+  }
+
+  let world = "当前局势里的动作与情绪线会在这里提醒你。";
+  if (lastWorld?.message) {
+    world = trimInlineMessage(lastWorld.message);
+  } else if (lastCharacter?.message) {
+    world = `人物最新情绪线：${trimInlineMessage(lastCharacter.message)}`;
+  }
+
+  return {
+    modeLabel,
+    recap,
+    cast,
+    perspective,
+    world,
+    updated: formatWeakTime(session?.updated_at) || "刚刚更新",
+  };
+}
+
+function renderDialogueMemory(session) {
+  const root = el("dialogue-memory");
+  if (!root) return;
+  if (!session) {
+    root.classList.add("hidden");
+    return;
+  }
+  const snapshot = buildDialogueMemorySnapshot(session);
+  const collapsed = root.classList.contains("is-collapsed");
+  root.classList.remove("hidden");
+  setText("dialogue-memory-recap", snapshot.recap, "");
+  setText("dialogue-memory-cast", snapshot.cast, "");
+  setText("dialogue-memory-perspective", snapshot.perspective, "");
+  setText("dialogue-memory-world", snapshot.world, "");
+  setText("dialogue-memory-mode", `模式：${snapshot.modeLabel}`, "");
+  setText("dialogue-memory-updated", `更新于 ${snapshot.updated}`, "");
+  const toggle = el("dialogue-memory-toggle-button");
+  if (toggle) {
+    toggle.textContent = collapsed ? "展开" : "收起";
+  }
+  const body = el("dialogue-memory-body");
+  if (body) {
+    body.classList.toggle("hidden", collapsed);
+  }
+}
+
+function buildDialogueMemoryClipboardText(session) {
+  if (!session) return "";
+  const snapshot = buildDialogueMemorySnapshot(session);
+  const participants = Array.isArray(session?.session_card?.participants) ? session.session_card.participants : [];
+  const participantText = participants.length ? joinCharacters(participants) : "未记录";
+  return [
+    `【本局记忆】`,
+    `模式：${snapshot.modeLabel}`,
+    `同席：${participantText}`,
+    `场景回顾：${snapshot.recap}`,
+    `人物动向：${snapshot.cast}`,
+    `你的位置：${snapshot.perspective}`,
+    `世界状态：${snapshot.world}`,
+    `更新时间：${snapshot.updated}`,
+  ].join("\n");
+}
+
+async function copyDialogueMemorySummary() {
+  if (!currentDialogueSession) return;
+  const button = el("dialogue-memory-copy-button");
+  const status = el("dialogue-memory-copy-status");
+  const original = button?.textContent || "复制摘要";
+  const text = buildDialogueMemoryClipboardText(currentDialogueSession);
+  if (!text) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "readonly");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand("copy");
+      textarea.remove();
+      if (!ok) {
+        throw new Error("copy_failed");
+      }
+    }
+    if (button) {
+      button.textContent = "已复制";
+      window.setTimeout(() => {
+        if (button) button.textContent = original;
+      }, 1200);
+    }
+    if (status) status.textContent = "已复制";
+    window.setTimeout(() => {
+      if (status) status.textContent = "";
+    }, 1600);
+  } catch (_error) {
+    if (button) {
+      button.textContent = "复制失败";
+      window.setTimeout(() => {
+        if (button) button.textContent = original;
+      }, 1400);
+    }
+    if (status) status.textContent = "复制失败";
+    window.setTimeout(() => {
+      if (status) status.textContent = "";
+    }, 1600);
+  }
+}
+
+function toggleDialogueMemory() {
+  const root = el("dialogue-memory");
+  if (!root) return;
+  root.classList.toggle("is-collapsed");
+  renderDialogueMemory(currentDialogueSession);
+}
+
 function renderTranscript(items) {
   const root = el("dialogue-transcript");
   if (!root) return;
@@ -145,9 +332,26 @@ function buildOptimisticTranscript(session, message) {
   return transcript;
 }
 
+function latestSessionSnippetFromTranscript(items) {
+  const rows = Array.isArray(items) ? items : [];
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const entry = rows[index] || {};
+    const role = String(entry.role || "").trim();
+    const message = String(entry.message || "").trim();
+    if (!message) continue;
+    if (role === "loading") continue;
+    return message;
+  }
+  return "";
+}
+
 async function renderDialogueSession(session) {
   currentDialogueSessionId = session.session_id || "";
   currentDialogueSession = session;
+  const latestSnippet = latestSessionSnippetFromTranscript(session?.transcript);
+  if (latestSnippet) {
+    rememberRecentSessionSnippet(currentRunId, currentDialogueSessionId, latestSnippet);
+  }
   sessionBooting = false;
   setComposerEnabled(true);
   if (typeof syncSuggestButtonVisibility === "function") {
@@ -157,6 +361,7 @@ async function renderDialogueSession(session) {
     renderObserveQuickReplies(session);
   }
   setSessionBadge("对话中");
+  renderDialogueMemory(session);
   renderDialogueTranscript(session);
   await loadRecentSessions();
   updateWorkflowState();

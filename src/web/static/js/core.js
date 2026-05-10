@@ -21,11 +21,14 @@ var sidebarCollapsed = false;
 var sessionBooting = false;
 var recentSessionsRequestId = 0;
 var recentSessionsCache = [];
+var recentSessionSnippets = new Map();
 var allRuns = [];
 var chatModePickerOpen = false;
 var newRunFlowOpen = false;
 var redistillPanelOpen = false;
 var sourceHistoryExpanded = false;
+var characterReadinessExpanded = false;
+var workSessionPreviewExpanded = false;
 var characterOverviewOpen = false;
 var currentCharacterOverview = null;
 var currentPersonaReview = null;
@@ -106,6 +109,23 @@ function joinCharacters(values) {
 
 function parseCharacters(value) {
   return uniq(String(value || "").split(/[\n,，、]+/));
+}
+
+function sessionSnippetKey(runId, sessionId) {
+  return `${String(runId || "").trim()}::${String(sessionId || "").trim()}`;
+}
+
+function rememberRecentSessionSnippet(runId, sessionId, message) {
+  const key = sessionSnippetKey(runId, sessionId);
+  const text = String(message || "").trim();
+  if (!key || !text) return;
+  recentSessionSnippets.set(key, text);
+}
+
+function readRecentSessionSnippet(runId, sessionId) {
+  const key = sessionSnippetKey(runId, sessionId);
+  if (!key) return "";
+  return String(recentSessionSnippets.get(key) || "").trim();
 }
 
 function applySidebarState() {

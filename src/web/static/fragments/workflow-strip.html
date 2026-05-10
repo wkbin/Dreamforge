@@ -165,6 +165,18 @@
       </div>
     </section>
     <p id="detail-action-note" class="card-note hidden">这一卷还在整理中，先看进度继续往前走。</p>
+    <section id="work-overview-loading" class="work-overview-loading hidden" aria-hidden="true">
+      <div class="work-loading-line work-loading-line-lg"></div>
+      <div class="work-loading-grid">
+        <div class="work-loading-card"></div>
+        <div class="work-loading-card"></div>
+        <div class="work-loading-card"></div>
+      </div>
+      <div class="work-loading-grid work-loading-grid-2">
+        <div class="work-loading-card"></div>
+        <div class="work-loading-card"></div>
+      </div>
+    </section>
 
     <div class="work-overview-grid">
       <section class="detail-section work-overview-panel">
@@ -173,6 +185,7 @@
             <p class="eyebrow">角色</p>
             <h4>这一卷里谁已经站稳了</h4>
           </div>
+          <button id="run-character-readiness-toggle" type="button" class="soft-button hidden">展开全部</button>
         </div>
         <p class="detail-section-copy">先看谁已站稳、谁还缺关键字段，再决定下一步补谁。</p>
         <div id="run-character-readiness" class="work-character-list"></div>
@@ -262,7 +275,11 @@
           <strong>最近会话</strong>
           <small>可以直接从这里接着说</small>
         </div>
+        <div id="work-session-resume-shell" class="card-actions hidden">
+          <button id="work-session-resume-latest-button" type="button" class="soft-button">继续最近一局</button>
+        </div>
         <div id="work-session-preview" class="work-session-preview"></div>
+        <button id="work-session-preview-toggle" type="button" class="soft-button hidden">展开全部</button>
         <p id="work-session-preview-empty" class="card-note hidden">还没有会话，随时可以从下方三种方式开局。</p>
         <div class="work-mode-shortcuts">
           <button id="quick-open-observe-button" type="button" class="soft-button">旁观此局</button>
@@ -412,6 +429,18 @@
       </div>
       <p class="detail-section-copy">这里先做轻量判断，帮你分清哪些字段来自蒸馏稿、哪些刚被补全或校对过。</p>
       <div id="character-overview-trust-signals" class="character-overview-trust-signals"></div>
+    </section>
+
+    <section class="detail-section">
+      <div class="detail-section-head">
+        <div>
+          <p class="eyebrow">改动时间线</p>
+          <h4>这一页最近怎样被写回过</h4>
+        </div>
+      </div>
+      <p class="detail-section-copy">这里按时间记录字段补全、手动保存和增量蒸馏写回，方便快速回看这份角色资产是怎么稳起来的。</p>
+      <div id="character-overview-change-timeline" class="character-overview-change-timeline"></div>
+      <p id="character-overview-change-timeline-empty" class="card-note hidden">还没有这位角色的改动记录，先补一次字段或继续增量蒸馏就会出现。</p>
     </section>
 
     <div class="character-overview-grid">

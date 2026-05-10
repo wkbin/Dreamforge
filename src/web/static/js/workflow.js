@@ -151,6 +151,11 @@ function resetDialogueView() {
   currentCharacterOverview = null;
   setSessionBadge("未启幕");
   if (el("dialogue-transcript")) el("dialogue-transcript").innerHTML = "";
+  const memoryRoot = el("dialogue-memory");
+  if (memoryRoot) {
+    memoryRoot.classList.add("is-collapsed");
+  }
+  toggle("dialogue-memory", false);
   if (el("dialogue-message")) el("dialogue-message").value = "";
   if (typeof syncSuggestButtonVisibility === "function") syncSuggestButtonVisibility(null);
   if (typeof renderObserveQuickReplies === "function") renderObserveQuickReplies(null);

@@ -4,6 +4,40 @@
 
     <div id="dialogue-detail" class="hidden chat-detail">
       <div id="chat-content" class="chat-content">
+        <section id="dialogue-memory" class="dialogue-memory hidden is-collapsed" aria-live="polite">
+          <div class="dialogue-memory-head">
+            <div class="dialogue-memory-head-title">
+              <strong>本局记忆</strong>
+              <button id="dialogue-memory-toggle-button" type="button" class="soft-button">展开</button>
+              <button id="dialogue-memory-copy-button" type="button" class="soft-button">复制摘要</button>
+            </div>
+            <small id="dialogue-memory-updated">刚刚更新</small>
+            <small id="dialogue-memory-copy-status" class="dialogue-memory-copy-status"></small>
+          </div>
+          <div id="dialogue-memory-body" class="dialogue-memory-body">
+            <div class="dialogue-memory-grid">
+              <article class="dialogue-memory-card">
+                <span>场景回顾</span>
+                <p id="dialogue-memory-recap">这局刚开场，回顾会在这里滚动更新。</p>
+              </article>
+              <article class="dialogue-memory-card">
+                <span>人物动向</span>
+                <p id="dialogue-memory-cast">人物发言次序会在这里收住。</p>
+              </article>
+              <article class="dialogue-memory-card">
+                <span>你的位置</span>
+                <p id="dialogue-memory-perspective">你当前的入场方式会在这里提示。</p>
+              </article>
+              <article class="dialogue-memory-card">
+                <span>世界状态提示</span>
+                <p id="dialogue-memory-world">当前局势里的动作与情绪线会在这里提醒你。</p>
+              </article>
+            </div>
+            <div class="dialogue-memory-meta">
+              <span id="dialogue-memory-mode" class="dialogue-memory-mode">模式：未入场</span>
+            </div>
+          </div>
+        </section>
         <div id="dialogue-transcript" class="transcript"></div>
       </div>
     </div>

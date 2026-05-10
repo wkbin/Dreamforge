@@ -588,6 +588,34 @@ async function openPersonaReview() {
   await openPersonaReviewForCharacter("");
 }
 
+async function openWorkCharacterReview() {
+  if (!currentRunId || !currentRun) return;
+  const names = getRunCharacterNames(currentRun);
+  if (!names.length) {
+    setStatus("bookshelf-status", "这一卷里还没有可校对的人物。");
+    return;
+  }
+
+  let targetCharacter = "";
+  if (typeof buildWorkPriorityReviewItems === "function") {
+    const priority = buildWorkPriorityReviewItems(currentRun);
+    targetCharacter = String(priority?.[0]?.name || "").trim();
+  }
+  if (!targetCharacter) {
+    targetCharacter = names[0] || "";
+  }
+  if (!targetCharacter) {
+    setStatus("bookshelf-status", "这一卷里还没有可校对的人物。");
+    return;
+  }
+
+  if (typeof openCharacterOverview === "function") {
+    await openCharacterOverview(targetCharacter);
+    return;
+  }
+  await openPersonaReviewForCharacter(targetCharacter);
+}
+
 async function openQuickDialogueMode(mode) {
   await openNewDialogueSession();
   if (!currentRun || !el("dialogue-mode")) return;
@@ -1062,7 +1090,11 @@ function bindEvents() {
     openQuickDialogueMode("insert").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
   });
   bind("detail-stop-run-button", "click", handleStopRun);
-  bind("open-persona-review-button", "click", openPersonaReview);
+  bind("open-persona-review-button", "click", () => {
+    openWorkCharacterReview().catch((error) => {
+      setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
+    });
+  });
   bind("open-relation-details-button", "click", openRelationDetails);
   bind("detail-export-summary-button", "click", () => {
     if (typeof openWorkSummaryExport === "function") {
@@ -1146,6 +1178,18 @@ function bindEvents() {
       renderSourceHistory(currentRun);
     }
   });
+  bind("run-character-readiness-toggle", "click", () => {
+    characterReadinessExpanded = !characterReadinessExpanded;
+    if (currentRun) {
+      renderCharacterReadiness(currentRun);
+    }
+  });
+  bind("work-session-preview-toggle", "click", () => {
+    workSessionPreviewExpanded = !workSessionPreviewExpanded;
+    if (currentRun) {
+      renderWorkSessionPreview(currentRun);
+    }
+  });
   bind("back-to-bookshelf-button", "click", showBookshelfHome);
   bind("back-to-detail-button", "click", () => {
     chatModePickerOpen = false;
@@ -1166,6 +1210,16 @@ function bindEvents() {
   bind("delete-self-card-button", "click", handleDeleteSelfCard);
   bind("suggest-turn-button", "click", handleSuggestTurn);
   bind("prepare-turn-button", "click", handleSendTurn);
+  bind("dialogue-memory-copy-button", "click", () => {
+    if (typeof copyDialogueMemorySummary === "function") {
+      copyDialogueMemorySummary();
+    }
+  });
+  bind("dialogue-memory-toggle-button", "click", () => {
+    if (typeof toggleDialogueMemory === "function") {
+      toggleDialogueMemory();
+    }
+  });
 
   bind("dialogue-mode", "change", syncModeFields);
   bind("dialogue-self-card", "change", handleSelfCardSelectionChange);

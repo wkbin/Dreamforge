@@ -67,6 +67,10 @@ function setWorkOverviewLoading(loading, message = "") {
   if (progressRoot) {
     progressRoot.classList.toggle("is-loading-work", Boolean(loading));
   }
+  const loadingRoot = el("work-overview-loading");
+  if (loadingRoot) {
+    loadingRoot.classList.toggle("hidden", !loading);
+  }
   if (loading) {
     setText("detail-action-note", message || "正在载入这一卷...", "");
     toggle("detail-action-note", true);
@@ -431,10 +435,13 @@ function buildCharacterReadinessItems(run) {
 
 function renderCharacterReadiness(run) {
   const root = el("run-character-readiness");
+  const toggleButton = el("run-character-readiness-toggle");
   if (!root) return;
   root.innerHTML = "";
   const items = buildCharacterReadinessItems(run);
-  items.forEach((item) => {
+  const canExpand = items.length > 3;
+  const visibleItems = characterReadinessExpanded ? items : items.slice(0, 3);
+  visibleItems.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "work-character-card";
@@ -459,6 +466,10 @@ function renderCharacterReadiness(run) {
     });
     root.appendChild(button);
   });
+  if (toggleButton) {
+    toggleButton.classList.toggle("hidden", !canExpand);
+    toggleButton.textContent = characterReadinessExpanded ? "收起部分" : "展开全部";
+  }
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("run-character-readiness-empty", root.childElementCount === 0);
 }
@@ -589,16 +600,48 @@ function setWorkGraphStatusBadge(text, tone = "warning") {
 
 function renderWorkSessionPreview(run) {
   const root = el("work-session-preview");
+  const toggleButton = el("work-session-preview-toggle");
+  const resumeShell = el("work-session-resume-shell");
+  const resumeButton = el("work-session-resume-latest-button");
   if (!root) return;
   root.innerHTML = "";
   const novelTitle = runNovelTitle(run);
-  const sessions = (recentSessionsCache || [])
+  const characterNames = getRunCharacterNames(run);
+  const allSessions = (recentSessionsCache || [])
     .filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle)
-    .slice(0, 3);
-  sessions.forEach((item) => {
+    .sort((left, right) => String(right?.updated_at || "").localeCompare(String(left?.updated_at || "")));
+  const rankedSessions = [...allSessions].sort((left, right) => {
+    const rightMatch = Boolean(findMatchedSessionCharacter(getSessionPreviewSnippet(right), characterNames));
+    const leftMatch = Boolean(findMatchedSessionCharacter(getSessionPreviewSnippet(left), characterNames));
+    if (rightMatch !== leftMatch) {
+      return Number(rightMatch) - Number(leftMatch);
+    }
+    return String(right?.updated_at || "").localeCompare(String(left?.updated_at || ""));
+  });
+  const canExpand = rankedSessions.length > 3;
+  const visibleSessions = workSessionPreviewExpanded ? rankedSessions : rankedSessions.slice(0, 3);
+  if (resumeShell && resumeButton) {
+    const latest = allSessions[0] || null;
+    resumeShell.classList.toggle("hidden", !latest);
+    if (latest) {
+      const label = joinCharacters(latest.participants || []) || "最近会话";
+      resumeButton.textContent = `继续：${label}`;
+      resumeButton.onclick = () => {
+        openWorkSessionFromPreviewItem(latest).catch((error) => {
+          setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
+        });
+      };
+    } else {
+      resumeButton.onclick = null;
+      resumeButton.textContent = "继续最近一局";
+    }
+  }
+  visibleSessions.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "work-session-card";
+    const snippet = getSessionPreviewSnippet(item);
+    const matchInfo = findMatchedSessionCharacter(snippet, characterNames);
+    button.className = `work-session-card${matchInfo.character ? " has-match" : ""}`;
     const participantCount = Array.isArray(item.participants) ? item.participants.length : 0;
     button.innerHTML = `
       <div class="work-session-head">
@@ -607,31 +650,59 @@ function renderWorkSessionPreview(run) {
           <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"} · ${participantCount || 0} 人</small>
         </div>
       </div>
+      ${matchInfo.character ? `<span class="work-session-match">命中 ${escapeHtml(matchInfo.character)} · ${escapeHtml(matchInfo.reason)}</span>` : ""}
+      ${snippet ? `<p class="work-session-copy">${escapeHtml(snippet)}</p>` : ""}
       <div class="work-session-meta">
         <span>${formatWeakTime(item.updated_at) || "刚刚"}</span>
         <span>${humanizeSessionStatus(item.status)}</span>
       </div>
     `;
-    button.addEventListener("click", async () => {
-      currentRunId = item.run_id || currentRunId;
-      currentDialogueSessionId = item.session_id || "";
-      currentDialogueSession = null;
-      sessionBooting = true;
-      setComposerEnabled(false);
-      setSessionBadge("入场中");
-      renderSessionBooting(item.mode, item.participants || []);
-      updateWorkflowState();
-      const [freshRun, session] = await Promise.all([
-        apiJson(`/api/web/runs/${item.run_id}`),
-        apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
-      ]);
-      renderRun(freshRun, { preserveDialogue: true, suppressWorkflowUpdate: true });
-      await renderDialogueSession(session);
+    button.addEventListener("click", () => {
+      openWorkSessionFromPreviewItem(item).catch((error) => {
+        setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
+      });
     });
     root.appendChild(button);
   });
+  if (toggleButton) {
+    toggleButton.classList.toggle("hidden", !canExpand);
+    toggleButton.textContent = workSessionPreviewExpanded ? "收起部分" : "展开全部";
+  }
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("work-session-preview-empty", root.childElementCount === 0);
+}
+
+function getSessionPreviewSnippet(item) {
+  const serverSnippet = String(item?.last_entry_preview || "").trim();
+  return serverSnippet || readRecentSessionSnippet(item?.run_id, item?.session_id);
+}
+
+function findMatchedSessionCharacter(snippet, characterNames) {
+  const text = String(snippet || "").trim();
+  if (!text) return { character: "", reason: "" };
+  const matched = (Array.isArray(characterNames) ? characterNames : []).find((name) => {
+    const candidate = String(name || "").trim();
+    return candidate && text.includes(candidate);
+  }) || "";
+  return matched ? { character: matched, reason: "摘要提到" } : { character: "", reason: "" };
+}
+
+async function openWorkSessionFromPreviewItem(item) {
+  if (!item?.run_id || !item?.session_id) return;
+  currentRunId = item.run_id || currentRunId;
+  currentDialogueSessionId = item.session_id || "";
+  currentDialogueSession = null;
+  sessionBooting = true;
+  setComposerEnabled(false);
+  setSessionBadge("入场中");
+  renderSessionBooting(item.mode, item.participants || []);
+  updateWorkflowState();
+  const [freshRun, session] = await Promise.all([
+    apiJson(`/api/web/runs/${item.run_id}`),
+    apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
+  ]);
+  renderRun(freshRun, { preserveDialogue: true, suppressWorkflowUpdate: true });
+  await renderDialogueSession(session);
 }
 
 function openWorkSummaryExport() {
@@ -681,10 +752,66 @@ function renderCharacterOverview(payload) {
   renderCharacterOverviewHealthMetrics(snapshot);
   renderCharacterOverviewEvidenceMetrics(evidenceSnapshot);
   renderCharacterOverviewTrustSignals(payload, snapshot, evidenceSnapshot);
+  renderCharacterOverviewChangeTimeline(payload);
   renderCharacterOverviewKeyFields(fields);
   renderCharacterOverviewVoiceSummary(fields);
   renderCharacterOverviewRelationSummary(fields);
   renderCharacterOverviewAdvancedGroups(fields);
+}
+
+function buildCharacterOverviewChangeTimelineItems(character) {
+  const name = String(character || "").trim();
+  if (!name) return [];
+  const events = getCurrentRunEvents()
+    .filter((item) => String(item?.character || "").trim() === name && String(item?.stage || "").trim() === "persona_review_saved")
+    .slice()
+    .reverse();
+  return events.slice(0, 8).map((item) => {
+    const reviewSource = String(item?.review_source || "").trim();
+    const reviewNote = String(item?.review_note || "").trim();
+    const changedFields = Array.isArray(item?.changed_fields) ? item.changed_fields.filter(Boolean) : [];
+    const changedLabels = changedFields.map((field) => CHARACTER_OVERVIEW_FIELD_LABELS[field] || field).slice(0, 3);
+    let title = "字段已写回";
+    let badge = "手动校对";
+    let copy = String(item?.message || "").trim() || "这次改动已经写回这一卷。";
+    if (reviewSource === "character_overview_autofill") {
+      title = "AI补全已写回";
+      badge = formatCharacterOverviewAutofillSource(reviewNote);
+      copy = changedLabels.length ? `已补：${changedLabels.join("、")}。` : "AI 补全结果已写回。";
+    } else if (reviewSource === "character_overview_inline_edit") {
+      title = "手动改动已写回";
+      badge = "字段直改";
+      copy = changedLabels.length ? `你改了：${changedLabels.join("、")}。` : "手动改动已写回。";
+    }
+    return {
+      title,
+      badge,
+      copy,
+      updated: formatWeakTime(item?.timestamp || "") || "刚刚",
+    };
+  });
+}
+
+function renderCharacterOverviewChangeTimeline(payload) {
+  const root = el("character-overview-change-timeline");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = buildCharacterOverviewChangeTimelineItems(payload?.character || "");
+  items.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-change-item";
+    card.innerHTML = `
+      <div class="character-overview-change-item-head">
+        <strong>${item.title}</strong>
+        <small>${item.updated}</small>
+      </div>
+      <p>${item.copy}</p>
+      <span>${item.badge}</span>
+    `;
+    root.appendChild(card);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("character-overview-change-timeline-empty", root.childElementCount === 0);
 }
 
 function buildCharacterOverviewHealthSnapshot(fields) {
@@ -1555,6 +1682,8 @@ function renderRun(run, options = {}) {
   currentCharacterOverview = null;
   redistillPanelOpen = false;
   sourceHistoryExpanded = false;
+  characterReadinessExpanded = false;
+  workSessionPreviewExpanded = false;
   runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
   renderRunSummary(run);
   renderRunEvents(run);
