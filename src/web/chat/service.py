@@ -567,11 +567,26 @@ class DialogueService:
                     world = f"人物最新情绪线：{self._trim_summary_text(text, 78)}"
                     break
 
+        relation = "关系线还在铺，先让人物多接几拍。"
+        recent_character_speakers: list[str] = []
+        for item in transcript[-10:]:
+            if str(item.get("role", "")).strip() != "character":
+                continue
+            speaker = str(item.get("speaker", "")).strip()
+            if speaker:
+                recent_character_speakers.append(speaker)
+        if len(recent_character_speakers) >= 2:
+            chain = " → ".join(recent_character_speakers[-4:])
+            relation = f"最近接话链：{chain}"
+        elif cast_speakers:
+            relation = f"本局关键人物：{'、'.join(cast_speakers[:4])}"
+
         return {
             "mode": mode,
             "mode_display": mode_display,
             "recap": recap,
             "cast": cast,
+            "relation_drift": relation,
             "perspective": perspective,
             "world": world,
             "updated_at": str(session.get("updated_at", "")).strip(),

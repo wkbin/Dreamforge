@@ -2700,6 +2700,7 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertEqual(memory_summary.get("mode"), "insert")
             self.assertIn("最近一拍", memory_summary.get("recap", ""))
             self.assertIn("当前主要在场", memory_summary.get("cast", ""))
+            self.assertTrue(memory_summary.get("relation_drift"))
             self.assertIn("你以", memory_summary.get("perspective", ""))
             self.assertTrue(memory_summary.get("world"))
 
