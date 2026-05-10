@@ -597,12 +597,32 @@ function setWorkGraphStatusBadge(text, tone = "warning") {
 function renderWorkSessionPreview(run) {
   const root = el("work-session-preview");
   const toggleButton = el("work-session-preview-toggle");
+  const resumeShell = el("work-session-resume-shell");
+  const resumeButton = el("work-session-resume-latest-button");
   if (!root) return;
   root.innerHTML = "";
   const novelTitle = runNovelTitle(run);
-  const allSessions = (recentSessionsCache || []).filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle);
+  const allSessions = (recentSessionsCache || [])
+    .filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle)
+    .sort((left, right) => String(right?.updated_at || "").localeCompare(String(left?.updated_at || "")));
   const canExpand = allSessions.length > 3;
   const visibleSessions = workSessionPreviewExpanded ? allSessions : allSessions.slice(0, 3);
+  if (resumeShell && resumeButton) {
+    const latest = allSessions[0] || null;
+    resumeShell.classList.toggle("hidden", !latest);
+    if (latest) {
+      const label = joinCharacters(latest.participants || []) || "最近会话";
+      resumeButton.textContent = `继续：${label}`;
+      resumeButton.onclick = () => {
+        openWorkSessionFromPreviewItem(latest).catch((error) => {
+          setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
+        });
+      };
+    } else {
+      resumeButton.onclick = null;
+      resumeButton.textContent = "继续最近一局";
+    }
+  }
   visibleSessions.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -620,21 +640,10 @@ function renderWorkSessionPreview(run) {
         <span>${humanizeSessionStatus(item.status)}</span>
       </div>
     `;
-    button.addEventListener("click", async () => {
-      currentRunId = item.run_id || currentRunId;
-      currentDialogueSessionId = item.session_id || "";
-      currentDialogueSession = null;
-      sessionBooting = true;
-      setComposerEnabled(false);
-      setSessionBadge("入场中");
-      renderSessionBooting(item.mode, item.participants || []);
-      updateWorkflowState();
-      const [freshRun, session] = await Promise.all([
-        apiJson(`/api/web/runs/${item.run_id}`),
-        apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
-      ]);
-      renderRun(freshRun, { preserveDialogue: true, suppressWorkflowUpdate: true });
-      await renderDialogueSession(session);
+    button.addEventListener("click", () => {
+      openWorkSessionFromPreviewItem(item).catch((error) => {
+        setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
+      });
     });
     root.appendChild(button);
   });
@@ -644,6 +653,24 @@ function renderWorkSessionPreview(run) {
   }
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("work-session-preview-empty", root.childElementCount === 0);
+}
+
+async function openWorkSessionFromPreviewItem(item) {
+  if (!item?.run_id || !item?.session_id) return;
+  currentRunId = item.run_id || currentRunId;
+  currentDialogueSessionId = item.session_id || "";
+  currentDialogueSession = null;
+  sessionBooting = true;
+  setComposerEnabled(false);
+  setSessionBadge("入场中");
+  renderSessionBooting(item.mode, item.participants || []);
+  updateWorkflowState();
+  const [freshRun, session] = await Promise.all([
+    apiJson(`/api/web/runs/${item.run_id}`),
+    apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
+  ]);
+  renderRun(freshRun, { preserveDialogue: true, suppressWorkflowUpdate: true });
+  await renderDialogueSession(session);
 }
 
 function openWorkSummaryExport() {
