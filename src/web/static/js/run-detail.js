@@ -752,10 +752,66 @@ function renderCharacterOverview(payload) {
   renderCharacterOverviewHealthMetrics(snapshot);
   renderCharacterOverviewEvidenceMetrics(evidenceSnapshot);
   renderCharacterOverviewTrustSignals(payload, snapshot, evidenceSnapshot);
+  renderCharacterOverviewChangeTimeline(payload);
   renderCharacterOverviewKeyFields(fields);
   renderCharacterOverviewVoiceSummary(fields);
   renderCharacterOverviewRelationSummary(fields);
   renderCharacterOverviewAdvancedGroups(fields);
+}
+
+function buildCharacterOverviewChangeTimelineItems(character) {
+  const name = String(character || "").trim();
+  if (!name) return [];
+  const events = getCurrentRunEvents()
+    .filter((item) => String(item?.character || "").trim() === name && String(item?.stage || "").trim() === "persona_review_saved")
+    .slice()
+    .reverse();
+  return events.slice(0, 8).map((item) => {
+    const reviewSource = String(item?.review_source || "").trim();
+    const reviewNote = String(item?.review_note || "").trim();
+    const changedFields = Array.isArray(item?.changed_fields) ? item.changed_fields.filter(Boolean) : [];
+    const changedLabels = changedFields.map((field) => CHARACTER_OVERVIEW_FIELD_LABELS[field] || field).slice(0, 3);
+    let title = "字段已写回";
+    let badge = "手动校对";
+    let copy = String(item?.message || "").trim() || "这次改动已经写回这一卷。";
+    if (reviewSource === "character_overview_autofill") {
+      title = "AI补全已写回";
+      badge = formatCharacterOverviewAutofillSource(reviewNote);
+      copy = changedLabels.length ? `已补：${changedLabels.join("、")}。` : "AI 补全结果已写回。";
+    } else if (reviewSource === "character_overview_inline_edit") {
+      title = "手动改动已写回";
+      badge = "字段直改";
+      copy = changedLabels.length ? `你改了：${changedLabels.join("、")}。` : "手动改动已写回。";
+    }
+    return {
+      title,
+      badge,
+      copy,
+      updated: formatWeakTime(item?.timestamp || "") || "刚刚",
+    };
+  });
+}
+
+function renderCharacterOverviewChangeTimeline(payload) {
+  const root = el("character-overview-change-timeline");
+  if (!root) return;
+  root.innerHTML = "";
+  const items = buildCharacterOverviewChangeTimelineItems(payload?.character || "");
+  items.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "character-overview-change-item";
+    card.innerHTML = `
+      <div class="character-overview-change-item-head">
+        <strong>${item.title}</strong>
+        <small>${item.updated}</small>
+      </div>
+      <p>${item.copy}</p>
+      <span>${item.badge}</span>
+    `;
+    root.appendChild(card);
+  });
+  root.classList.toggle("hidden", root.childElementCount === 0);
+  toggle("character-overview-change-timeline-empty", root.childElementCount === 0);
 }
 
 function buildCharacterOverviewHealthSnapshot(fields) {

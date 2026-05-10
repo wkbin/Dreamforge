@@ -1210,6 +1210,16 @@ function bindEvents() {
   bind("delete-self-card-button", "click", handleDeleteSelfCard);
   bind("suggest-turn-button", "click", handleSuggestTurn);
   bind("prepare-turn-button", "click", handleSendTurn);
+  bind("dialogue-memory-copy-button", "click", () => {
+    if (typeof copyDialogueMemorySummary === "function") {
+      copyDialogueMemorySummary();
+    }
+  });
+  bind("dialogue-memory-toggle-button", "click", () => {
+    if (typeof toggleDialogueMemory === "function") {
+      toggleDialogueMemory();
+    }
+  });
 
   bind("dialogue-mode", "change", syncModeFields);
   bind("dialogue-self-card", "change", handleSelfCardSelectionChange);

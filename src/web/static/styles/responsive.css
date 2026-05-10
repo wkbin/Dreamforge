@@ -113,6 +113,14 @@
     height: auto;
   }
 
+  .dialogue-memory {
+    padding: 0.78rem 0.86rem 0.62rem;
+  }
+
+  .dialogue-memory-grid {
+    grid-template-columns: 1fr;
+  }
+
   .chat-detail {
     min-height: 20rem;
   }

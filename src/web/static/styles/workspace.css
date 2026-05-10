@@ -980,6 +980,58 @@
   font-size: 0.68rem;
 }
 
+.character-overview-change-timeline {
+  display: grid;
+  gap: 0.56rem;
+}
+
+.character-overview-change-item {
+  display: grid;
+  gap: 0.26rem;
+  padding: 0.78rem 0.86rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(170, 146, 127, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.character-overview-change-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.character-overview-change-item-head strong {
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.character-overview-change-item-head small,
+.character-overview-change-item p,
+.character-overview-change-item span {
+  color: var(--ink-faint);
+  font-size: 0.69rem;
+  line-height: 1.56;
+}
+
+.character-overview-change-item p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.character-overview-change-item span {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 1.25rem;
+  padding: 0 0.46rem;
+  border-radius: 999px;
+  background: rgba(184, 132, 113, 0.1);
+  color: var(--accent-strong);
+}
+
 .character-overview-grid {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;

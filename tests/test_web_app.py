@@ -2696,6 +2696,12 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertEqual(completed["transcript"][0]["role"], "scene")
             self.assertEqual(completed["transcript"][1]["role"], "user")
             self.assertEqual(completed["transcript"][2]["role"], "character")
+            memory_summary = completed.get("session_memory_summary", {})
+            self.assertEqual(memory_summary.get("mode"), "insert")
+            self.assertIn("最近一拍", memory_summary.get("recap", ""))
+            self.assertIn("当前主要在场", memory_summary.get("cast", ""))
+            self.assertIn("你以", memory_summary.get("perspective", ""))
+            self.assertTrue(memory_summary.get("world"))
 
 @unittest.skipUnless(TestClient and create_app, "fastapi test client is unavailable")
 class WebAppRouteTests(unittest.TestCase):
