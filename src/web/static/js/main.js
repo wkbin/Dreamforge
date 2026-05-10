@@ -1146,6 +1146,12 @@ function bindEvents() {
       renderSourceHistory(currentRun);
     }
   });
+  bind("run-character-readiness-toggle", "click", () => {
+    characterReadinessExpanded = !characterReadinessExpanded;
+    if (currentRun) {
+      renderCharacterReadiness(currentRun);
+    }
+  });
   bind("back-to-bookshelf-button", "click", showBookshelfHome);
   bind("back-to-detail-button", "click", () => {
     chatModePickerOpen = false;

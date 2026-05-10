@@ -26,6 +26,7 @@ var chatModePickerOpen = false;
 var newRunFlowOpen = false;
 var redistillPanelOpen = false;
 var sourceHistoryExpanded = false;
+var characterReadinessExpanded = false;
 var characterOverviewOpen = false;
 var currentCharacterOverview = null;
 var currentPersonaReview = null;

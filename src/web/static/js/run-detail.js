@@ -431,10 +431,13 @@ function buildCharacterReadinessItems(run) {
 
 function renderCharacterReadiness(run) {
   const root = el("run-character-readiness");
+  const toggleButton = el("run-character-readiness-toggle");
   if (!root) return;
   root.innerHTML = "";
   const items = buildCharacterReadinessItems(run);
-  items.forEach((item) => {
+  const canExpand = items.length > 3;
+  const visibleItems = characterReadinessExpanded ? items : items.slice(0, 3);
+  visibleItems.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "work-character-card";
@@ -459,6 +462,10 @@ function renderCharacterReadiness(run) {
     });
     root.appendChild(button);
   });
+  if (toggleButton) {
+    toggleButton.classList.toggle("hidden", !canExpand);
+    toggleButton.textContent = characterReadinessExpanded ? "收起部分" : "展开全部";
+  }
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("run-character-readiness-empty", root.childElementCount === 0);
 }
@@ -1555,6 +1562,7 @@ function renderRun(run, options = {}) {
   currentCharacterOverview = null;
   redistillPanelOpen = false;
   sourceHistoryExpanded = false;
+  characterReadinessExpanded = false;
   runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
   renderRunSummary(run);
   renderRunEvents(run);
