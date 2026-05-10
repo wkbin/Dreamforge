@@ -881,6 +881,9 @@ class ChatEngine:
         latest = session["history"][-6:]
         emotion = session["state"]["emotion"]
         relation_matrix = session["state"].setdefault("relation_matrix", {})
+        seen_keys = session["state"].setdefault("_processed_history_keys", [])
+        seen = set(str(item) for item in seen_keys if item)
+        touched: List[str] = []
         for item in latest:
             speaker = item["speaker"]
             if speaker in self.SYSTEM_SPEAKERS:
@@ -888,6 +891,12 @@ class ChatEngine:
 
             delta = 0
             msg = item["message"]
+            ts = int(item.get("ts", 0) or 0)
+            dedupe_key = f"{speaker}|{msg}|{ts}"
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            touched.append(dedupe_key)
             if any(k in msg for k in ("！", "怒", "生气", "质问")):
                 delta += 1
             if any(k in msg for k in ("冷静", "平静", "慢慢说", "理解")):
@@ -919,9 +928,32 @@ class ChatEngine:
                 "hostility": state["hostility"],
                 "ambiguity": state["ambiguity"],
             }
+            novel_id = str(session.get("novel_id", "")).strip()
+            if novel_id and hasattr(self.relation_store, "apply_dialogue_update"):
+                try:
+                    self.relation_store.apply_dialogue_update(
+                        novel_id,
+                        pair_key=key,
+                        message=msg,
+                        speaker=speaker,
+                        target=target,
+                    )
+                except Exception as exc:
+                    self.logger.debug("relation evolution skipped: %s", exc)
+        if touched:
+            session["state"]["_processed_history_keys"] = (list(seen_keys) + touched)[-240:]
 
     def _save_session(self, session: Dict[str, Any]) -> None:
         session["updated_at"] = int(time.time())
+        if hasattr(self.session_store, "compress_context"):
+            try:
+                self.session_store.compress_context(
+                    session,
+                    max_recent_turns=int(self.config.get("memory.recent_turns", 24) or 24),
+                    summary_char_limit=int(self.config.get("memory.summary_char_limit", 360) or 360),
+                )
+            except Exception as exc:
+                self.logger.debug("session context compression skipped: %s", exc)
         self.session_store.save_session(session)
         self._save_relation_snapshot(session)
 

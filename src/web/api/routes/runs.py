@@ -14,6 +14,7 @@ from src.web.api.schemas import (
     RestartRunRequest,
     SavePersonaReviewRequest,
     SuggestPersonaFieldRequest,
+    UpdateRelationDetailRequest,
 )
 from src.web.workflow import WebRunService
 
@@ -155,6 +156,21 @@ def list_relation_details(run_id: str, run_service: WebRunService = Depends(get_
         return run_service.list_relation_details(run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Relation graph not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/api/web/runs/{run_id}/relations/{pair_key}")
+def update_relation_details(
+    run_id: str,
+    pair_key: str,
+    payload: UpdateRelationDetailRequest,
+    run_service: WebRunService = Depends(get_run_service),
+) -> dict[str, Any]:
+    try:
+        return run_service.update_relation_detail(run_id, pair_key, model_to_dict(payload))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Relation pair not found.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

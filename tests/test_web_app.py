@@ -2636,6 +2636,50 @@ class WebAppRouteTests(unittest.TestCase):
                 (Path(tmp) / "runs" / payload["run_id"] / "artifacts" / "relations" / "hongloumeng_relations.html").exists()
             )
 
+    def test_relation_details_patch_updates_relation_and_conflicts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            relations_text = "\n".join(
+                [
+                    "- novel_id: hongloumeng",
+                    "## 林黛玉_贾宝玉",
+                    "- trust: 8",
+                    "- affection: 8",
+                    "- hostility: 1",
+                    "- relationship_type: 牵连",
+                    "- typical_interaction: 试探",
+                ]
+            )
+            service.ingest_relation_result(
+                payload["run_id"],
+                content_base64=base64.b64encode(relations_text.encode("utf-8")).decode("ascii"),
+                filename="hongloumeng_relations.md",
+            )
+            client = TestClient(create_app(service))
+            patched = client.patch(
+                f"/api/web/runs/{payload['run_id']}/relations/{'林黛玉_贾宝玉'}",
+                json={
+                    "hostility": 7,
+                    "relationship_type": "拉扯",
+                    "conflict_point": "真心反噬",
+                },
+            )
+            self.assertEqual(patched.status_code, 200)
+            data = patched.json()
+            self.assertEqual(data["items"][0]["relationship_type"], "拉扯")
+            self.assertGreaterEqual(data["conflict_count"], 1)
+
     def test_dialogue_session_prepare_and_ingest(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)

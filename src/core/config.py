@@ -103,6 +103,15 @@ class Config:
             "min_reply_relevance": 4,
             "llm_history_messages": 8,
         },
+        "memory": {
+            "recent_turns": 24,
+            "summary_char_limit": 360,
+            "long_term_max_entries": 400,
+            "vector_provider": "local",
+            "pinecone_api_key": "",
+            "pinecone_index": "",
+            "pinecone_namespace": "zaomeng",
+        },
         "paths": {
             "characters": "data/characters",
             "relations": "data/relations",

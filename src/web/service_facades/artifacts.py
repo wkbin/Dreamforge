@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from src.utils.file_utils import save_markdown_data
 from src.web.artifacts import (
     export_relations_source,
     load_profile_source,
@@ -20,6 +21,7 @@ from src.web.artifacts import (
     split_relation_pair,
 )
 from src.web.artifacts import list_relation_details as build_relation_details_payload
+from src.web.artifacts import update_relation_detail as apply_relation_detail_update
 from src.web.artifacts import (
     ingest_character_result as apply_character_ingest,
     ingest_relation_result as apply_relation_ingest,
@@ -170,9 +172,72 @@ class ArtifactServiceMixin:
             coerce_relation_evidence=coerce_relation_evidence,
         )
 
+    def update_relation_detail(self, run_id: str, pair_key: str, updates: dict[str, Any]) -> dict[str, Any]:
+        manifest = self._require_manifest(run_id)
+        relations_file = resolve_relations_file(manifest)
+        payload = load_relations_source(relations_file)
+        refreshed_payload = apply_relation_detail_update(
+            run_id=run_id,
+            manifest=manifest,
+            relations_file=relations_file,
+            payload=payload,
+            pair_key=pair_key,
+            updates=updates,
+            save_relations=lambda path, data: save_markdown_data(
+                path,
+                data,
+                title="RELATION_GRAPH",
+                summary=[
+                    f"- novel_id: {data.get('novel_id', '')}",
+                    f"- relation_count: {len(dict(data.get('relations', {}) or {}))}",
+                    f"- conflict_count: {len(list(data.get('conflicts', []) or []))}",
+                ],
+            ),
+            detect_conflicts=self._detect_relation_conflicts,
+        )
+        return build_relation_details_payload(
+            run_id=run_id,
+            manifest=manifest,
+            relations_file=relations_file,
+            payload=refreshed_payload,
+            split_relation_pair=split_relation_pair,
+            relation_type_label=relation_type_label,
+            coerce_relation_evidence=coerce_relation_evidence,
+        )
+
     def resolve_run_file(self, run_id: str, relative_path: str) -> Path:
         return resolve_run_file(
             runs_root=self.runs_root,
             run_id=run_id,
             relative_path=relative_path,
         )
+
+    @staticmethod
+    def _detect_relation_conflicts(relations: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+        conflicts: list[dict[str, Any]] = []
+        for pair_key, relation in (relations or {}).items():
+            if not isinstance(relation, dict):
+                continue
+            trust = int(relation.get("trust", 5) or 5)
+            affection = int(relation.get("affection", 5) or 5)
+            hostility = int(relation.get("hostility", 0) or 0)
+            ambiguity = int(relation.get("ambiguity", 3) or 3)
+            tags = []
+            if trust >= 8 and hostility >= 6:
+                tags.append("high_trust_high_hostility")
+            if affection >= 8 and hostility >= 6:
+                tags.append("high_affection_high_hostility")
+            if ambiguity >= 8 and max(trust, affection, hostility) >= 8:
+                tags.append("high_ambiguity_with_extreme_signal")
+            if tags:
+                conflicts.append(
+                    {
+                        "pair_key": pair_key,
+                        "tags": tags,
+                        "trust": trust,
+                        "affection": affection,
+                        "hostility": hostility,
+                        "ambiguity": ambiguity,
+                    }
+                )
+        return conflicts

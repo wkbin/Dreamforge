@@ -100,6 +100,42 @@
   line-height: 1.65;
 }
 
+.relation-detail-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.relation-detail-edit-grid label,
+.relation-detail-edit-text label {
+  display: grid;
+  gap: 0.2rem;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.relation-detail-edit-grid input,
+.relation-detail-edit-text input,
+.relation-detail-edit-text textarea {
+  border: 1px solid rgba(170, 146, 127, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  padding: 0.38rem 0.5rem;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.relation-detail-edit-text {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.relation-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .relation-detail-copy p,
 .relation-detail-evidence p {
   margin: 0;

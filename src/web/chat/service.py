@@ -11,6 +11,9 @@ from typing import Any
 from uuid import uuid4
 
 from src.web.artifacts.ingest import load_profile_source
+from src.core.config import Config
+from src.core.path_provider import PathProvider
+from src.core.session_store import MarkdownSessionStore
 
 
 def _utc_now() -> str:
@@ -46,6 +49,7 @@ class DialogueService:
 
     def __init__(self, runs_root: str | Path) -> None:
         self.runs_root = Path(runs_root)
+        self._memory_store: MarkdownSessionStore | None = None
 
     def list_sessions(self, run_id: str) -> list[dict[str, Any]]:
         root = self._sessions_root(run_id)
@@ -738,6 +742,18 @@ class DialogueService:
         elif cast_speakers:
             relation = f"本局关键人物：{'、'.join(cast_speakers[:4])}"
 
+        session_id = str(session.get("session_id", "")).strip()
+        semantic_hint = ""
+        if session_id and self._ensure_memory_store():
+            try:
+                hits = self._memory_store.search_long_term_memory(session_id, "关系 冲突 目标", top_k=1)
+            except Exception:
+                hits = []
+            if hits:
+                semantic_hint = str((hits[0] or {}).get("text", "")).strip()
+        if semantic_hint:
+            relation = f"{relation} · 长期记忆：{self._trim_summary_text(semantic_hint, 68)}"
+
         return {
             "mode": mode,
             "mode_display": mode_display,
@@ -748,6 +764,18 @@ class DialogueService:
             "world": world,
             "updated_at": str(session.get("updated_at", "")).strip(),
         }
+
+    def _ensure_memory_store(self) -> bool:
+        if self._memory_store is not None:
+            return True
+        try:
+            config = Config()
+            config.update({"paths": {"sessions": str(self.runs_root / "__session_memory_cache")}})
+            self._memory_store = MarkdownSessionStore(PathProvider(config))
+            return True
+        except Exception:
+            self._memory_store = None
+            return False
 
     @staticmethod
     def _trim_summary_text(value: str, limit: int) -> str:

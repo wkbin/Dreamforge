@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Dict
 
 from src.utils.file_utils import safe_filename
 from src.web.artifacts.ingest import decode_text_content
@@ -107,6 +108,7 @@ def list_relation_details(
     coerce_relation_evidence: Callable[[dict[str, Any]], list[str]],
 ) -> dict[str, Any]:
     relations = dict(payload.get("relations", {}) or {})
+    conflicts = list(payload.get("conflicts", []) or [])
     items: list[dict[str, Any]] = []
     for pair_key, relation in sorted(relations.items()):
         if not isinstance(relation, dict):
@@ -123,16 +125,68 @@ def list_relation_details(
                 "relation_change": str(relation.get("relation_change", "")).strip(),
                 "conflict_point": str(relation.get("conflict_point", "")).strip(),
                 "typical_interaction": str(relation.get("typical_interaction", "")).strip(),
+                "ambiguity": int(relation.get("ambiguity", 3) or 3),
                 "evidence_lines": coerce_relation_evidence(relation),
             }
         )
+    conflict_map = {}
+    for item in conflicts:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("pair_key", "")).strip()
+        if not key:
+            continue
+        conflict_map[key] = item
     return {
         "run_id": run_id,
         "novel_id": str(manifest.get("novel_id", "")).strip(),
         "relations_file": str(relations_file.resolve()),
         "relation_count": len(items),
+        "conflict_count": len(conflict_map),
+        "conflicts": list(conflict_map.values()),
         "items": items,
     }
+
+
+def update_relation_detail(
+    *,
+    run_id: str,
+    manifest: dict[str, Any],
+    relations_file: Path,
+    payload: dict[str, Any],
+    pair_key: str,
+    updates: dict[str, Any],
+    save_relations: Callable[[Path, dict[str, Any]], None],
+    detect_conflicts: Callable[[Dict[str, Dict[str, Any]]], list[Dict[str, Any]]],
+) -> dict[str, Any]:
+    novel_id = str(manifest.get("novel_id", "")).strip() or run_id
+    relations = dict(payload.get("relations", {}) or {})
+    if pair_key not in relations or not isinstance(relations.get(pair_key), dict):
+        raise FileNotFoundError(pair_key)
+
+    relation = dict(relations[pair_key])
+    metric_fields = ("trust", "affection", "hostility", "ambiguity")
+    text_fields = ("relationship_type", "relation_change", "conflict_point", "typical_interaction")
+    for field in metric_fields:
+        if field not in updates:
+            continue
+        try:
+            relation[field] = max(0, min(10, int(updates.get(field, relation.get(field, 0)))))
+        except (TypeError, ValueError):
+            continue
+    for field in text_fields:
+        if field not in updates:
+            continue
+        relation[field] = str(updates.get(field, relation.get(field, "")) or "").strip()
+    relation["updated_at"] = int(time.time())
+    relations[pair_key] = relation
+
+    updated_payload = dict(payload)
+    updated_payload["novel_id"] = novel_id
+    updated_payload["relations"] = relations
+    updated_payload["conflicts"] = detect_conflicts(relations)
+    save_relations(relations_file, updated_payload)
+    return updated_payload
 
 
 def resolve_run_file(*, runs_root: Path, run_id: str, relative_path: str) -> Path:
