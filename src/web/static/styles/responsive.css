@@ -48,6 +48,10 @@
     overflow: visible;
   }
 
+  .experience-shell.dialogue-layout .chat-shell {
+    display: block;
+  }
+
   .library-rail {
     grid-template-rows: auto;
     width: 100%;
@@ -90,6 +94,7 @@
     padding: 24px 16px 20px;
     max-height: min(56vh, 32rem);
     min-height: 18rem;
+    height: auto;
   }
 
   .chat-detail {

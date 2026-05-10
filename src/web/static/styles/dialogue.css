@@ -1,15 +1,17 @@
 .chat-shell {
   min-height: 0;
-  overflow: visible;
+  height: 100%;
+  overflow: hidden;
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  display: grid;
 }
 
 .chat-empty,
 .chat-detail {
   min-height: 0;
-  height: auto;
+  height: 100%;
 }
 
 .chat-empty {
@@ -19,12 +21,14 @@
 }
 
 .chat-detail {
-  min-height: 26rem;
+  min-height: 0;
+  display: grid;
 }
 
 .chat-content {
-  height: auto;
-  min-height: 26rem;
+  height: 100%;
+  min-height: 0;
+  display: grid;
   border-radius: 32px;
   background: linear-gradient(180deg, rgba(255, 252, 248, 0.86), rgba(255, 248, 243, 0.76));
   box-shadow: var(--shadow);
@@ -32,8 +36,9 @@
 }
 
 .transcript {
-  max-height: min(62vh, 46rem);
-  min-height: 26rem;
+  max-height: none;
+  min-height: 0;
+  height: 100%;
   overflow: auto;
   display: grid;
   gap: 18px;
