@@ -606,8 +606,16 @@ function renderWorkSessionPreview(run) {
   const allSessions = (recentSessionsCache || [])
     .filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle)
     .sort((left, right) => String(right?.updated_at || "").localeCompare(String(left?.updated_at || "")));
-  const canExpand = allSessions.length > 3;
-  const visibleSessions = workSessionPreviewExpanded ? allSessions : allSessions.slice(0, 3);
+  const rankedSessions = [...allSessions].sort((left, right) => {
+    const rightMatch = Boolean(findMatchedSessionCharacter(getSessionPreviewSnippet(right), characterNames));
+    const leftMatch = Boolean(findMatchedSessionCharacter(getSessionPreviewSnippet(left), characterNames));
+    if (rightMatch !== leftMatch) {
+      return Number(rightMatch) - Number(leftMatch);
+    }
+    return String(right?.updated_at || "").localeCompare(String(left?.updated_at || ""));
+  });
+  const canExpand = rankedSessions.length > 3;
+  const visibleSessions = workSessionPreviewExpanded ? rankedSessions : rankedSessions.slice(0, 3);
   if (resumeShell && resumeButton) {
     const latest = allSessions[0] || null;
     resumeShell.classList.toggle("hidden", !latest);
@@ -627,8 +635,7 @@ function renderWorkSessionPreview(run) {
   visibleSessions.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
-    const serverSnippet = String(item.last_entry_preview || "").trim();
-    const snippet = serverSnippet || readRecentSessionSnippet(item.run_id, item.session_id);
+    const snippet = getSessionPreviewSnippet(item);
     const matchedCharacter = findMatchedSessionCharacter(snippet, characterNames);
     button.className = `work-session-card${matchedCharacter ? " has-match" : ""}`;
     const participantCount = Array.isArray(item.participants) ? item.participants.length : 0;
@@ -659,6 +666,11 @@ function renderWorkSessionPreview(run) {
   }
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("work-session-preview-empty", root.childElementCount === 0);
+}
+
+function getSessionPreviewSnippet(item) {
+  const serverSnippet = String(item?.last_entry_preview || "").trim();
+  return serverSnippet || readRecentSessionSnippet(item?.run_id, item?.session_id);
 }
 
 function findMatchedSessionCharacter(snippet, characterNames) {
