@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +18,32 @@ def _utc_now() -> str:
 
 
 class DialogueService:
+    _LEAVE_TOKENS = (
+        "离开",
+        "离席",
+        "退场",
+        "告退",
+        "先走",
+        "退下",
+        "走了",
+        "离去",
+        "回房",
+        "回去了",
+        "退出",
+    )
+    _RETURN_TOKENS = (
+        "回来",
+        "回来了",
+        "折返",
+        "再入",
+        "再至",
+        "现身",
+        "又到了",
+        "入场",
+        "进门",
+        "重回",
+    )
+
     def __init__(self, runs_root: str | Path) -> None:
         self.runs_root = Path(runs_root)
 
@@ -91,18 +119,24 @@ class DialogueService:
         *,
         session_id: str,
         message: str,
+        message_kind: str = "dialogue",
         speaker_override: str = "",
         transcript_message: str | None = None,
     ) -> dict[str, Any]:
         run_id = str(run_manifest.get("run_id", "")).strip()
         session = self._read_json(self._session_file(run_id, session_id))
+        normalized_message_kind = self._normalize_message_kind(message_kind)
+        effective_speaker_override = str(speaker_override or "").strip()
+        if normalized_message_kind == "narration" and not effective_speaker_override:
+            effective_speaker_override = "场景提示"
         turn_id = f"turn-{uuid4().hex[:8]}"
         payload = self._build_turn_payload(
             run_manifest,
             session,
             turn_id=turn_id,
             message=message,
-            speaker_override=speaker_override,
+            speaker_override=effective_speaker_override,
+            message_kind=normalized_message_kind,
         )
         turn_dir = self._session_dir(run_id, session_id) / "turns"
         turn_dir.mkdir(parents=True, exist_ok=True)
@@ -112,9 +146,11 @@ class DialogueService:
             "turn_id": turn_id,
             "user_message": message,
             "transcript_message": message if transcript_message is None else transcript_message,
+            "message_kind": normalized_message_kind,
             "speaker": payload["input"]["speaker"],
             "mode": payload["mode"],
             "participants": list(payload["input"]["participants"]),
+            "active_participants": list(payload["input"].get("active_participants", [])),
             "response_limit_hint": payload["host_action"]["response_limit_hint"],
             "payload_path": str(turn_payload_path.resolve()),
             "created_at": _utc_now(),
@@ -214,10 +250,12 @@ class DialogueService:
         *,
         turn_id: str,
         message: str,
+        message_kind: str = "dialogue",
         speaker_override: str = "",
     ) -> dict[str, Any]:
         participants = list(session.get("participants", []))
         mode = str(session.get("mode", "observe")).strip() or "observe"
+        normalized_message_kind = self._normalize_message_kind(message_kind)
         speaker = str(speaker_override or "").strip() or (
             session.get("controlled_character", "")
             if mode == "act"
@@ -257,15 +295,27 @@ class DialogueService:
                 }
             )
 
-        latest_history = list(session.get("history", []))[-8:]
+        full_history = list(session.get("history", []))
+        latest_history = full_history[-8:]
+        active_participants = self._resolve_active_participants(participants, full_history, mode, speaker)
+        response_limit_hint = self._choose_response_limit_hint(
+            mode=mode,
+            active_count=len(active_participants),
+            turn_id=turn_id,
+            message_kind=normalized_message_kind,
+        )
         instructions = {
             "mode": mode,
             "generation_goal": "Keep every reply faithful to the persona bundle, relationship context, and scene mode.",
             "mode_rule": self._mode_rule(mode),
-            "speaker_rule": self._speaker_rule(mode, session),
-            "response_style": self._response_style_rule(mode),
+            "speaker_rule": self._speaker_rule(mode, session, normalized_message_kind),
+            "response_style": self._response_style_rule(mode, normalized_message_kind),
+            "response_count_rule": (
+                f"Return 1-{response_limit_hint} in-world replies. "
+                "Let only characters who are currently present respond; do not force every participant to speak each turn."
+            ),
         }
-        responder_hints = self._responder_hints(mode, participants, speaker)
+        responder_hints = self._responder_hints(mode, active_participants, speaker)
 
         return {
             "kind": "zaomeng_dialogue_turn",
@@ -277,7 +327,9 @@ class DialogueService:
             "input": {
                 "speaker": speaker,
                 "message": message,
+                "message_kind": normalized_message_kind,
                 "participants": participants,
+                "active_participants": active_participants,
                 "controlled_character": session.get("controlled_character", ""),
                 "self_insert": dict(session.get("self_insert", {})),
             },
@@ -293,7 +345,7 @@ class DialogueService:
                 "expected_output": [
                     {"speaker": "CharacterName", "message": "..."}
                 ],
-                "response_limit_hint": 3 if mode == "observe" else 2,
+                "response_limit_hint": response_limit_hint,
                 "output_rule": "Return only in-world character replies. Do not explain the workflow or mention prompts.",
             },
             "host_prompt_brief": self._host_prompt_brief(mode, speaker, participants),
@@ -309,7 +361,9 @@ class DialogueService:
         return "The user is observing. Characters should continue the scene among themselves."
 
     @staticmethod
-    def _speaker_rule(mode: str, session: dict[str, Any]) -> str:
+    def _speaker_rule(mode: str, session: dict[str, Any], message_kind: str = "dialogue") -> str:
+        if message_kind == "narration":
+            return "Treat the user message as an in-world scene cue or director beat, not as a cast member's spoken line."
         if mode == "act":
             return f"Treat the user message as spoken by {session.get('controlled_character', '')}."
         if mode == "insert":
@@ -321,9 +375,14 @@ class DialogueService:
         return "Treat the user message as a scene steering hint. Characters reply in-world."
 
     @staticmethod
-    def _response_style_rule(mode: str) -> str:
+    def _response_style_rule(mode: str, message_kind: str = "dialogue") -> str:
+        if message_kind == "narration":
+            return (
+                "The cue is scene-driving. Let the cast react with concrete action/emotion changes; "
+                "you may include one short 场景提示 or 旁白 line when needed."
+            )
         if mode == "observe":
-            return "Prefer 2-3 short in-character replies that move the scene forward naturally."
+            return "Prefer 2-4 short in-character replies when the scene is busy, and fewer when it is quiet."
         if mode == "act":
             return "Reply as the other characters addressing the controlled role directly."
         return "Reply as the cast addressing the self-insert user naturally inside the scene."
@@ -422,6 +481,102 @@ class DialogueService:
         return f"Help the user guide {', '.join(participants)} with one short prompt that clearly pushes the scene into its next beat."
 
     @staticmethod
+    def _normalize_message_kind(message_kind: str) -> str:
+        kind = str(message_kind or "").strip().lower()
+        if kind in {"narration", "scene", "scene_prompt", "director"}:
+            return "narration"
+        return "dialogue"
+
+    @classmethod
+    def _resolve_active_participants(
+        cls,
+        participants: list[str],
+        history: list[dict[str, Any]],
+        mode: str,
+        speaker: str,
+    ) -> list[str]:
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for name in participants:
+            normalized = str(name or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        if not deduped:
+            return []
+
+        departed = cls._infer_departed_participants(deduped, history)
+        active = [name for name in deduped if name not in departed]
+        if mode == "act":
+            active = [name for name in active if name != speaker]
+        if active:
+            return active
+        # Never end up with an empty speaker pool.
+        fallback = [name for name in deduped if not (mode == "act" and name == speaker)]
+        return fallback or deduped[:1]
+
+    @classmethod
+    def _infer_departed_participants(cls, participants: list[str], history: list[dict[str, Any]]) -> set[str]:
+        departed: set[str] = set()
+        recent = list(history or [])[-16:]
+        for entry in recent:
+            speaker = str(entry.get("speaker", "")).strip()
+            message = str(entry.get("message", "")).strip()
+            if not message:
+                continue
+            for name in participants:
+                if name not in message:
+                    continue
+                if cls._contains_return_signal(message, name):
+                    departed.discard(name)
+                    continue
+                if cls._contains_leave_signal(message, name):
+                    departed.add(name)
+            # If the character themselves says they are leaving, treat as departed.
+            if speaker in participants and cls._self_exit_signal(message):
+                departed.add(speaker)
+        return departed
+
+    @classmethod
+    def _contains_leave_signal(cls, text: str, name: str) -> bool:
+        compact = re.sub(r"\s+", "", str(text or ""))
+        for token in cls._LEAVE_TOKENS:
+            if f"{name}{token}" in compact or f"{token}{name}" in compact:
+                return True
+        return False
+
+    @classmethod
+    def _contains_return_signal(cls, text: str, name: str) -> bool:
+        compact = re.sub(r"\s+", "", str(text or ""))
+        for token in cls._RETURN_TOKENS:
+            if f"{name}{token}" in compact or f"{token}{name}" in compact:
+                return True
+        return False
+
+    @classmethod
+    def _self_exit_signal(cls, text: str) -> bool:
+        compact = re.sub(r"\s+", "", str(text or ""))
+        return any(token in compact for token in ("我先走", "我先告退", "我先退下", "我先回房", "我先离开", "容我告退"))
+
+    @staticmethod
+    def _choose_response_limit_hint(*, mode: str, active_count: int, turn_id: str, message_kind: str) -> int:
+        if active_count <= 0:
+            return 1
+        seed = sum(ord(ch) for ch in str(turn_id or ""))
+        rng = random.Random(seed)
+        if mode == "observe":
+            upper = min(4, max(2, active_count))
+            lower = 3 if active_count >= 4 else 2
+            if message_kind == "narration":
+                upper = min(5, max(upper, 3))
+                lower = min(upper, 2 if active_count <= 2 else 3)
+            return rng.randint(lower, upper)
+        upper = min(3, max(1, active_count))
+        lower = 1 if active_count <= 1 else 2
+        return rng.randint(lower, upper)
+
+    @staticmethod
     def _load_text_excerpt(path_text: str, *, limit: int) -> str:
         path = Path(str(path_text or ""))
         if not path.exists() or not path.is_file():
@@ -498,8 +653,10 @@ class DialogueService:
             "turn_id": str(pending.get("turn_id", "")).strip(),
             "speaker": str(pending.get("speaker", "")).strip(),
             "message": str(pending.get("user_message", "")).strip(),
+            "message_kind": self._normalize_message_kind(str(pending.get("message_kind", "")).strip()),
             "mode": str(pending.get("mode", "")).strip(),
             "participants": list(pending.get("participants", [])),
+            "active_participants": list(pending.get("active_participants", [])),
             "response_limit_hint": int(pending.get("response_limit_hint", 0) or 0),
         }
 

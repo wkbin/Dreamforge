@@ -2685,6 +2685,7 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertIn("pending_turn_payload", prepared["file_urls"])
             self.assertEqual(prepared["session_card"]["self_insert"]["display_name"], "Self")
             self.assertEqual(prepared["pending_turn_summary"]["speaker"], "Self")
+            self.assertEqual(prepared["pending_turn_summary"]["message_kind"], "dialogue")
 
             completed = service.ingest_dialogue_turn(
                 payload["run_id"],
@@ -3309,7 +3310,7 @@ class WebAppRouteTests(unittest.TestCase):
             ):
                 reply_response = client.post(
                     f"/api/web/runs/{run['run_id']}/dialogue/sessions/{session['session_id']}/reply",
-                    json={"message": "你们先聊几句。"},
+                    json={"message": "你们先聊几句。", "message_kind": "narration"},
                 )
 
             self.assertEqual(reply_response.status_code, 200)
@@ -3522,6 +3523,111 @@ class WebAppRouteTests(unittest.TestCase):
             payload = reply_response.json()
             self.assertEqual(payload["status"], "ready")
             self.assertEqual(payload["transcript"][-1]["speaker"], "林黛玉")
+
+
+class DialogueTurnBehaviorTests(unittest.TestCase):
+    def test_prepare_turn_narration_sets_scene_speaker_and_kind(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉", "薛宝钗"],
+            )
+            for name in ("林黛玉", "贾宝玉", "薛宝钗"):
+                service.ingest_character_result(
+                    payload["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                service,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "开场。"}],
+            ):
+                session = service.create_dialogue_session(
+                    payload["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉", "薛宝钗"],
+                )
+
+            prepared = service.prepare_dialogue_turn(
+                payload["run_id"],
+                session_id=session["session_id"],
+                message="门外忽然传来脚步声，屋里人都静了一拍。",
+                message_kind="narration",
+            )
+            pending = prepared.get("pending_turn_summary", {})
+            self.assertEqual(pending.get("message_kind"), "narration")
+            self.assertEqual(pending.get("speaker"), "场景提示")
+            self.assertTrue(2 <= int(pending.get("response_limit_hint", 0)) <= 5)
+
+    def test_prepare_turn_filters_departed_participants_from_active_pool(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉", "薛宝钗"],
+            )
+            for name in ("林黛玉", "贾宝玉", "薛宝钗"):
+                service.ingest_character_result(
+                    payload["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                service,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "开场。"}],
+            ):
+                session = service.create_dialogue_session(
+                    payload["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉", "薛宝钗"],
+                )
+
+            service.prepare_dialogue_turn(
+                payload["run_id"],
+                session_id=session["session_id"],
+                message="先铺一下场子。",
+                message_kind="narration",
+            )
+            service.ingest_dialogue_turn(
+                payload["run_id"],
+                session_id=session["session_id"],
+                responses=[
+                    {"speaker": "旁白", "message": "薛宝钗告退回房，先离开了。"},
+                    {"speaker": "林黛玉", "message": "那便先由我们说。"},
+                ],
+            )
+            prepared = service.prepare_dialogue_turn(
+                payload["run_id"],
+                session_id=session["session_id"],
+                message="你们接着说。",
+            )
+            active = prepared.get("pending_turn_summary", {}).get("active_participants", [])
+            self.assertIn("林黛玉", active)
+            self.assertIn("贾宝玉", active)
+            self.assertNotIn("薛宝钗", active)
 
 
 if __name__ == "__main__":

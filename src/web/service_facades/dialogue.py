@@ -76,16 +76,36 @@ class DialogueServiceMixin:
         self._ensure_run_exists(run_id)
         self.dialogue.delete_session(run_id, session_id)
 
-    def prepare_dialogue_turn(self, run_id: str, *, session_id: str, message: str) -> dict[str, Any]:
+    def prepare_dialogue_turn(
+        self,
+        run_id: str,
+        *,
+        session_id: str,
+        message: str,
+        message_kind: str = "dialogue",
+    ) -> dict[str, Any]:
         manifest = self._require_manifest(run_id)
-        return self.dialogue.prepare_turn(manifest, session_id=session_id, message=message)
+        return self.dialogue.prepare_turn(
+            manifest,
+            session_id=session_id,
+            message=message,
+            message_kind=message_kind,
+        )
 
-    def reply_dialogue_turn(self, run_id: str, *, session_id: str, message: str) -> dict[str, Any]:
+    def reply_dialogue_turn(
+        self,
+        run_id: str,
+        *,
+        session_id: str,
+        message: str,
+        message_kind: str = "dialogue",
+    ) -> dict[str, Any]:
         manifest = self._require_manifest(run_id)
         return reply_dialogue_turn_payload(
             run_id=run_id,
             session_id=session_id,
             message=message,
+            message_kind=message_kind,
             manifest=manifest,
             dialogue=self.dialogue,
             load_pending_turn_payload=self._load_pending_turn_payload,

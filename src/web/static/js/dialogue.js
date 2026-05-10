@@ -334,17 +334,19 @@ function renderSessionBooting(mode, participants) {
   renderTranscript(items);
 }
 
-function buildOptimisticTranscript(session, message) {
+function buildOptimisticTranscript(session, message, messageKind = "dialogue") {
   const transcript = Array.isArray(session?.transcript) ? [...session.transcript] : [];
   const mode = session?.mode || session?.session_card?.mode || "observe";
   const selfInsert = session?.session_card?.self_insert || {};
-  const speaker =
-    mode === "act"
+  const isNarration = String(messageKind || "").trim() === "narration";
+  const speaker = isNarration
+    ? "场景提示"
+    : mode === "act"
       ? session?.session_card?.controlled_character || "你"
       : mode === "insert"
         ? selfInsert.display_name || "你"
         : "你";
-  const role = mode === "observe" ? "director" : "user";
+  const role = isNarration ? "scene" : mode === "observe" ? "director" : "user";
   transcript.push({ speaker, message, role });
   transcript.push({ speaker: "", message: "正在生成回复...", role: "loading" });
   return transcript;

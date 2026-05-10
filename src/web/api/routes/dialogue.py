@@ -79,7 +79,12 @@ def prepare_dialogue_turn(
     run_service: WebRunService = Depends(get_run_service),
 ) -> dict[str, Any]:
     try:
-        return run_service.prepare_dialogue_turn(run_id, session_id=session_id, message=payload.message)
+        return run_service.prepare_dialogue_turn(
+            run_id,
+            session_id=session_id,
+            message=payload.message,
+            message_kind=payload.message_kind,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Session not found.") from exc
     except ValueError as exc:
@@ -94,7 +99,12 @@ def reply_dialogue_turn(
     run_service: WebRunService = Depends(get_run_service),
 ) -> dict[str, Any]:
     try:
-        return run_service.reply_dialogue_turn(run_id, session_id=session_id, message=payload.message)
+        return run_service.reply_dialogue_turn(
+            run_id,
+            session_id=session_id,
+            message=payload.message,
+            message_kind=payload.message_kind,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Session not found.") from exc
     except ValueError as exc:
