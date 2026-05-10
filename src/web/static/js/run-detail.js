@@ -602,6 +602,7 @@ function renderWorkSessionPreview(run) {
   if (!root) return;
   root.innerHTML = "";
   const novelTitle = runNovelTitle(run);
+  const characterNames = getRunCharacterNames(run);
   const allSessions = (recentSessionsCache || [])
     .filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle)
     .sort((left, right) => String(right?.updated_at || "").localeCompare(String(left?.updated_at || "")));
@@ -626,10 +627,11 @@ function renderWorkSessionPreview(run) {
   visibleSessions.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "work-session-card";
-    const participantCount = Array.isArray(item.participants) ? item.participants.length : 0;
     const serverSnippet = String(item.last_entry_preview || "").trim();
     const snippet = serverSnippet || readRecentSessionSnippet(item.run_id, item.session_id);
+    const matchedCharacter = findMatchedSessionCharacter(snippet, characterNames);
+    button.className = `work-session-card${matchedCharacter ? " has-match" : ""}`;
+    const participantCount = Array.isArray(item.participants) ? item.participants.length : 0;
     button.innerHTML = `
       <div class="work-session-head">
         <div class="work-session-title">
@@ -637,6 +639,7 @@ function renderWorkSessionPreview(run) {
           <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"} · ${participantCount || 0} 人</small>
         </div>
       </div>
+      ${matchedCharacter ? `<span class="work-session-match">命中 ${escapeHtml(matchedCharacter)}</span>` : ""}
       ${snippet ? `<p class="work-session-copy">${escapeHtml(snippet)}</p>` : ""}
       <div class="work-session-meta">
         <span>${formatWeakTime(item.updated_at) || "刚刚"}</span>
@@ -656,6 +659,15 @@ function renderWorkSessionPreview(run) {
   }
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("work-session-preview-empty", root.childElementCount === 0);
+}
+
+function findMatchedSessionCharacter(snippet, characterNames) {
+  const text = String(snippet || "").trim();
+  if (!text) return "";
+  return (Array.isArray(characterNames) ? characterNames : []).find((name) => {
+    const candidate = String(name || "").trim();
+    return candidate && text.includes(candidate);
+  }) || "";
 }
 
 async function openWorkSessionFromPreviewItem(item) {

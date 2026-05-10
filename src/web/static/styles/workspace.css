@@ -634,6 +634,19 @@
   overflow: hidden;
 }
 
+.work-session-match {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 1.35rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: rgba(184, 132, 113, 0.12);
+  color: var(--accent-strong);
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
 .work-character-meta,
 .work-session-meta {
   display: flex;
@@ -676,6 +689,11 @@
     border-color 180ms ease,
     background 180ms ease,
     box-shadow 180ms ease;
+}
+
+.work-session-card.has-match {
+  border-color: rgba(184, 132, 113, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(250, 241, 235, 0.86));
 }
 
 .work-session-card:hover {
