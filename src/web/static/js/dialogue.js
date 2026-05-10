@@ -145,9 +145,26 @@ function buildOptimisticTranscript(session, message) {
   return transcript;
 }
 
+function latestSessionSnippetFromTranscript(items) {
+  const rows = Array.isArray(items) ? items : [];
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const entry = rows[index] || {};
+    const role = String(entry.role || "").trim();
+    const message = String(entry.message || "").trim();
+    if (!message) continue;
+    if (role === "loading") continue;
+    return message;
+  }
+  return "";
+}
+
 async function renderDialogueSession(session) {
   currentDialogueSessionId = session.session_id || "";
   currentDialogueSession = session;
+  const latestSnippet = latestSessionSnippetFromTranscript(session?.transcript);
+  if (latestSnippet) {
+    rememberRecentSessionSnippet(currentRunId, currentDialogueSessionId, latestSnippet);
+  }
   sessionBooting = false;
   setComposerEnabled(true);
   if (typeof syncSuggestButtonVisibility === "function") {

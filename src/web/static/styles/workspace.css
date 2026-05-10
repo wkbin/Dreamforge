@@ -626,6 +626,14 @@
   line-height: 1.55;
 }
 
+.work-session-copy {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .work-character-meta,
 .work-session-meta {
   display: flex;

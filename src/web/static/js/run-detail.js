@@ -628,6 +628,7 @@ function renderWorkSessionPreview(run) {
     button.type = "button";
     button.className = "work-session-card";
     const participantCount = Array.isArray(item.participants) ? item.participants.length : 0;
+    const snippet = readRecentSessionSnippet(item.run_id, item.session_id);
     button.innerHTML = `
       <div class="work-session-head">
         <div class="work-session-title">
@@ -635,6 +636,7 @@ function renderWorkSessionPreview(run) {
           <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"} · ${participantCount || 0} 人</small>
         </div>
       </div>
+      ${snippet ? `<p class="work-session-copy">${escapeHtml(snippet)}</p>` : ""}
       <div class="work-session-meta">
         <span>${formatWeakTime(item.updated_at) || "刚刚"}</span>
         <span>${humanizeSessionStatus(item.status)}</span>
