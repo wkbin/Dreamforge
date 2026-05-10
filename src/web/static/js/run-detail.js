@@ -596,13 +596,14 @@ function setWorkGraphStatusBadge(text, tone = "warning") {
 
 function renderWorkSessionPreview(run) {
   const root = el("work-session-preview");
+  const toggleButton = el("work-session-preview-toggle");
   if (!root) return;
   root.innerHTML = "";
   const novelTitle = runNovelTitle(run);
-  const sessions = (recentSessionsCache || [])
-    .filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle)
-    .slice(0, 3);
-  sessions.forEach((item) => {
+  const allSessions = (recentSessionsCache || []).filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle);
+  const canExpand = allSessions.length > 3;
+  const visibleSessions = workSessionPreviewExpanded ? allSessions : allSessions.slice(0, 3);
+  visibleSessions.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "work-session-card";
@@ -637,6 +638,10 @@ function renderWorkSessionPreview(run) {
     });
     root.appendChild(button);
   });
+  if (toggleButton) {
+    toggleButton.classList.toggle("hidden", !canExpand);
+    toggleButton.textContent = workSessionPreviewExpanded ? "收起部分" : "展开全部";
+  }
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle("work-session-preview-empty", root.childElementCount === 0);
 }
@@ -1563,6 +1568,7 @@ function renderRun(run, options = {}) {
   redistillPanelOpen = false;
   sourceHistoryExpanded = false;
   characterReadinessExpanded = false;
+  workSessionPreviewExpanded = false;
   runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
   renderRunSummary(run);
   renderRunEvents(run);

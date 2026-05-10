@@ -1184,6 +1184,12 @@ function bindEvents() {
       renderCharacterReadiness(currentRun);
     }
   });
+  bind("work-session-preview-toggle", "click", () => {
+    workSessionPreviewExpanded = !workSessionPreviewExpanded;
+    if (currentRun) {
+      renderWorkSessionPreview(currentRun);
+    }
+  });
   bind("back-to-bookshelf-button", "click", showBookshelfHome);
   bind("back-to-detail-button", "click", () => {
     chatModePickerOpen = false;
