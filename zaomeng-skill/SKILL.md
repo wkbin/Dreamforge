@@ -233,7 +233,7 @@ python tools/verify_host_workflow.py --characters-root <characters/<novel_id>> -
 - `run_manifest.json`
 - `references/output_schema.md`、`references/style_differ.md`、`references/logic_constraint.md`
 
-如果宿主想把 Web UI 那套新能力一起带走，可直接调用：
+如果宿主需要角色卡、人物字段补全或对话建议 helper，可直接调用：
 
 - `python tools/manage_self_card.py --mode blank|list|get|save|delete|build-random-payload|parse-random-response`
 - `python tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto|model_knowledge|web_fallback`

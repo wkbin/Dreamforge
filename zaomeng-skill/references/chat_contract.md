@@ -83,7 +83,7 @@ If the host wants packaged helpers instead of hand-writing this layer, use:
 - `tools/manage_self_card.py --mode build-random-payload`
 - `tools/manage_self_card.py --mode parse-random-response`
 
-This lets the host support both manual role-card editing and AI-random role-card generation without binding itself to the Web UI implementation.
+This lets the host support both manual role-card editing and AI-random role-card generation through the packaged skill helpers.
 
 ### 4. Dialogue Rendering
 
@@ -94,7 +94,7 @@ The host performs the actual generation. It should use the persona bundle and co
 - relation-aware
 - scene-aware
 
-If the host wants the same “自动生成一句下一条要发的话” flow as the Web UI, call:
+If the host wants a packaged one-line reply suggestion flow, call:
 
 - `tools/build_dialogue_suggestion_payload.py --context-file <context.json>`
 
