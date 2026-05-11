@@ -843,6 +843,87 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertIn("增量蒸馏 1 人", refreshed["redistill"]["summary"])
             start_background_run.assert_called_once()
 
+    def test_suggest_redistill_segments_returns_dialogue_heavy_windows_for_weak_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode(
+                    (
+                        "林黛玉轻声道：“你怎么也在这里？”"
+                        "贾宝玉笑道：“我正等你。”"
+                        "林黛玉心想，这人说话轻浮，却又不全是假意。"
+                        "林黛玉又问了两句，贾宝玉都接了话。"
+                        "袭人远远看着，只觉两人气氛古怪。"
+                    ).encode("utf-8")
+                ).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            run_dir = Path(tmp) / "runs" / payload["run_id"]
+            persona_dir = run_dir / "artifacts" / "characters" / "hongloumeng" / "林黛玉"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "PROFILE.generated.md").write_text(
+                "- name: 林黛玉\n- core_identity: 贾府外来才女\n- story_role: 女主角之一\n- speech_style:\n- key_bonds:\n",
+                encoding="utf-8",
+            )
+            service.refresh_run(payload["run_id"])
+
+            suggested = service.suggest_redistill_segments(payload["run_id"], "林黛玉", max_segments=2)
+
+            self.assertEqual(suggested["character"], "林黛玉")
+            self.assertEqual(suggested["source_name"], "hongloumeng.txt")
+            self.assertEqual(suggested["source_kind"], "initial")
+            self.assertIn("speech_style", suggested["weak_fields"])
+            self.assertTrue(suggested["segments"])
+            first = suggested["segments"][0]
+            self.assertGreaterEqual(first["dialogue_hits"], 1)
+            self.assertIn("speech_style", first["estimated_fields"])
+            self.assertIn("对白密度较高", first["reason"])
+            self.assertTrue(str(first["preview"]).strip())
+
+    def test_suggest_redistill_segments_reads_latest_incremental_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng-1.txt",
+                novel_content_base64=base64.b64encode("第一章里林黛玉出场。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+
+            with patch.object(service, "_start_background_run"):
+                service.restart_run_distill(
+                    payload["run_id"],
+                    characters=["林黛玉", "薛宝钗"],
+                    novel_name="hongloumeng-2.txt",
+                    novel_content_base64=base64.b64encode(
+                        (
+                            "第二章里薛宝钗入府。"
+                            "薛宝钗笑道：“早听过妹妹名声。”"
+                            "林黛玉看了她一眼，没有立刻作声。"
+                            "薛宝钗心想，先把话说软些。"
+                        ).encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            suggested = service.suggest_redistill_segments(payload["run_id"], "薛宝钗", max_segments=2)
+
+            self.assertTrue(str(suggested["source_name"]).endswith("hongloumeng-2.txt"))
+            self.assertEqual(suggested["source_kind"], "incremental_update")
+            self.assertTrue(suggested["segments"])
+            self.assertIn("speech_style", suggested["segments"][0]["estimated_fields"])
+
     def test_delete_run_group_removes_same_novel_runs_and_dialogue(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
@@ -1173,6 +1254,17 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertCountEqual(
                 [item["name"] for item in result["artifact_index"]["characters"]],
                 ["林黛玉", "薛宝钗"],
+            )
+            self.assertTrue(result["redistill"]["recent_changes"])
+            first_change = result["redistill"]["recent_changes"][0]
+            self.assertEqual(first_change["character"], "林黛玉")
+            self.assertGreaterEqual(first_change["changed_count"], 1)
+            self.assertIn("core_identity", first_change["changed_fields"])
+            self.assertTrue(
+                any(
+                    item.get("stage") == "redistill_character_updated" and item.get("character") == "林黛玉"
+                    for item in result["events"]
+                )
             )
 
     def test_automatic_pipeline_relation_graph_failure_does_not_fail_chat_ready_state(self):
@@ -3111,6 +3203,55 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertGreater(data["novel_sources"][-1]["byte_size"], 0)
             self.assertGreater(data["novel_sources"][-1]["char_count"], 0)
             start_background_run.assert_called_once()
+
+    def test_redistill_recommend_route_reads_latest_incremental_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            app = create_app(service)
+            client = TestClient(app)
+            create_response = client.post(
+                "/api/web/runs",
+                json={
+                    "novel_name": "hongloumeng-1.txt",
+                    "novel_content_base64": base64.b64encode("第一章里林黛玉出场。".encode("utf-8")).decode("ascii"),
+                    "characters": ["林黛玉"],
+                },
+            )
+            payload = create_response.json()
+
+            with patch.object(service, "_start_background_run"):
+                restarted = service.restart_run_distill(
+                    payload["run_id"],
+                    characters=["林黛玉", "薛宝钗"],
+                    novel_name="hongloumeng-2.txt",
+                    novel_content_base64=base64.b64encode(
+                        (
+                            "第二章里薛宝钗入府。"
+                            "薛宝钗笑道：“早听过妹妹名声。”"
+                            "林黛玉看了她一眼，没有立刻作声。"
+                            "薛宝钗又缓缓说道：“若你不嫌，我愿陪你说会儿话。”"
+                        ).encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            response = client.post(
+                f"/api/web/runs/{restarted['run_id']}/redistill/recommend",
+                json={"character": "薛宝钗", "max_segments": 2},
+            )
+
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["character"], "薛宝钗")
+            self.assertTrue(str(data["source_name"]).endswith("hongloumeng-2.txt"))
+            self.assertEqual(data["source_kind"], "incremental_update")
+            self.assertTrue(data["segments"])
+            self.assertLessEqual(len(data["segments"]), 2)
 
     def test_stop_run_route_marks_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:

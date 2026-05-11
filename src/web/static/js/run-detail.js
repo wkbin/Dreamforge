@@ -1725,6 +1725,7 @@ function renderRedistillPlan(run) {
   const usingNewSource = Boolean(redistill.used_new_source);
   const existing = Array.isArray(redistill.existing_characters) ? redistill.existing_characters : [];
   const newcomers = Array.isArray(redistill.new_characters) ? redistill.new_characters : [];
+  const recentChanges = Array.isArray(redistill.recent_changes) ? redistill.recent_changes : [];
 
   setText(
     "redistill-plan-title",
@@ -1741,6 +1742,7 @@ function renderRedistillPlan(run) {
 
   renderRedistillPlanGroup("redistill-existing-list", existing, "redistill-existing-empty");
   renderRedistillPlanGroup("redistill-new-list", newcomers, "redistill-new-empty");
+  renderRedistillRecentChanges(recentChanges);
 }
 
 function renderRedistillPlanGroup(rootId, names, emptyId) {
@@ -1754,6 +1756,43 @@ function renderRedistillPlanGroup(rootId, names, emptyId) {
   });
   root.classList.toggle("hidden", root.childElementCount === 0);
   toggle(emptyId, root.childElementCount === 0);
+}
+
+function renderRedistillRecentChanges(items) {
+  const root = el("redistill-change-list");
+  if (!root) return;
+  root.innerHTML = "";
+  (items || []).forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "redistill-change-card";
+
+    const title = document.createElement("strong");
+    title.textContent = String(item?.character || "角色").trim() || "角色";
+
+    const summary = document.createElement("p");
+    summary.textContent = String(item?.summary || "").trim() || "这一轮有新的字段变化落了下来。";
+
+    const metaBits = [];
+    const labels = Array.isArray(item?.highlight_field_labels) ? item.highlight_field_labels.filter(Boolean) : [];
+    if (labels.length) {
+      metaBits.push(`重点：${labels.join("、")}`);
+    }
+    const changedCount = Number(item?.changed_count || 0);
+    if (changedCount > 0) {
+      metaBits.push(`共 ${changedCount} 项`);
+    }
+    const meta = document.createElement("small");
+    meta.textContent = metaBits.join(" · ");
+
+    card.appendChild(title);
+    card.appendChild(summary);
+    if (meta.textContent) {
+      card.appendChild(meta);
+    }
+    root.appendChild(card);
+  });
+  toggle("redistill-change-shell", root.childElementCount > 0);
+  toggle("redistill-change-empty", root.childElementCount === 0);
 }
 
 function renderSourceHistory(run) {

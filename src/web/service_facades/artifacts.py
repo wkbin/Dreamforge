@@ -34,6 +34,7 @@ from src.web.review import (
     read_persona_review_fields,
     resolve_persona_review_source,
     save_persona_review_payload,
+    suggest_redistill_segments_payload,
     suggest_persona_field_payload,
 )
 
@@ -156,6 +157,23 @@ class ArtifactServiceMixin:
                 temperature=temperature,
                 max_tokens=max_tokens,
             ),
+        )
+
+    def suggest_redistill_segments(self, run_id: str, character: str, max_segments: int = 3) -> dict[str, Any]:
+        manifest = self._require_manifest(run_id)
+        current_fields: dict[str, str] = {}
+        try:
+            persona_dir = resolve_persona_dir(manifest, character)
+            _, _, source_path = resolve_persona_review_source(persona_dir)
+            if source_path.exists():
+                current_fields = read_persona_review_fields(load_profile_source(source_path))
+        except FileNotFoundError:
+            current_fields = {}
+        return suggest_redistill_segments_payload(
+            manifest,
+            character=character,
+            current_fields=current_fields,
+            max_segments=max_segments,
         )
 
     def list_relation_details(self, run_id: str) -> dict[str, Any]:

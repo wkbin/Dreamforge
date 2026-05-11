@@ -52,6 +52,8 @@ from .profile_repair import (
 )
 from .relation_repair import collect_relation_repair_issues, looks_like_unstable_relation_scalar
 from .repair_orchestration import maybe_repair_generated_profile, maybe_repair_generated_relations
+from .redistill_diff import summarize_redistill_character_change
+from .redistill_recommendation import suggest_redistill_segments_payload
 
 __all__ = [
     "PERSONA_REVIEW_FIELDS",
@@ -99,5 +101,7 @@ __all__ = [
     "parse_random_self_card_response",
     "save_self_card_payload",
     "split_profile_list_value",
+    "summarize_redistill_character_change",
+    "suggest_redistill_segments_payload",
     "suggest_persona_field_payload",
 ]

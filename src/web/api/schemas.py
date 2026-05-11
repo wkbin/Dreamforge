@@ -26,6 +26,11 @@ class RestartRunRequest(BaseModel):
     max_chars: int = Field(default=50_000, ge=2_000, le=200_000)
 
 
+class SuggestRedistillSegmentsRequest(BaseModel):
+    character: str = Field(..., min_length=1)
+    max_segments: int = Field(default=3, ge=1, le=8)
+
+
 class SaveModelSettingsRequest(BaseModel):
     provider: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)

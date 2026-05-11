@@ -108,6 +108,7 @@ def apply_restart_manifest_state(
         "pending_characters": pending_characters,
         "resume_completed_characters": resume_completed_characters,
         "relation_characters": relation_characters,
+        "recent_changes": [],
         "summary": redistill_summary,
         "used_new_source": using_new_source,
         "source_name": Path(novel_path).name,

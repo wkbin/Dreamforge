@@ -6,6 +6,8 @@ from typing import Any, Callable
 from src.utils.file_utils import safe_filename
 from src.skill_support.prompt_payloads import build_distill_prompt_payload
 from src.skill_support.prompt_payloads import build_relation_prompt_payload
+from src.web.artifacts import load_profile_source
+from src.web.review import read_persona_review_fields, resolve_persona_review_source, summarize_redistill_character_change
 
 
 def process_distill_character(
@@ -39,6 +41,16 @@ def process_distill_character(
     relation_repairs_getter: Callable[[dict[str, Any]], dict[str, Any]],
     aggregates: dict[str, Any],
 ) -> None:
+    previous_review_fields: dict[str, str] = {}
+    persona_dir = run_dir / "artifacts" / "characters" / novel_id / safe_filename(character)
+    if persona_dir.exists():
+        try:
+            _, _, previous_source_path = resolve_persona_review_source(persona_dir)
+            if previous_source_path.exists():
+                previous_review_fields = read_persona_review_fields(load_profile_source(previous_source_path))
+        except Exception:
+            previous_review_fields = {}
+
     assert_run_not_stopped(manifest_path, current_character=character)
     on_distill("drafting_character", {"character": character})
     character_payload = build_distill_prompt_payload(
@@ -115,6 +127,12 @@ def process_distill_character(
 
     assert_run_not_stopped(manifest_path, current_character=character)
     on_distill("materializing_character", {"character": character})
+    current_review_fields = read_persona_review_fields(load_profile_source(source_path))
+    change_summary = summarize_redistill_character_change(
+        character=character,
+        previous_fields=previous_review_fields,
+        next_fields=current_review_fields,
+    )
     materialized = materialize_profile_source(
         source_path,
         run_dir / "artifacts" / "characters" / novel_id / safe_filename(character),
@@ -163,6 +181,26 @@ def process_distill_character(
         relation_repairs=relation_repairs_getter(current),
     )
     current["updated_at"] = utc_now()
+    if change_summary is not None:
+        change_summary["timestamp"] = current["updated_at"]
+        redistill_state = current.setdefault("redistill", {})
+        recent_changes = list(redistill_state.get("recent_changes", []) or [])
+        recent_changes = [
+            item for item in recent_changes if str(item.get("character", "")).strip() != materialized["character"]
+        ]
+        recent_changes.insert(0, change_summary)
+        redistill_state["recent_changes"] = recent_changes[:6]
+        current.setdefault("events", []).append(
+            {
+                "stage": "redistill_character_updated",
+                "status": "running",
+                "message": str(change_summary.get("summary", "")).strip() or f"{materialized['character']} 已完成增量补稳",
+                "character": materialized["character"],
+                "capability": "distill",
+                "timestamp": current["updated_at"],
+                "changed_fields": list(change_summary.get("changed_fields", []) or []),
+            }
+        )
     write_json(manifest_path, current)
     on_distill("character_done", {"character": materialized["character"]})
 

@@ -103,13 +103,21 @@ async function handleRedistill() {
   }
   const characters = charactersOf("redistill-characters");
   const file = el("redistill-novel-file")?.files?.[0];
+  const selectedSegment = !file ? getSelectedRedistillSegment() : null;
   if (!characters.length) {
     setStatus("redistill-status", "写下想继续补入的人物名字。");
     return;
   }
   runCreationPending = true;
   updateWorkflowState();
-  setStatus("redistill-status", file ? "正在换入新的书段，并继续整理人物..." : "正在沿着这卷书继续往下整理...");
+  setStatus(
+    "redistill-status",
+    file
+      ? "正在换入新的书段，并继续整理人物..."
+      : selectedSegment
+        ? "正在切到推荐片段，并继续补稳这一位角色..."
+        : "正在沿着这卷书继续往下整理..."
+  );
   try {
     renderRun(
       await apiJson(
@@ -119,8 +127,8 @@ async function handleRedistill() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             characters,
-            novel_name: file?.name || "",
-            novel_content_base64: file ? await fileToBase64(file) : "",
+            novel_name: file?.name || (selectedSegment ? `${String(redistillSuggestionState.character || "redistill").trim()}-推荐片段.txt` : ""),
+            novel_content_base64: file ? await fileToBase64(file) : selectedSegment ? textToBase64(selectedSegment.full_text || "") : "",
             max_sentences: numberValue("max-sentences", 120),
             max_chars: numberValue("max-chars", 50000),
           }),
@@ -131,14 +139,68 @@ async function handleRedistill() {
     await loadRunsOverview();
     if (el("redistill-novel-file")) {
       el("redistill-novel-file").value = "";
-      updateRedistillFileView();
     }
-    setStatus("redistill-status", file ? "新的书段已经接入，这一轮增量整理开始了。" : "新的整理已经开始，人物会陆续补进来。");
+    resetRedistillRecommendationState();
+    updateRedistillFileView();
+    setStatus(
+      "redistill-status",
+      file
+        ? "新的书段已经接入，这一轮增量整理开始了。"
+        : selectedSegment
+          ? "推荐片段已经接入，这一轮增量整理开始了。"
+          : "新的整理已经开始，人物会陆续补进来。"
+    );
   } catch (error) {
     runCreationPending = false;
     stopRunPolling();
     updateWorkflowState();
     setStatus("redistill-status", error.message || "这次继续整理没有接上。");
+  }
+}
+
+async function handleRedistillRecommend() {
+  const character = getRedistillRecommendationTarget();
+  if (!currentRunId || !character) {
+    setStatus("redistill-status", "先只选中一位已有角色，再让我替你找更适合的正文片段。");
+    return;
+  }
+  redistillSuggestionState.loading = true;
+  redistillSuggestionState.runId = currentRunId;
+  redistillSuggestionState.character = character;
+  redistillSuggestionState.items = [];
+  redistillSuggestionState.selectedSegmentId = "";
+  renderRedistillRecommendationState(character);
+  setStatus("redistill-status", `正在替「${character}」翻当前书段，挑适合补稳的正文片段...`);
+  try {
+    const payload = await apiJson(
+      `/api/web/runs/${currentRunId}/redistill/recommend`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ character, max_segments: 3 }),
+      },
+      "推荐片段失败。"
+    );
+    redistillSuggestionState.loading = false;
+    redistillSuggestionState.runId = currentRunId;
+    redistillSuggestionState.character = character;
+    redistillSuggestionState.sourceName = String(payload?.source_name || "").trim();
+    redistillSuggestionState.weakFieldLabels = Array.isArray(payload?.weak_field_labels) ? payload.weak_field_labels : [];
+    redistillSuggestionState.items = Array.isArray(payload?.segments) ? payload.segments : [];
+    redistillSuggestionState.selectedSegmentId = "";
+    renderRedistillRecommendationState(character);
+    setStatus(
+      "redistill-status",
+      redistillSuggestionState.items.length
+        ? `已经为「${character}」挑出 ${redistillSuggestionState.items.length} 段更适合补料的正文。`
+        : `当前书段里暂时没找到更适合「${character}」的推荐窗口。`
+    );
+  } catch (error) {
+    redistillSuggestionState.loading = false;
+    redistillSuggestionState.items = [];
+    redistillSuggestionState.selectedSegmentId = "";
+    renderRedistillRecommendationState(character);
+    setStatus("redistill-status", error.message || "这次推荐片段没有接上。");
   }
 }
 
@@ -1236,6 +1298,7 @@ function bindEvents() {
   bind("redistill-button", "click", handleRedistill);
   bind("redistill-add-button", "click", handleRedistillAdd);
   bind("redistill-refresh-button", "click", handleRedistillRefresh);
+  bind("redistill-recommend-button", "click", handleRedistillRecommend);
   bind("dialogue-session-form", "submit", handleDialogueSessionSubmit);
   bind("create-self-card-button", "click", handleOpenNewSelfCard);
   bind("edit-self-card-button", "click", handleEditCurrentSelfCard);

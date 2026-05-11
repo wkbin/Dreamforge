@@ -335,6 +335,11 @@
             <p id="redistill-new-empty" class="card-note">这一轮暂时没有新角色。</p>
           </div>
         </div>
+        <div id="redistill-change-shell" class="plan-group hidden">
+          <span class="plan-label">这轮刚补稳了什么</span>
+          <div id="redistill-change-list" class="redistill-change-list"></div>
+          <p id="redistill-change-empty" class="card-note">增量蒸馏完成后，这里会总结本轮字段变化。</p>
+        </div>
       </section>
       <label class="upload-card" for="redistill-novel-file">
         <input id="redistill-novel-file" class="native-hidden" type="file" accept=".txt,.md,.text,.epub" />
@@ -348,6 +353,19 @@
         <small>已有角色会做增量更新，新角色会首次蒸馏。</small>
       </label>
       <div class="pill-row" id="redistill-character-pills"></div>
+      <section id="redistill-recommend-shell" class="detail-section redistill-recommend-shell hidden">
+        <div class="detail-section-head">
+          <div>
+            <p class="eyebrow">推荐片段</p>
+            <h4 id="redistill-recommend-title">替这一轮找更适合补料的正文窗口</h4>
+          </div>
+          <div class="card-actions">
+            <button id="redistill-recommend-button" type="button" class="soft-button">推荐片段</button>
+          </div>
+        </div>
+        <p id="redistill-recommend-note" class="detail-section-copy">选中一位已有角色后，可以让系统从当前书段里挑出几段更适合增量补稳的正文。</p>
+        <div id="redistill-recommend-list" class="redistill-recommend-list"></div>
+      </section>
       <div class="card-actions">
         <button id="redistill-add-button" type="button" class="soft-button">只加新人物</button>
         <button id="redistill-refresh-button" type="button" class="soft-button">沿用当前</button>

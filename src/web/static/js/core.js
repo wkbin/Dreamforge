@@ -9,6 +9,16 @@ async function fileToBase64(file) {
   return btoa(binary);
 }
 
+function textToBase64(text) {
+  const bytes = new TextEncoder().encode(String(text || ""));
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 var currentRunId = "";
 var currentRun = null;
 var currentDialogueSessionId = "";
@@ -38,6 +48,15 @@ var selfCards = [];
 var currentSelfCard = null;
 var selectedSelfCardId = "";
 var samplingSuggestion = null;
+var redistillSuggestionState = {
+  runId: "",
+  character: "",
+  sourceName: "",
+  weakFieldLabels: [],
+  items: [],
+  selectedSegmentId: "",
+  loading: false,
+};
 const DISTILL_CHUNK_MAX_CHARS = 9000;
 const DISTILL_CHUNK_MAX_SENTENCES = 70;
 const RELATION_CHUNK_MAX_CHARS = 4800;
@@ -303,19 +322,35 @@ function initCustomSelect(selectId) {
 
 function updateRedistillFileView() {
   const file = el("redistill-novel-file")?.files?.[0];
-  setText("redistill-file-name", file?.name || "沿用当前书段", "");
+  const selected = getSelectedRedistillSegment();
+  const activeName = file?.name || (selected ? `${selected.character || redistillSuggestionState.character}-推荐片段.txt` : "沿用当前书段");
+  setText("redistill-file-name", activeName, "");
   setText(
     "redistill-file-hint",
-    file ? "新的书段已经放好，这一轮会基于它继续整理人物。" : "如果这是连载的新章节，就在这里换入新的正文片段",
+    file
+      ? "新的书段已经放好，这一轮会基于它继续整理人物。"
+      : selected
+        ? "当前会直接使用所选推荐片段继续增量蒸馏。"
+        : "如果这是连载的新章节，就在这里换入新的正文片段",
     ""
   );
   if (file) {
+    redistillSuggestionState.selectedSegmentId = "";
+    renderRedistillRecommendationState();
     setText("redistill-plan-title", "这轮会换入新的书段继续整理", "");
     setText("redistill-source-note", `当前准备换入新的正文片段：${file.name}`, "");
+  } else if (selected) {
+    setText("redistill-plan-title", "这轮会使用推荐片段继续整理", "");
+    setText(
+      "redistill-source-note",
+      `当前准备切到推荐片段：${selected.reason || "更适合补稳目标字段"}${redistillSuggestionState.sourceName ? ` · 来源 ${redistillSuggestionState.sourceName}` : ""}`,
+      ""
+    );
   } else if (currentRun) {
     renderRedistillPlan(currentRun);
     syncRedistillPreview();
   }
+  syncRedistillRecommendationState();
 }
 
 async function applySamplingHint(file) {
@@ -633,6 +668,7 @@ function renderRedistillPills(run) {
 function updateRedistillPillState() {
   updatePillState("#redistill-character-pills", charactersOf("redistill-characters"));
   syncRedistillPreview();
+  syncRedistillRecommendationState();
 }
 
 function syncRedistillPreview() {
@@ -642,6 +678,139 @@ function syncRedistillPreview() {
   const newcomers = requested.filter((name) => !existingNames.has(name));
   renderRedistillPlanGroup("redistill-existing-list", existing, "redistill-existing-empty");
   renderRedistillPlanGroup("redistill-new-list", newcomers, "redistill-new-empty");
+}
+
+function getSelectedRedistillSegment() {
+  return redistillSuggestionState.items.find((item) => item.segment_id === redistillSuggestionState.selectedSegmentId) || null;
+}
+
+function getRedistillRecommendationTarget() {
+  const file = el("redistill-novel-file")?.files?.[0];
+  if (file || !currentRunId || !currentRun) {
+    return "";
+  }
+  const requested = charactersOf("redistill-characters");
+  const existingNames = new Set(getRunCharacterNames(currentRun));
+  const existing = requested.filter((name) => existingNames.has(name));
+  return existing.length === 1 && requested.length === 1 ? existing[0] : "";
+}
+
+function resetRedistillRecommendationState() {
+  redistillSuggestionState = {
+    runId: currentRunId || "",
+    character: "",
+    sourceName: "",
+    weakFieldLabels: [],
+    items: [],
+    selectedSegmentId: "",
+    loading: false,
+  };
+}
+
+function syncRedistillRecommendationState() {
+  if (redistillSuggestionState.runId && redistillSuggestionState.runId !== currentRunId) {
+    resetRedistillRecommendationState();
+  }
+  const target = getRedistillRecommendationTarget();
+  const file = el("redistill-novel-file")?.files?.[0];
+  const shouldShow = Boolean(currentRunId && target && !file);
+  toggle("redistill-recommend-shell", shouldShow);
+  if (!shouldShow) {
+    if (!file) {
+      const hadSelectedSegment = Boolean(redistillSuggestionState.selectedSegmentId);
+      resetRedistillRecommendationState();
+      renderRedistillRecommendationState();
+      if (hadSelectedSegment) {
+        setText("redistill-file-name", "沿用当前书段", "");
+        setText("redistill-file-hint", "如果这是连载的新章节，就在这里换入新的正文片段", "");
+        if (currentRun) {
+          renderRedistillPlan(currentRun);
+          syncRedistillPreview();
+        }
+      }
+    }
+    return;
+  }
+  if (redistillSuggestionState.character && redistillSuggestionState.character !== target) {
+    resetRedistillRecommendationState();
+  }
+  if (!redistillSuggestionState.runId) {
+    redistillSuggestionState.runId = currentRunId || "";
+  }
+  renderRedistillRecommendationState(target);
+}
+
+function renderRedistillRecommendationState(targetCharacter = "") {
+  const target = String(targetCharacter || redistillSuggestionState.character || getRedistillRecommendationTarget() || "").trim();
+  const button = el("redistill-recommend-button");
+  const root = el("redistill-recommend-list");
+  if (button) {
+    button.disabled = redistillSuggestionState.loading || !target;
+    button.textContent = redistillSuggestionState.loading ? "正在挑片段..." : "推荐片段";
+  }
+  if (!root) return;
+  root.innerHTML = "";
+  if (!target) {
+    setText("redistill-recommend-note", "只选中一位已有角色时，这里会给出适合补稳这位角色的正文窗口。", "");
+    return;
+  }
+  if (!redistillSuggestionState.items.length) {
+    const weakLabelText =
+      Array.isArray(redistillSuggestionState.weakFieldLabels) && redistillSuggestionState.weakFieldLabels.length
+        ? `优先盯：${redistillSuggestionState.weakFieldLabels.join("、")}。`
+        : "";
+    setText(
+      "redistill-recommend-note",
+      redistillSuggestionState.loading
+        ? `正在替「${target}」翻当前书段，找更适合补稳的正文片段...`
+        : `只选中「${target}」后，可一键从当前书段里挑推荐片段。${weakLabelText}`,
+      ""
+    );
+    return;
+  }
+  setText(
+    "redistill-recommend-note",
+    `当前基于 ${redistillSuggestionState.sourceName || "当前书段"} 为「${target}」挑了 ${redistillSuggestionState.items.length} 段候选正文。`,
+    ""
+  );
+  redistillSuggestionState.items.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = `redistill-recommend-card${item.segment_id === redistillSuggestionState.selectedSegmentId ? " is-selected" : ""}`;
+
+    const head = document.createElement("div");
+    head.className = "redistill-recommend-card-head";
+    head.innerHTML = `
+      <strong>${escapeHtml(item.preview || "推荐片段")}</strong>
+      <small>句段 ${escapeHtml(`${item.start_sentence}-${item.end_sentence}`)} · 分数 ${escapeHtml(String(item.score || 0))}</small>
+    `;
+
+    const meta = document.createElement("p");
+    meta.className = "redistill-recommend-card-meta";
+    meta.textContent = [item.reason, Array.isArray(item.estimated_field_labels) ? `预计能补：${item.estimated_field_labels.join("、")}` : ""]
+      .filter(Boolean)
+      .join(" · ");
+
+    const actions = document.createElement("div");
+    actions.className = "card-actions";
+    const useButton = document.createElement("button");
+    useButton.type = "button";
+    useButton.className = item.segment_id === redistillSuggestionState.selectedSegmentId ? "primary-button" : "soft-button";
+    useButton.textContent = item.segment_id === redistillSuggestionState.selectedSegmentId ? "已选这段" : "用这一段";
+    useButton.addEventListener("click", () => {
+      redistillSuggestionState.selectedSegmentId = item.segment_id;
+      setStatus("redistill-status", `这轮会直接用推荐片段为「${target}」继续增量蒸馏。`);
+      updateRedistillFileView();
+      renderRedistillRecommendationState(target);
+    });
+    actions.appendChild(useButton);
+
+    card.appendChild(head);
+    if (meta.textContent) {
+      card.appendChild(meta);
+    }
+    card.appendChild(actions);
+    root.appendChild(card);
+  });
 }
 
 function humanizeSummary(summary) {
@@ -676,6 +845,7 @@ function humanizeRunEventStage(stage) {
     merging_graph: "正在汇总关系",
     graph_done: "关系图已生成",
     graph_failed: "关系图生成失败",
+    redistill_character_updated: "增量补稳完成",
     persona_review_saved: "人物稿已写回",
     workflow_complete: "这一卷已完成",
     stopped: "已停止",

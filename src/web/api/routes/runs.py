@@ -13,6 +13,7 @@ from src.web.api.schemas import (
     IngestRelationRequest,
     RestartRunRequest,
     SavePersonaReviewRequest,
+    SuggestRedistillSegmentsRequest,
     SuggestPersonaFieldRequest,
     UpdateRelationDetailRequest,
 )
@@ -94,6 +95,24 @@ def redistill_run(
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Run not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/web/runs/{run_id}/redistill/recommend")
+def suggest_redistill_segments(
+    run_id: str,
+    payload: SuggestRedistillSegmentsRequest,
+    run_service: WebRunService = Depends(get_run_service),
+) -> dict[str, Any]:
+    try:
+        return run_service.suggest_redistill_segments(
+            run_id,
+            character=payload.character,
+            max_segments=payload.max_segments,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Run or source not found.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
