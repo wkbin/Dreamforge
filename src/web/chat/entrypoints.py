@@ -18,7 +18,6 @@ def create_dialogue_session_payload(
     load_pending_turn_payload: Callable[[str, str], dict[str, Any]],
     generate_dialogue_responses: Callable[[str, dict[str, Any]], list[dict[str, str]]],
     friendly_dialogue_llm_error: Callable[[Exception], str],
-    remember_long_term_memory: Callable[[str, str, str, str], None],
     evolve_relations_from_turn: Callable[[str, dict[str, Any], list[dict[str, str]]], None],
 ) -> dict[str, Any]:
     session = dialogue.create_session(
@@ -47,8 +46,8 @@ def create_dialogue_session_payload(
         run_id,
         session_id=session_id,
         responses=responses,
+        remember_turn_memory=True,
     )
-    remember_long_term_memory(run_id, session_id, opening_message, "narration")
     return ingested
 
 
@@ -63,7 +62,6 @@ def reply_dialogue_turn_payload(
     load_pending_turn_payload: Callable[[str, str], dict[str, Any]],
     generate_dialogue_responses: Callable[[str, dict[str, Any]], list[dict[str, str]]],
     friendly_dialogue_llm_error: Callable[[Exception], str],
-    remember_long_term_memory: Callable[[str, str, str, str], None],
     evolve_relations_from_turn: Callable[[str, dict[str, Any], list[dict[str, str]]], None],
 ) -> dict[str, Any]:
     speaker_override = "场景提示" if str(message_kind or "").strip() == "narration" else ""
@@ -80,8 +78,12 @@ def reply_dialogue_turn_payload(
     except LLMRequestError as exc:
         raise ValueError(friendly_dialogue_llm_error(exc)) from exc
     evolve_relations_from_turn(run_id, pending_payload, responses)
-    ingested = dialogue.ingest_turn_responses(run_id, session_id=session_id, responses=responses)
-    remember_long_term_memory(run_id, session_id, message, message_kind)
+    ingested = dialogue.ingest_turn_responses(
+        run_id,
+        session_id=session_id,
+        responses=responses,
+        remember_turn_memory=True,
+    )
     return ingested
 
 

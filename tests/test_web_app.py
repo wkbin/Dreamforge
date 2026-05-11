@@ -3362,6 +3362,61 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertEqual(payload["status"], "ready")
             self.assertEqual(payload["transcript"][-1]["speaker"], "林黛玉")
 
+    def test_dialogue_reply_uses_shared_long_term_memory_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                service,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "开场。"}],
+            ):
+                session = service.create_dialogue_session(
+                    run["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉"],
+                )
+
+            with patch.object(
+                service,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "林黛玉", "message": "我们的目标还没改，你先别急。"}],
+            ):
+                replied = service.reply_dialogue_turn(
+                    run["run_id"],
+                    session_id=session["session_id"],
+                    message="那就继续往目标走。",
+                    message_kind="narration",
+                )
+
+            config = service._build_runtime_config_for_run(run_dir=service.runs_root / run["run_id"])
+            parts = service._build_runtime_parts(config)
+            hits = parts.session_store.search_long_term_memory(session["session_id"], "目标", top_k=5)
+
+            self.assertTrue(hits)
+            hit_texts = " ".join(str(item.get("text", "")) for item in hits)
+            self.assertIn("目标", hit_texts)
+            self.assertIn("长期记忆", replied["session_memory_summary"]["relation_drift"])
+
     def test_dialogue_suggest_route_returns_suggestion_without_mutating_session(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)

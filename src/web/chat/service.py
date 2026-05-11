@@ -7,7 +7,7 @@ import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from src.web.artifacts.ingest import load_profile_source
@@ -47,9 +47,15 @@ class DialogueService:
         "重回",
     )
 
-    def __init__(self, runs_root: str | Path) -> None:
+    def __init__(
+        self,
+        runs_root: str | Path,
+        *,
+        memory_store_resolver: Callable[[str], MarkdownSessionStore] | None = None,
+    ) -> None:
         self.runs_root = Path(runs_root)
-        self._memory_store: MarkdownSessionStore | None = None
+        self._memory_store_resolver = memory_store_resolver
+        self._memory_stores: dict[str, MarkdownSessionStore] = {}
 
     def list_sessions(self, run_id: str) -> list[dict[str, Any]]:
         root = self._sessions_root(run_id)
@@ -205,11 +211,13 @@ class DialogueService:
         *,
         session_id: str,
         responses: list[dict[str, str]],
+        remember_turn_memory: bool = False,
     ) -> dict[str, Any]:
         session = self._read_json(self._session_file(run_id, session_id))
         pending = dict(session.get("pending_turn", {}) or {})
         if not pending:
             raise ValueError("No pending turn to ingest.")
+        session_store = self._resolve_memory_store(run_id) if remember_turn_memory else None
         clean_responses = []
         for item in responses:
             speaker = str(item.get("speaker", "")).strip()
@@ -221,18 +229,57 @@ class DialogueService:
             raise ValueError("No valid responses provided.")
         transcript_message = str(pending.get("transcript_message", pending.get("user_message", ""))).strip()
         if transcript_message:
-            session.setdefault("history", []).append(
-                {
-                    "speaker": pending.get("speaker", "User"),
-                    "message": transcript_message,
-                    "target": "",
-                    "ts": pending.get("created_at", _utc_now()),
-                }
-            )
+            user_entry = {
+                "speaker": pending.get("speaker", "User"),
+                "message": transcript_message,
+                "target": "",
+                "ts": pending.get("created_at", _utc_now()),
+            }
+            if session_store is not None:
+                session_store.append_long_term_memory(
+                    session_id,
+                    self._entry_to_memory_text(user_entry),
+                    metadata={
+                        "run_id": run_id,
+                        "kind": self._normalize_message_kind(str(pending.get("message_kind", "")).strip()),
+                        "speaker": str(user_entry.get("speaker", "")).strip(),
+                        "target": "",
+                        "ts": user_entry.get("ts", ""),
+                    },
+                )
+                user_entry["memory_archived"] = True
+            session.setdefault("history", []).append(user_entry)
+        remembered_responses = []
+        pending_speaker = str(pending.get("speaker", "")).strip()
+        active_participants = [str(item).strip() for item in pending.get("active_participants", []) if str(item).strip()]
         session["history"].extend(clean_responses)
+        for item in clean_responses:
+            response_entry = item
+            if session_store is not None:
+                target = pending_speaker if pending_speaker not in {"", "User", "场景提示", "旁白"} else ""
+                if not target:
+                    pool = [name for name in active_participants if name and name != str(response_entry.get("speaker", "")).strip()]
+                    target = pool[0] if pool else ""
+                session_store.append_long_term_memory(
+                    session_id,
+                    self._entry_to_memory_text(response_entry),
+                    metadata={
+                        "run_id": run_id,
+                        "kind": "dialogue",
+                        "speaker": str(response_entry.get("speaker", "")).strip(),
+                        "target": target,
+                        "ts": response_entry.get("ts", ""),
+                    },
+                )
+                response_entry["memory_archived"] = True
+            remembered_responses.append(response_entry)
+        if remembered_responses:
+            session["history"][-len(remembered_responses) :] = remembered_responses
         session["pending_turn"] = {}
         session["updated_at"] = _utc_now()
         session["status"] = "ready"
+        if session_store is not None:
+            session_store.compress_context(session)
         result_path = self._session_dir(run_id, session_id) / "turns" / f"{pending.get('turn_id', 'turn')}.result.json"
         self._write_json(
             result_path,
@@ -600,7 +647,7 @@ class DialogueService:
         session["last_entry_preview"] = self._build_last_entry_preview(session)
         session["session_card"] = self._build_session_card(session)
         session["pending_turn_summary"] = self._build_pending_turn_summary(session)
-        session["session_memory_summary"] = self._build_session_memory_summary(session, transcript)
+        session["session_memory_summary"] = self._build_session_memory_summary(run_id, session, transcript)
         return session
 
     def _serialize_transcript(self, session: dict[str, Any]) -> list[dict[str, Any]]:
@@ -664,7 +711,7 @@ class DialogueService:
             "response_limit_hint": int(pending.get("response_limit_hint", 0) or 0),
         }
 
-    def _build_session_memory_summary(self, session: dict[str, Any], transcript: list[dict[str, Any]]) -> dict[str, str]:
+    def _build_session_memory_summary(self, run_id: str, session: dict[str, Any], transcript: list[dict[str, Any]]) -> dict[str, str]:
         mode = str(session.get("mode", "observe")).strip() or "observe"
         mode_display = self._mode_display(mode)
         participants = [str(item).strip() for item in session.get("participants", []) if str(item).strip()]
@@ -744,9 +791,9 @@ class DialogueService:
 
         session_id = str(session.get("session_id", "")).strip()
         semantic_hint = ""
-        if session_id and self._ensure_memory_store():
+        if session_id and self._ensure_memory_store(run_id):
             try:
-                hits = self._memory_store.search_long_term_memory(session_id, "关系 冲突 目标", top_k=1)
+                hits = self._memory_stores[run_id].search_long_term_memory(session_id, "关系 冲突 目标", top_k=1)
             except Exception:
                 hits = []
             if hits:
@@ -765,17 +812,29 @@ class DialogueService:
             "updated_at": str(session.get("updated_at", "")).strip(),
         }
 
-    def _ensure_memory_store(self) -> bool:
-        if self._memory_store is not None:
-            return True
+    def _ensure_memory_store(self, run_id: str) -> bool:
+        return self._resolve_memory_store(run_id) is not None
+
+    def _resolve_memory_store(self, run_id: str) -> MarkdownSessionStore | None:
+        normalized_run_id = str(run_id or "").strip()
+        if not normalized_run_id:
+            return None
+        cached = self._memory_stores.get(normalized_run_id)
+        if cached is not None:
+            return cached
         try:
+            if callable(self._memory_store_resolver):
+                resolved = self._memory_store_resolver(normalized_run_id)
+                if resolved is not None:
+                    self._memory_stores[normalized_run_id] = resolved
+                    return resolved
             config = Config()
-            config.update({"paths": {"sessions": str(self.runs_root / "__session_memory_cache")}})
-            self._memory_store = MarkdownSessionStore(PathProvider(config))
-            return True
+            config.update({"paths": {"sessions": str(self.runs_root / normalized_run_id / "__session_memory_cache")}})
+            resolved = MarkdownSessionStore(PathProvider(config))
+            self._memory_stores[normalized_run_id] = resolved
+            return resolved
         except Exception:
-            self._memory_store = None
-            return False
+            return None
 
     @staticmethod
     def _trim_summary_text(value: str, limit: int) -> str:
@@ -818,6 +877,19 @@ class DialogueService:
             if pending_relative is not None:
                 urls["pending_turn_payload"] = self._file_url(run_id, pending_relative)
         return urls
+
+    @staticmethod
+    def _entry_to_memory_text(entry: dict[str, Any]) -> str:
+        speaker = str(entry.get("speaker", "")).strip()
+        message = " ".join(str(entry.get("message", "")).split()).strip()
+        target = str(entry.get("target", "")).strip()
+        if not message:
+            return ""
+        if speaker and target:
+            return f"{speaker} -> {target}: {message}"
+        if speaker:
+            return f"{speaker}: {message}"
+        return message
 
     def _sessions_root(self, run_id: str) -> Path:
         return self.runs_root / run_id / "dialogue"

@@ -191,7 +191,10 @@ class WebRunService(
         self.settings_path = self.storage_root / "model_settings.json"
         self.runs_root.mkdir(parents=True, exist_ok=True)
         self.self_cards_root.mkdir(parents=True, exist_ok=True)
-        self.dialogue = DialogueService(self.runs_root)
+        self.dialogue = DialogueService(
+            self.runs_root,
+            memory_store_resolver=self._dialogue_memory_store_for_run,
+        )
         self._active_run_threads: dict[str, threading.Thread] = {}
         self._app_update_lock = threading.Lock()
         self._app_update_thread: threading.Thread | None = None

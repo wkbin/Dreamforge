@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 import time
@@ -56,12 +57,15 @@ class MarkdownSessionStore(SessionStore):
         return load_markdown_data(self._session_path(session_id), default=default)
 
     def save_session(self, session: Dict[str, Any]) -> None:
+        session_id = self._session_identity(session)
+        if not session_id:
+            raise ValueError("Session payload is missing id/session_id.")
         save_markdown_data(
-            self._session_path(str(session.get("id", ""))),
+            self._session_path(session_id),
             session,
             title="SESSION",
             summary=[
-                f"- id: {session.get('id', '')}",
+                f"- id: {session_id}",
                 f"- novel_id: {session.get('novel_id', '')}",
                 f"- mode: {session.get('mode', '')}",
             ],
@@ -101,9 +105,11 @@ class MarkdownSessionStore(SessionStore):
         }
         session["history"] = keep
 
-        session_id = str(session.get("id", "")).strip()
+        session_id = self._session_identity(session)
         if session_id:
             for entry in to_archive:
+                if bool(entry.get("memory_archived")):
+                    continue
                 text = self._entry_to_memory_text(entry)
                 if not text:
                     continue
@@ -113,6 +119,7 @@ class MarkdownSessionStore(SessionStore):
                     "ts": int(entry.get("ts", 0) or 0),
                 }
                 self.append_long_term_memory(session_id, text, metadata=metadata)
+                entry["memory_archived"] = True
         return session
 
     def append_long_term_memory(
@@ -127,6 +134,8 @@ class MarkdownSessionStore(SessionStore):
             return
         memory_payload = self._load_long_term_payload(session_id)
         entries = list(memory_payload.get("entries", []) or [])
+        if self._memory_entry_exists(entries, normalized, metadata):
+            return
         item = {
             "id": f"mem-{_now_ts()}-{len(entries) + 1}",
             "text": normalized,
@@ -170,9 +179,7 @@ class MarkdownSessionStore(SessionStore):
             text = _normalize_text(item.get("text", ""))
             if not text:
                 continue
-            item_vec = item.get("vector")
-            if not isinstance(item_vec, list) or not item_vec:
-                item_vec = self._embed_local(text)
+            item_vec = self._embed_local(text)
             score = self._cosine_similarity(query_vec, item_vec)
             scored.append(
                 MemorySearchHit(
@@ -185,19 +192,22 @@ class MarkdownSessionStore(SessionStore):
         return [hit.to_payload() for hit in scored[:limit]]
 
     def save_relation_snapshot(self, session: Dict[str, Any]) -> None:
+        session_id = self._session_identity(session)
+        if not session_id:
+            raise ValueError("Session payload is missing id/session_id.")
         payload = {
-            "session_id": session.get("id"),
+            "session_id": session_id,
             "novel_id": session.get("novel_id"),
             "updated_at": session.get("updated_at"),
             "relation_matrix": session.get("state", {}).get("relation_matrix", {}),
             "relation_delta": session.get("state", {}).get("relation_delta", {}),
         }
         save_markdown_data(
-            self._relation_snapshot_path(str(session.get("id", ""))),
+            self._relation_snapshot_path(session_id),
             payload,
             title="SESSION_RELATIONS",
             summary=[
-                f"- session_id: {session.get('id', '')}",
+                f"- session_id: {session_id}",
                 f"- novel_id: {session.get('novel_id', '')}",
             ],
         )
@@ -252,6 +262,36 @@ class MarkdownSessionStore(SessionStore):
             return f"{speaker}: {message}"
         return message
 
+    @staticmethod
+    def _session_identity(session: Dict[str, Any]) -> str:
+        return str(session.get("id") or session.get("session_id") or "").strip()
+
+    @staticmethod
+    def _memory_entry_exists(entries: Sequence[Dict[str, Any]], text: str, metadata: Optional[Dict[str, Any]]) -> bool:
+        incoming = dict(metadata or {})
+        incoming_speaker = str(incoming.get("speaker", "")).strip()
+        incoming_target = str(incoming.get("target", "")).strip()
+        incoming_kind = str(incoming.get("kind", "")).strip()
+        incoming_run_id = str(incoming.get("run_id", "")).strip()
+        for entry in entries:
+            if _normalize_text(entry.get("text", "")) != text:
+                continue
+            current_metadata = dict(entry.get("metadata", {}) or {})
+            current_speaker = str(current_metadata.get("speaker", "")).strip()
+            current_target = str(current_metadata.get("target", "")).strip()
+            current_kind = str(current_metadata.get("kind", "")).strip()
+            current_run_id = str(current_metadata.get("run_id", "")).strip()
+            if current_speaker != incoming_speaker:
+                continue
+            if current_target != incoming_target:
+                continue
+            if incoming_kind and current_kind and current_kind != incoming_kind:
+                continue
+            if incoming_run_id and current_run_id and current_run_id != incoming_run_id:
+                continue
+            return True
+        return False
+
     def _build_memory_summary(
         self,
         previous_summary: str,
@@ -287,12 +327,16 @@ class MarkdownSessionStore(SessionStore):
         if not counts:
             return vec
         for token, weight in counts.items():
-            slot = hash(token) % self._local_vector_dimensions
+            slot = self._stable_slot(token)
             vec[slot] += float(weight)
         norm = math.sqrt(sum(value * value for value in vec))
         if norm <= 0:
             return vec
         return [value / norm for value in vec]
+
+    def _stable_slot(self, token: str) -> int:
+        digest = hashlib.blake2b(str(token or "").encode("utf-8"), digest_size=8).digest()
+        return int.from_bytes(digest, "big") % self._local_vector_dimensions
 
     @staticmethod
     def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:

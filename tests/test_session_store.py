@@ -71,6 +71,30 @@ class SessionStoreTests(unittest.TestCase):
             self.assertTrue(hits)
             self.assertIn("text", hits[0])
 
+    def test_session_store_search_recomputes_local_vectors_from_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = Config()
+            config.update({"paths": {"sessions": str(root / "sessions")}})
+            store = MarkdownSessionStore(PathProvider(config))
+
+            store.append_long_term_memory(
+                "mem456",
+                "宝玉还惦记着黛玉的心事。",
+                metadata={"speaker": "旁白"},
+            )
+            memory_path = root / "sessions" / "mem456_memory.md"
+            payload = load_markdown_data(memory_path, default={})
+            payload["entries"][0]["vector"] = [999.0, 1.0, 0.0]
+            memory_path.write_text("", encoding="utf-8")
+            from src.utils.file_utils import save_markdown_data
+
+            save_markdown_data(memory_path, payload, title="SESSION_LONG_TERM_MEMORY", summary=["- session_id: mem456"])
+
+            hits = store.search_long_term_memory("mem456", "黛玉 心事", top_k=1)
+            self.assertTrue(hits)
+            self.assertIn("黛玉", hits[0]["text"])
+
 
 if __name__ == "__main__":
     unittest.main()

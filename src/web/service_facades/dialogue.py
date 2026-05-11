@@ -69,7 +69,6 @@ class DialogueServiceMixin:
             load_pending_turn_payload=self._load_pending_turn_payload,
             generate_dialogue_responses=self._generate_dialogue_responses,
             friendly_dialogue_llm_error=friendly_dialogue_llm_error,
-            remember_long_term_memory=self._remember_dialogue_long_term_memory,
             evolve_relations_from_turn=self._evolve_relations_from_turn,
         )
 
@@ -116,7 +115,6 @@ class DialogueServiceMixin:
             load_pending_turn_payload=self._load_pending_turn_payload,
             generate_dialogue_responses=self._generate_dialogue_responses,
             friendly_dialogue_llm_error=friendly_dialogue_llm_error,
-            remember_long_term_memory=self._remember_dialogue_long_term_memory,
             evolve_relations_from_turn=self._evolve_relations_from_turn,
         )
 
@@ -140,7 +138,12 @@ class DialogueServiceMixin:
         responses: list[dict[str, str]],
     ) -> dict[str, Any]:
         self._ensure_run_exists(run_id)
-        return self.dialogue.ingest_turn_responses(run_id, session_id=session_id, responses=responses)
+        return self.dialogue.ingest_turn_responses(
+            run_id,
+            session_id=session_id,
+            responses=responses,
+            remember_turn_memory=True,
+        )
 
     def _generate_dialogue_responses(self, run_id: str, payload: dict[str, Any]) -> list[dict[str, str]]:
         return generate_dialogue_responses_for_run(
@@ -206,24 +209,6 @@ class DialogueServiceMixin:
     @staticmethod
     def _parse_dialogue_suggestion(content: str) -> str:
         return parse_dialogue_suggestion(content)
-
-    def _remember_dialogue_long_term_memory(
-        self,
-        run_id: str,
-        session_id: str,
-        message: str,
-        message_kind: str,
-    ) -> None:
-        if not message:
-            return
-        try:
-            config = self._build_runtime_config_for_run(run_dir=self.runs_root / run_id)
-            parts = self._build_runtime_parts(config)
-            text = str(message).strip()
-            prefix = "[剧情推动]" if str(message_kind or "").strip() == "narration" else "[对话]"
-            parts.session_store.append_long_term_memory(session_id, f"{prefix} {text}", metadata={"run_id": run_id})
-        except Exception:
-            return
 
     def _evolve_relations_from_turn(
         self,
@@ -334,3 +319,8 @@ class DialogueServiceMixin:
             )
         except Exception:
             return
+
+    def _dialogue_memory_store_for_run(self, run_id: str) -> Any:
+        config = self._build_runtime_config_for_run(run_dir=self.runs_root / run_id)
+        parts = self._build_runtime_parts(config)
+        return parts.session_store
