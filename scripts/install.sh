@@ -23,6 +23,77 @@ need_cmd() {
   fi
 }
 
+is_termux() {
+  [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux/files/usr" ]
+}
+
+run_pkg_manager() {
+  local install_cmd="$1"
+  if [ "$(id -u)" -eq 0 ]; then
+    sh -c "$install_cmd"
+    return
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo sh -c "$install_cmd"
+    return
+  fi
+  echo "Need elevated privileges to install dependencies / 安装依赖需要更高权限: $install_cmd" >&2
+  return 1
+}
+
+auto_install_python() {
+  echo "Python 3 was not found. Trying to install it automatically... / 未检测到 Python 3，正在尝试自动安装..." >&2
+
+  if is_termux; then
+    if command -v pkg >/dev/null 2>&1; then
+      echo "Installing python in Termux via pkg / 正在通过 pkg 安装 Termux Python" >&2
+      pkg update -y >&2 && pkg install -y python >&2
+      return
+    fi
+    echo "Termux was detected but pkg is unavailable. / 检测到 Termux，但没有找到 pkg。" >&2
+    return 1
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "Installing python3 via apt-get / 正在通过 apt-get 安装 python3" >&2
+    run_pkg_manager "apt-get update -y && apt-get install -y python3 python3-venv" >&2
+    return
+  fi
+  if command -v apt >/dev/null 2>&1; then
+    echo "Installing python3 via apt / 正在通过 apt 安装 python3" >&2
+    run_pkg_manager "apt update -y && apt install -y python3 python3-venv" >&2
+    return
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    echo "Installing python3 via dnf / 正在通过 dnf 安装 python3" >&2
+    run_pkg_manager "dnf install -y python3" >&2
+    return
+  fi
+  if command -v yum >/dev/null 2>&1; then
+    echo "Installing python3 via yum / 正在通过 yum 安装 python3" >&2
+    run_pkg_manager "yum install -y python3" >&2
+    return
+  fi
+  if command -v pacman >/dev/null 2>&1; then
+    echo "Installing python via pacman / 正在通过 pacman 安装 python" >&2
+    run_pkg_manager "pacman -Sy --noconfirm python" >&2
+    return
+  fi
+  if command -v zypper >/dev/null 2>&1; then
+    echo "Installing python3 via zypper / 正在通过 zypper 安装 python3" >&2
+    run_pkg_manager "zypper --non-interactive install python3" >&2
+    return
+  fi
+  if command -v apk >/dev/null 2>&1; then
+    echo "Installing python3 via apk / 正在通过 apk 安装 python3" >&2
+    run_pkg_manager "apk add --no-cache python3 py3-pip" >&2
+    return
+  fi
+
+  echo "Python 3 is required but no supported package manager was found. / 需要 Python 3，但没有找到可自动安装的包管理器。" >&2
+  return 1
+}
+
 choose_python() {
   if [ -n "$PYTHON_BIN" ]; then
     echo "$PYTHON_BIN"
@@ -36,7 +107,25 @@ choose_python() {
     echo python
     return
   fi
-  echo "Python 3 is required. Please install python3 first. / 需要 Python 3，请先安装 python3。" >&2
+
+  if auto_install_python; then
+    if command -v python3 >/dev/null 2>&1; then
+      echo python3
+      return
+    fi
+    if command -v python >/dev/null 2>&1; then
+      echo python
+      return
+    fi
+  fi
+
+  if is_termux; then
+    echo "Python 3 is required. Please run: pkg install python / 需要 Python 3，请执行：pkg install python" >&2
+  elif command -v apt-get >/dev/null 2>&1 || command -v apt >/dev/null 2>&1; then
+    echo "Python 3 is required. Please run: sudo apt-get install python3 python3-venv / 需要 Python 3，请执行：sudo apt-get install python3 python3-venv" >&2
+  else
+    echo "Python 3 is required. Please install python3 first. / 需要 Python 3，请先安装 python3。" >&2
+  fi
   exit 1
 }
 

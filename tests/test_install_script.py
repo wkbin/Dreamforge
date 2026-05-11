@@ -5,6 +5,18 @@ from pathlib import Path
 
 
 class InstallScriptTests(unittest.TestCase):
+    def test_install_script_can_try_auto_install_python_with_platform_package_manager(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        script_text = (repo_root / "scripts" / "install.sh").read_text(encoding="utf-8")
+
+        self.assertIn("is_termux()", script_text)
+        self.assertIn("auto_install_python()", script_text)
+        self.assertIn('pkg install -y python', script_text)
+        self.assertIn('apt-get install -y python3 python3-venv', script_text)
+        self.assertIn('if auto_install_python; then', script_text)
+        self.assertIn('pkg install python', script_text)
+        self.assertIn('sudo apt-get install python3 python3-venv', script_text)
+
     def test_install_launcher_checks_remote_version_before_update(self):
         repo_root = Path(__file__).resolve().parents[1]
         script_text = (repo_root / "scripts" / "install.sh").read_text(encoding="utf-8")
