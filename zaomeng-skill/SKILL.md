@@ -236,7 +236,7 @@ python tools/verify_host_workflow.py --characters-root <characters/<novel_id>> -
 如果宿主需要角色卡、人物字段补全或对话建议 helper，可直接调用：
 
 - `python tools/manage_self_card.py --mode blank|list|get|save|delete|build-random-payload|parse-random-response`
-- `python tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto|model_knowledge|web_fallback`
+- `python tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto|model_knowledge|web_fallback [--collect-web]`
 - `python tools/build_dialogue_suggestion_payload.py --context-file <context.json>`
 
 宿主结束提示建议直接说清楚：

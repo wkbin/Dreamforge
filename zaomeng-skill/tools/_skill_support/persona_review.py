@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 from .persona_bundle import load_profile_source, render_profile_md
 
@@ -477,7 +478,7 @@ def save_self_card_payload(cards_root: str | Path, *, card_id: str, fields: dict
     normalized = normalize_self_card_fields(fields)
     validate_self_card_fields(normalized)
 
-    resolved_card_id = str(card_id or "").strip() or f"card-{_safe_id(normalized.get('display_name', 'self'))}"
+    resolved_card_id = str(card_id or "").strip() or f"card-{uuid4().hex[:10]}"
     card_dir = Path(cards_root) / resolved_card_id
     if str(card_id or "").strip() and not card_dir.exists():
         raise FileNotFoundError(card_id)
@@ -941,8 +942,3 @@ def _resolve_card_profile_path(card_dir: Path) -> Path | None:
             return candidate
     return None
 
-
-def _safe_id(value: str) -> str:
-    slug = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff_-]+", "-", str(value or "").strip())
-    slug = slug.strip("-_")
-    return slug or "self-card"

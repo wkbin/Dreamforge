@@ -37,7 +37,7 @@ def main() -> int:
     parser.add_argument("--strategy", choices=("auto", "model_knowledge", "web_fallback"), default="auto", help="Payload strategy")
     parser.add_argument("--response-file", default="", help="Parse a model response instead of building a payload")
     parser.add_argument("--output", default="", help="Optional JSON output path")
-    parser.add_argument("--collect-web", action="store_true", help="Collect Bing result snippets for web fallback")
+    parser.add_argument("--collect-web", action="store_true", help="Collect Bing result snippets for packaged web fallback")
     args = parser.parse_args()
 
     if args.response_file:
@@ -81,8 +81,12 @@ def main() -> int:
             }
         )
 
-    if args.strategy in {"auto", "web_fallback"}:
-        references = collect_persona_web_references(character=character, novel_title=novel_title) if args.collect_web else []
+    if args.strategy == "web_fallback" and not args.collect_web:
+        raise ValueError("web_fallback strategy requires --collect-web so the fallback step has actual reference snippets.")
+
+    web_collection_enabled = args.collect_web
+    if args.strategy in {"auto", "web_fallback"} and web_collection_enabled:
+        references = collect_persona_web_references(character=character, novel_title=novel_title)
         steps.append(
             {
                 "name": "web_fallback",
@@ -113,12 +117,15 @@ def main() -> int:
         "field": args.field,
         "label": PERSONA_REVIEW_FIELD_LABELS.get(args.field, args.field),
         "strategy": args.strategy,
+        "web_collection_enabled": web_collection_enabled,
         "persona_dir": str(Path(args.persona_dir).resolve()),
         "current_fields": current_fields,
         "steps": steps,
         "host_hint": (
             "Run step[0] first. If parsed result is insufficient or format-invalid and a later step exists, "
             "continue to the next step. Use --response-file to parse the model output."
+            if web_collection_enabled or args.strategy == "model_knowledge"
+            else "Run the model_knowledge step first. If you also want a packaged web fallback step, rerun with --collect-web."
         ),
     }
     _write_output(payload, args.output)

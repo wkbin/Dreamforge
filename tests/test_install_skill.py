@@ -161,6 +161,27 @@ class InstallSkillTests(unittest.TestCase):
             self.assertEqual(saved["fields"]["display_name"], "沈拂衣")
             self.assertTrue((cards_root / saved["card_id"] / "PROFILE.md").exists())
 
+            saved_path_two = tmp_root / "saved_card_two.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "manage_self_card.py"),
+                    "--mode",
+                    "save",
+                    "--cards-root",
+                    str(cards_root),
+                    "--response-file",
+                    str(response_path),
+                    "--output",
+                    str(saved_path_two),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+            saved_two = json.loads(saved_path_two.read_text(encoding="utf-8"))
+            self.assertNotEqual(saved["card_id"], saved_two["card_id"])
+
     def test_installed_persona_autofill_tool_builds_plan_and_parses_result(self):
         repo_root = Path(__file__).resolve().parents[1]
         packaged_src = repo_root / "zaomeng-skill"
@@ -204,6 +225,9 @@ class InstallSkillTests(unittest.TestCase):
             self.assertEqual(plan["field"], "key_bonds")
             self.assertTrue(plan["steps"])
             self.assertEqual(plan["steps"][0]["source_mode"], "model_knowledge")
+            self.assertEqual(len(plan["steps"]), 1)
+            self.assertFalse(plan["web_collection_enabled"])
+            self.assertIn("--collect-web", plan["host_hint"])
 
             result_path = tmp_root / "autofill_result.json"
             response_path = tmp_root / "autofill_response.txt"
@@ -224,6 +248,40 @@ class InstallSkillTests(unittest.TestCase):
             result = json.loads(result_path.read_text(encoding="utf-8"))
             self.assertEqual(result["parsed"]["status"], "filled")
             self.assertIn("魏无羡", result["parsed"]["value"])
+
+    def test_installed_persona_autofill_web_fallback_requires_collected_references(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            persona_dir = tmp_root / "data" / "characters" / "mdzs" / "江澄"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "PROFILE.generated.md").write_text(
+                "# PROFILE\n"
+                "- name: 江澄\n"
+                "- novel_id: mdzs\n"
+                "- core_identity: 云梦江氏家主\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_persona_autofill_payload.py"),
+                    "--persona-dir",
+                    str(persona_dir),
+                    "--field",
+                    "key_bonds",
+                    "--strategy",
+                    "web_fallback",
+                ],
+                cwd=dst,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--collect-web", result.stderr)
 
     def test_installed_dialogue_suggestion_tool_builds_bundle_and_parses_result(self):
         repo_root = Path(__file__).resolve().parents[1]
@@ -304,6 +362,38 @@ class InstallSkillTests(unittest.TestCase):
             )
             result = json.loads(result_path.read_text(encoding="utf-8"))
             self.assertIn("前面到底是人还是局", result["suggestion"])
+
+    def test_installed_dialogue_suggestion_tool_rejects_invalid_mode(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            context_path = tmp_root / "bad_context.json"
+            context_path.write_text(
+                json.dumps(
+                    {
+                        "mode": "scene_push",
+                        "participants": ["林黛玉"],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_dialogue_suggestion_payload.py"),
+                    "--context-file",
+                    str(context_path),
+                ],
+                cwd=dst,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Unsupported dialogue suggestion mode", result.stderr)
 
     def test_installed_prepare_excerpt_tool_runs_without_repo_src(self):
         repo_root = Path(__file__).resolve().parents[1]

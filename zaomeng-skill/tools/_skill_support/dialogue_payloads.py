@@ -7,11 +7,17 @@ from copy import deepcopy
 import json
 from typing import Any
 
+_SUPPORTED_DIALOGUE_MODES = {"act", "insert", "observe"}
+
 
 def normalize_dialogue_suggestion_context(context: dict[str, Any]) -> dict[str, Any]:
     mode = str(context.get("mode", "observe")).strip() or "observe"
+    if mode not in _SUPPORTED_DIALOGUE_MODES:
+        raise ValueError(f"Unsupported dialogue suggestion mode: {mode}")
     speaker = str(context.get("speaker", "")).strip()
     participants = [str(item).strip() for item in list(context.get("participants", [])) if str(item).strip()]
+    if not participants:
+        raise ValueError("Dialogue suggestion context requires at least one participant.")
     persona_contexts = [_normalize_persona_context(item) for item in list(context.get("persona_contexts", [])) if isinstance(item, dict)]
     history = [_normalize_history_entry(item) for item in list(context.get("history", [])) if isinstance(item, dict)]
     relation_excerpt = str(context.get("relation_excerpt", "")).strip()
@@ -22,6 +28,19 @@ def normalize_dialogue_suggestion_context(context: dict[str, Any]) -> dict[str, 
         speaker = controlled_character
     if mode == "insert" and not speaker:
         speaker = str(user_persona.get("display_name", "")).strip() or "你"
+    if mode == "act":
+        if not controlled_character and not speaker:
+            raise ValueError("act mode requires controlled_character or speaker.")
+        controlled_name = controlled_character or speaker
+        has_persona = any(str(item.get("name", "")).strip() == controlled_name for item in persona_contexts)
+        if not has_persona:
+            raise ValueError("act mode requires a matching persona_context for the controlled character.")
+    if mode == "insert":
+        if not any(
+            str(user_persona.get(key, "")).strip()
+            for key in ("display_name", "scene_identity", "core_identity", "speech_style", "soul_goal")
+        ):
+            raise ValueError("insert mode requires a non-empty user_persona profile.")
     return {
         "mode": mode,
         "speaker": speaker,

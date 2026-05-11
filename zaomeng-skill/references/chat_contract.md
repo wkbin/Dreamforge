@@ -106,7 +106,7 @@ The tool returns:
 
 For persona review autofill, call:
 
-- `tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto`
+- `tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto [--collect-web]`
 
 The tool returns:
 
