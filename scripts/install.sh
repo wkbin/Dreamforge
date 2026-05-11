@@ -27,6 +27,86 @@ is_termux() {
   [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux/files/usr" ]
 }
 
+install_system_packages() {
+  if [ "$#" -eq 0 ]; then
+    return 0
+  fi
+
+  if is_termux; then
+    if command -v pkg >/dev/null 2>&1; then
+      echo "Installing packages in Termux via pkg / 正在通过 pkg 安装依赖: $*" >&2
+      pkg update -y >&2
+      pkg install -y "$@" >&2
+      return
+    fi
+    echo "Termux was detected but pkg is unavailable. / 检测到 Termux，但没有找到 pkg。" >&2
+    return 1
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "Installing packages via apt-get / 正在通过 apt-get 安装依赖: $*" >&2
+    run_pkg_manager "apt-get update -y && apt-get install -y $*"
+    return
+  fi
+  if command -v apt >/dev/null 2>&1; then
+    echo "Installing packages via apt / 正在通过 apt 安装依赖: $*" >&2
+    run_pkg_manager "apt update -y && apt install -y $*"
+    return
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    echo "Installing packages via dnf / 正在通过 dnf 安装依赖: $*" >&2
+    run_pkg_manager "dnf install -y $*"
+    return
+  fi
+  if command -v yum >/dev/null 2>&1; then
+    echo "Installing packages via yum / 正在通过 yum 安装依赖: $*" >&2
+    run_pkg_manager "yum install -y $*"
+    return
+  fi
+  if command -v pacman >/dev/null 2>&1; then
+    echo "Installing packages via pacman / 正在通过 pacman 安装依赖: $*" >&2
+    run_pkg_manager "pacman -Sy --noconfirm $*"
+    return
+  fi
+  if command -v zypper >/dev/null 2>&1; then
+    echo "Installing packages via zypper / 正在通过 zypper 安装依赖: $*" >&2
+    run_pkg_manager "zypper --non-interactive install $*"
+    return
+  fi
+  if command -v apk >/dev/null 2>&1; then
+    echo "Installing packages via apk / 正在通过 apk 安装依赖: $*" >&2
+    run_pkg_manager "apk add --no-cache $*"
+    return
+  fi
+
+  echo "No supported package manager was found for: $* / 未找到可用于安装以下依赖的包管理器: $*" >&2
+  return 1
+}
+
+auto_install_base_tools() {
+  local missing_tools=()
+
+  if ! command -v tar >/dev/null 2>&1; then
+    missing_tools+=("tar")
+  fi
+  if ! command -v mktemp >/dev/null 2>&1 || ! command -v chmod >/dev/null 2>&1; then
+    missing_tools+=("coreutils")
+  fi
+  if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    missing_tools+=("curl" "wget")
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    missing_tools+=("git")
+  fi
+
+  if [ "${#missing_tools[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  echo "Trying to install base CLI tools... / 正在尝试自动安装基础命令行工具..." >&2
+  install_system_packages "${missing_tools[@]}"
+}
+
 run_pkg_manager() {
   local install_cmd="$1"
   if [ "$(id -u)" -eq 0 ]; then
@@ -45,48 +125,24 @@ auto_install_python() {
   echo "Python 3 was not found. Trying to install it automatically... / 未检测到 Python 3，正在尝试自动安装..." >&2
 
   if is_termux; then
-    if command -v pkg >/dev/null 2>&1; then
-      echo "Installing python in Termux via pkg / 正在通过 pkg 安装 Termux Python" >&2
-      pkg update -y >&2 && pkg install -y python >&2
-      return
-    fi
-    echo "Termux was detected but pkg is unavailable. / 检测到 Termux，但没有找到 pkg。" >&2
-    return 1
+    install_system_packages python
+    return
   fi
 
-  if command -v apt-get >/dev/null 2>&1; then
-    echo "Installing python3 via apt-get / 正在通过 apt-get 安装 python3" >&2
-    run_pkg_manager "apt-get update -y && apt-get install -y python3 python3-venv" >&2
+  if command -v apt-get >/dev/null 2>&1 || command -v apt >/dev/null 2>&1; then
+    install_system_packages python3 python3-venv
     return
   fi
-  if command -v apt >/dev/null 2>&1; then
-    echo "Installing python3 via apt / 正在通过 apt 安装 python3" >&2
-    run_pkg_manager "apt update -y && apt install -y python3 python3-venv" >&2
-    return
-  fi
-  if command -v dnf >/dev/null 2>&1; then
-    echo "Installing python3 via dnf / 正在通过 dnf 安装 python3" >&2
-    run_pkg_manager "dnf install -y python3" >&2
-    return
-  fi
-  if command -v yum >/dev/null 2>&1; then
-    echo "Installing python3 via yum / 正在通过 yum 安装 python3" >&2
-    run_pkg_manager "yum install -y python3" >&2
+  if command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1 || command -v zypper >/dev/null 2>&1; then
+    install_system_packages python3
     return
   fi
   if command -v pacman >/dev/null 2>&1; then
-    echo "Installing python via pacman / 正在通过 pacman 安装 python" >&2
-    run_pkg_manager "pacman -Sy --noconfirm python" >&2
-    return
-  fi
-  if command -v zypper >/dev/null 2>&1; then
-    echo "Installing python3 via zypper / 正在通过 zypper 安装 python3" >&2
-    run_pkg_manager "zypper --non-interactive install python3" >&2
+    install_system_packages python
     return
   fi
   if command -v apk >/dev/null 2>&1; then
-    echo "Installing python3 via apk / 正在通过 apk 安装 python3" >&2
-    run_pkg_manager "apk add --no-cache python3 py3-pip" >&2
+    install_system_packages python3 py3-pip
     return
   fi
 
@@ -138,6 +194,17 @@ choose_fetch() {
     echo wget
     return
   fi
+  echo "curl or wget was not found. Trying to install a downloader... / 未检测到 curl 或 wget，正在尝试自动安装下载工具..." >&2
+  if auto_install_base_tools; then
+    if command -v curl >/dev/null 2>&1; then
+      echo curl
+      return
+    fi
+    if command -v wget >/dev/null 2>&1; then
+      echo wget
+      return
+    fi
+  fi
   echo "curl or wget is required. / 需要安装 curl 或 wget。" >&2
   exit 1
 }
@@ -182,6 +249,7 @@ fetch_archive() {
 }
 
 main() {
+  auto_install_base_tools || true
   need_cmd tar
   need_cmd mktemp
   need_cmd chmod
