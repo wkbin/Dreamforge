@@ -308,6 +308,45 @@
   margin-top: 0.15rem;
 }
 
+.persona-review-vue-root {
+  display: grid;
+  gap: 1rem;
+}
+
+.relation-details-vue-root {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.self-card-vue-root {
+  display: grid;
+  gap: 1rem;
+}
+
+.self-card-vue-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.relation-details-vue-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.relation-detail-save-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.persona-review-vue-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.persona-vue-grid {
+  align-items: start;
+}
+
 .persona-reference-panel {
   margin-top: 0.2rem;
   padding: 0.15rem 0 0;
@@ -567,6 +606,22 @@
   min-height: 1.95rem;
   padding: 0 0.82rem;
   font-size: 0.74rem;
+}
+
+#persona-review-modal.has-vue-island #persona-review-form,
+#persona-review-modal.has-vue-island #persona-review-status,
+#persona-review-modal.has-vue-island #persona-review-reference-panel {
+  display: none !important;
+}
+
+#relation-details-modal.has-vue-island #relation-details-list,
+#relation-details-modal.has-vue-island #relation-details-status {
+  display: none !important;
+}
+
+#self-card-modal.has-vue-island #self-card-form,
+#self-card-modal.has-vue-island #self-card-status {
+  display: none !important;
 }
 
 @keyframes fade-card {

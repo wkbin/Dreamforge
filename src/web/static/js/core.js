@@ -44,6 +44,7 @@ var currentCharacterOverview = null;
 var currentPersonaReview = null;
 var currentPersonaAutofill = null;
 var currentRelationDetails = null;
+var currentSelfCardEditor = null;
 var selfCards = [];
 var currentSelfCard = null;
 var selectedSelfCardId = "";
@@ -61,6 +62,77 @@ const DISTILL_CHUNK_MAX_CHARS = 9000;
 const DISTILL_CHUNK_MAX_SENTENCES = 70;
 const RELATION_CHUNK_MAX_CHARS = 4800;
 const RELATION_CHUNK_MAX_SENTENCES = 36;
+
+function getLegacyBridge() {
+  const bridge = window.__ZAOMENG_LEGACY_BRIDGE__;
+  if (!bridge || typeof bridge.publish !== "function") {
+    return null;
+  }
+  return bridge;
+}
+
+function readLegacyActionBridge(name) {
+  const key = String(name || "").trim();
+  if (!key) return {};
+  const value = window[key];
+  return value && typeof value === "object" ? value : {};
+}
+
+function mergeLegacyActionBridge(name, actions = {}) {
+  const key = String(name || "").trim();
+  if (!key) return {};
+  const nextValue = {
+    ...readLegacyActionBridge(key),
+    ...(actions && typeof actions === "object" ? actions : {}),
+  };
+  window[key] = nextValue;
+  return nextValue;
+}
+
+function buildLegacyUiStateSnapshot(overrides = {}) {
+  return {
+    currentRunId,
+    currentRun,
+    allRuns,
+    currentDialogueSessionId,
+    currentDialogueSession,
+    modelSettings,
+    currentCharacterOverview,
+    currentPersonaReview,
+    currentPersonaAutofill,
+    currentRelationDetails,
+    currentSelfCardEditor,
+    selfCards,
+    currentSelfCard,
+    selectedSelfCardId,
+    redistillSuggestionState,
+    redistillDraft: buildRedistillDraftState(),
+    chatSetup: typeof window.__ZAOMENG_BUILD_CHAT_SETUP_STATE__ === "function" ? window.__ZAOMENG_BUILD_CHAT_SETUP_STATE__() : {},
+    composer: typeof window.__ZAOMENG_BUILD_COMPOSER_STATE__ === "function" ? window.__ZAOMENG_BUILD_COMPOSER_STATE__() : {},
+    workflow: window.__ZAOMENG_WORKFLOW_STATE__ || {},
+    ...overrides,
+  };
+}
+
+function publishLegacyUiState(source = "legacy", overrides = {}) {
+  const bridge = getLegacyBridge();
+  if (!bridge) {
+    return;
+  }
+  bridge.publish(buildLegacyUiStateSnapshot(overrides), source);
+}
+
+function publishLegacyStateSlice(source, key, value) {
+  const name = String(key || "").trim();
+  if (!name) return;
+  publishLegacyUiState(source, { [name]: value });
+}
+
+window.__ZAOMENG_UI_BRIDGE_TOOLS__ = {
+  readLegacyActionBridge,
+  mergeLegacyActionBridge,
+  publishLegacyStateSlice,
+};
 
 function el(id) {
   return document.getElementById(id);
@@ -351,6 +423,7 @@ function updateRedistillFileView() {
     syncRedistillPreview();
   }
   syncRedistillRecommendationState();
+  publishLegacyUiState("redistill-file-view-updated");
 }
 
 async function applySamplingHint(file) {
@@ -613,6 +686,9 @@ function maybePrefillChatSetup(run) {
   chatSetupPrefilledForRunId = run.run_id;
   syncModeFields();
   updateCharacterPillState();
+  if (typeof publishChatSetupState === "function") {
+    publishChatSetupState("chat-setup-prefilled");
+  }
 }
 
 function getRunCharacterNames(run) {
@@ -635,6 +711,9 @@ function renderCharacterPills(run) {
         setValue("dialogue-controlled", name);
       }
       updateCharacterPillState();
+      if (typeof publishChatSetupState === "function") {
+        publishChatSetupState("chat-setup-pill-clicked");
+      }
     });
     root.appendChild(button);
   });
@@ -643,6 +722,9 @@ function renderCharacterPills(run) {
 
 function updateCharacterPillState() {
   updatePillState("#dialogue-character-pills", charactersOf("dialogue-participants"));
+  if (typeof publishChatSetupState === "function") {
+    publishChatSetupState("chat-setup-pill-state-updated");
+  }
 }
 
 function renderRedistillPills(run) {
@@ -669,6 +751,7 @@ function updateRedistillPillState() {
   updatePillState("#redistill-character-pills", charactersOf("redistill-characters"));
   syncRedistillPreview();
   syncRedistillRecommendationState();
+  publishLegacyUiState("redistill-pill-state-updated");
 }
 
 function syncRedistillPreview() {
@@ -680,8 +763,41 @@ function syncRedistillPreview() {
   renderRedistillPlanGroup("redistill-new-list", newcomers, "redistill-new-empty");
 }
 
+function buildRedistillDraftState() {
+  const requestedCharacters = charactersOf("redistill-characters");
+  const existingNames = new Set(getRunCharacterNames(currentRun));
+  const existingSelectedCharacters = requestedCharacters.filter((name) => existingNames.has(name));
+  const newSelectedCharacters = requestedCharacters.filter((name) => !existingNames.has(name));
+  const file = el("redistill-novel-file")?.files?.[0] || null;
+  const selectedSegment = !file ? getSelectedRedistillSegment() : null;
+  return {
+    requestedCharacters,
+    existingSelectedCharacters,
+    newSelectedCharacters,
+    fileAttached: Boolean(file),
+    fileName: file?.name || "",
+    recommendationTarget: !file && requestedCharacters.length === 1 && existingSelectedCharacters.length === 1 ? existingSelectedCharacters[0] : "",
+    selectedSegmentId: selectedSegment?.segment_id || "",
+    selectedSegment,
+    usingSuggestedSegment: Boolean(selectedSegment && !file),
+    panelOpen: Boolean(redistillPanelOpen),
+  };
+}
+
 function getSelectedRedistillSegment() {
   return redistillSuggestionState.items.find((item) => item.segment_id === redistillSuggestionState.selectedSegmentId) || null;
+}
+
+function selectRedistillSuggestedSegment(segmentId) {
+  const nextId = String(segmentId || "").trim();
+  redistillSuggestionState.selectedSegmentId = nextId;
+  const target = String(redistillSuggestionState.character || "").trim();
+  if (nextId && target) {
+    setStatus("redistill-status", `这轮会直接用推荐片段为「${target}」继续增量蒸馏。`);
+  }
+  updateRedistillFileView();
+  renderRedistillRecommendationState(target);
+  publishLegacyUiState("redistill-segment-selected");
 }
 
 function getRedistillRecommendationTarget() {
@@ -796,12 +912,7 @@ function renderRedistillRecommendationState(targetCharacter = "") {
     useButton.type = "button";
     useButton.className = item.segment_id === redistillSuggestionState.selectedSegmentId ? "primary-button" : "soft-button";
     useButton.textContent = item.segment_id === redistillSuggestionState.selectedSegmentId ? "已选这段" : "用这一段";
-    useButton.addEventListener("click", () => {
-      redistillSuggestionState.selectedSegmentId = item.segment_id;
-      setStatus("redistill-status", `这轮会直接用推荐片段为「${target}」继续增量蒸馏。`);
-      updateRedistillFileView();
-      renderRedistillRecommendationState(target);
-    });
+    useButton.addEventListener("click", () => selectRedistillSuggestedSegment(item.segment_id));
     actions.appendChild(useButton);
 
     card.appendChild(head);
@@ -811,7 +922,12 @@ function renderRedistillRecommendationState(targetCharacter = "") {
     card.appendChild(actions);
     root.appendChild(card);
   });
+  publishLegacyUiState("redistill-recommendation-rendered");
 }
+
+mergeLegacyActionBridge("__ZAOMENG_REDISTILL_ACTIONS__", {
+  selectSegment: selectRedistillSuggestedSegment,
+});
 
 function humanizeSummary(summary) {
   const mapping = {
@@ -977,11 +1093,19 @@ function closeRelationDetailsModal() {
 function openSelfCardModal() {
   toggle("self-card-modal", true);
   syncModalScrollLock();
+  currentSelfCardEditor = typeof window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__ === "function"
+    ? window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__()
+    : currentSelfCardEditor;
+  publishLegacyUiState("self-card-modal-opened", { currentSelfCardEditor });
 }
 
 function closeSelfCardModal() {
   toggle("self-card-modal", false);
   syncModalScrollLock();
+  currentSelfCardEditor = typeof window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__ === "function"
+    ? window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__()
+    : currentSelfCardEditor;
+  publishLegacyUiState("self-card-modal-closed", { currentSelfCardEditor });
 }
 
 async function apiJson(url, options = {}, fallbackMessage = "请求失败。") {

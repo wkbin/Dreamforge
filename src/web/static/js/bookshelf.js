@@ -1,21 +1,96 @@
 function syncBookshelfSelection() {
-  document.querySelectorAll("#bookshelf-list .bookshelf-item").forEach((node) => {
-    const runId = node.getAttribute("data-run-id") || "";
-    const nodeRun = findRunById(runId);
-    const sameNovel = nodeRun && currentRun && runNovelTitle(nodeRun) === runNovelTitle(currentRun);
-    node.classList.toggle("active", runId === currentRunId || Boolean(sameNovel));
-  });
+  window.__ZAOMENG_BOOKSHELF_LEGACY_RENDER__?.syncBookshelfSelection?.();
+}
+
+const WORK_OVERVIEW_STATE = window.__ZAOMENG_WORK_OVERVIEW_STATE__ || {};
+
+function buildRunStatusBannerState(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildRunStatusBannerState === "function") {
+    return WORK_OVERVIEW_STATE.buildRunStatusBannerState(run);
+  }
+  return { visible: false, kicker: "", stage: "", description: "" };
+}
+
+function buildWorkActionState(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkActionState === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkActionState(run);
+  }
+  return {
+    primaryVisible: false,
+    secondaryVisible: false,
+    softenSecondary: false,
+    actionNoteVisible: false,
+    actionNote: "",
+    primaryButtons: [],
+    secondaryButtons: [],
+  };
+}
+
+function buildWorkTopOverviewState(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkTopOverviewState === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkTopOverviewState(run);
+  }
+  return {
+    title: run ? `《${runNovelTitle(run)}》` : "人物与关系正在慢慢浮现",
+    progressCopy: String(run?.progress?.message || "").trim() || "人物与关系会依次浮现。",
+    nextStep: "这一卷的下一步会在这里告诉你。",
+    banner: buildRunStatusBannerState(run),
+    heroMetrics: [],
+    progressMetrics: [],
+    actions: buildWorkActionState(run),
+  };
+}
+
+window.__ZAOMENG_BUILD_WORK_TOP_STATE__ = buildWorkTopOverviewState;
+
+const BOOKSHELF_BRIDGE_TOOLS = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
+
+function runDetailActions() {
+  if (typeof BOOKSHELF_BRIDGE_TOOLS.readLegacyActionBridge === "function") {
+    return BOOKSHELF_BRIDGE_TOOLS.readLegacyActionBridge("__ZAOMENG_RUN_DETAIL_ACTIONS__");
+  }
+  return window.__ZAOMENG_RUN_DETAIL_ACTIONS__ || {};
+}
+
+function renderRunFallbackFromBookshelf(run) {
+  if (!run || typeof run !== "object") {
+    throw new Error("这卷的详情数据暂时不可用。");
+  }
+  if (typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(false);
+  }
+  setStatus("bookshelf-status", "");
+  currentRunId = String(run.run_id || "").trim();
+  currentRun = run;
+  newRunFlowOpen = false;
+  chatModePickerOpen = false;
+  characterOverviewOpen = false;
+  currentCharacterOverview = null;
+  redistillPanelOpen = false;
+  sourceHistoryExpanded = false;
+  characterReadinessExpanded = false;
+  workSessionPreviewExpanded = false;
+  runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
+  if (typeof resetDialogueView === "function") {
+    resetDialogueView();
+  }
+  renderBookshelfDetail(run);
+  syncBookshelfSelection();
+  if (typeof updateWorkflowState === "function") {
+    updateWorkflowState();
+  }
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("run-rendered-fallback");
+  }
+  return run;
 }
 
 function renderBookshelfDetail(run) {
-  setText("run-stage-title", run ? `《${runNovelTitle(run)}》` : "人物与关系正在慢慢浮现", "");
-  setText("progress-copy", run?.progress?.message || "人物会依次显形，关系也会慢慢织起来。", "");
-  const isRunning = Boolean(run) && run.status === "running";
-  const isStopped = Boolean(run) && run.status === "stopped";
-  const stopRequested = isRunning && Boolean(run?.control?.stop_requested);
-  const canEnterChat = Boolean(run) && run.status === "ready" && getRunCharacterNames(run).length > 0;
-  const canRedistill = Boolean(run) && run.status !== "running";
-  const canStop = isRunning && !stopRequested;
+  const topState = buildWorkTopOverviewState(run);
+  const actionState = topState.actions;
+  setText("run-stage-title", topState.title, "");
+  setText("progress-copy", topState.progressCopy, "");
+  setText("work-overview-next-step", topState.nextStep, "");
   renderRunStatusBanner(run);
 
   const graphRoot = el("graph-links");
@@ -52,30 +127,33 @@ function renderBookshelfDetail(run) {
 
   const chatButton = el("detail-start-chat-button");
   if (chatButton) {
-    chatButton.disabled = !canEnterChat;
-    chatButton.classList.toggle("hidden", !canEnterChat);
+    const item = actionState.primaryButtons.find((entry) => entry.key === "chat");
+    chatButton.disabled = Boolean(item?.disabled);
+    chatButton.classList.toggle("hidden", Boolean(item?.hidden));
   }
   const redistillButton = el("detail-redistill-button");
   if (redistillButton) {
-    redistillButton.disabled = !canRedistill;
-    redistillButton.classList.toggle("hidden", !canRedistill);
-    redistillButton.textContent = redistillPanelOpen ? "收起继续蒸馏" : "继续蒸馏";
+    const item = actionState.primaryButtons.find((entry) => entry.key === "redistill");
+    redistillButton.disabled = Boolean(item?.disabled);
+    redistillButton.classList.toggle("hidden", Boolean(item?.hidden));
+    redistillButton.textContent = item?.label || "继续蒸馏";
   }
   const stopButton = el("detail-stop-run-button");
   if (stopButton) {
-    stopButton.disabled = !canStop;
-    stopButton.classList.toggle("hidden", !isRunning);
-    stopButton.textContent = stopRequested ? "正在停止..." : "停止蒸馏";
+    const item = actionState.primaryButtons.find((entry) => entry.key === "stop");
+    stopButton.disabled = Boolean(item?.disabled);
+    stopButton.classList.toggle("hidden", Boolean(item?.hidden));
+    stopButton.textContent = item?.label || "停止蒸馏";
   }
   const reviewButton = el("open-persona-review-button");
-  const hasReviewAction = Boolean(run?.artifact_index?.characters?.length);
   const detailActions = el("detail-primary-actions");
   if (detailActions) {
-    detailActions.classList.toggle("hidden", !canEnterChat && !canRedistill && !canStop && !hasReviewAction);
+    detailActions.classList.toggle("hidden", !actionState.primaryVisible);
   }
   if (reviewButton) {
+    const item = actionState.primaryButtons.find((entry) => entry.key === "review");
     reviewButton.classList.remove("hidden");
-    reviewButton.disabled = !hasReviewAction;
+    reviewButton.disabled = Boolean(item?.disabled);
   }
   const relationButton = el("open-relation-details-button");
   const hasRelation = Boolean(run?.artifact_index?.relation_graph?.relations_file);
@@ -86,18 +164,14 @@ function renderBookshelfDetail(run) {
   const exportButton = el("detail-export-summary-button");
   let hasExport = false;
   if (exportButton) {
-    hasExport =
-      Boolean(run?.file_urls?.manifest) ||
-      Boolean(run?.file_urls?.graph_relations_file) ||
-      Boolean(run?.file_urls?.graph_html) ||
-      Boolean(run?.file_urls?.graph_svg);
+    hasExport = !actionState.secondaryButtons.find((entry) => entry.key === "export")?.disabled;
     exportButton.classList.remove("hidden");
     exportButton.disabled = !hasExport;
   }
   const graphButton = el("detail-view-graph-button");
   let hasGraphLink = false;
   if (graphButton) {
-    hasGraphLink = Boolean(run?.file_urls?.graph_html || run?.file_urls?.graph_svg);
+    hasGraphLink = !actionState.secondaryButtons.find((entry) => entry.key === "graph")?.disabled;
     graphButton.classList.remove("hidden");
     graphButton.disabled = !hasGraphLink;
     graphButton.onclick = () => {
@@ -106,182 +180,34 @@ function renderBookshelfDetail(run) {
       window.open(target, "_blank", "noopener,noreferrer");
     };
   }
-  toggle("detail-secondary-actions-shell", Boolean(run));
-  const shouldSoftenSecondary = isRunning && (!hasRelation || !hasGraphLink || !hasExport);
+  toggle("detail-secondary-actions-shell", actionState.secondaryVisible);
   const secondaryActions = el("detail-secondary-actions");
   if (secondaryActions) {
-    secondaryActions.classList.toggle("is-softened", shouldSoftenSecondary);
+    secondaryActions.classList.toggle("is-softened", actionState.softenSecondary);
   }
-  toggle("detail-action-note", Boolean(run) && (isRunning || isStopped));
-  if (stopRequested) {
-    setText("detail-action-note", "已收到停止请求，正在把当前这一步收住。", "");
-  } else if (isRunning) {
-    setText("detail-action-note", "这一卷还在整理中，先盯住进度，人物落定后再继续别的动作。", "");
-  } else if (isStopped) {
-    setText("detail-action-note", "这一轮已经停在这里，可以继续蒸馏把它接上。", "");
-  } else if (run?.status === "failed") {
-    setText("detail-action-note", "这一轮停在了半途，可以继续蒸馏把它接上。", "");
-    toggle("detail-action-note", true);
-  }
+  toggle("detail-action-note", actionState.actionNoteVisible);
+  setText("detail-action-note", actionState.actionNote, "");
 }
 
 function renderRunStatusBanner(run) {
-  const visible = Boolean(run) && (run.status === "running" || run.status === "failed" || run.status === "ready" || run.status === "stopped");
-  toggle("run-status-banner", visible);
-  if (!visible) return;
-
-  const progressMessage = run?.progress?.message || "这一卷还在慢慢成形。";
-  const stage = String(run?.progress?.stage || "").trim();
-  const summary = humanizeSummary(run?.summary?.status_text);
-  const stopRequested = Boolean(run?.control?.stop_requested) && run?.status === "running";
-
-  if (run?.status === "running") {
-    setText("run-status-kicker", stopRequested ? "正在停下" : "正在整理", "");
-    setText("run-status-stage", summary || "人物依次显形中", "");
-    setText(
-      "run-status-description",
-      progressMessage || (stopRequested ? "已经收到停止请求，正在收束当前步骤。" : "这一卷还在慢慢成形，先看它往哪里走。"),
-      ""
-    );
-    return;
-  }
-  if (run?.status === "failed") {
-    setText("run-status-kicker", "这卷停住了", "");
-    setText("run-status-stage", "可以从这里重新接上", "");
-    setText("run-status-description", progressMessage || "这一次停在半途，继续蒸馏就能把它接回去。", "");
-    return;
-  }
-  if (run?.status === "stopped") {
-    setText("run-status-kicker", "这卷先停下了", "");
-    setText("run-status-stage", "已经按你的意思收住", "");
-    setText("run-status-description", progressMessage || "这一轮已经停止，可以稍后继续蒸馏，或直接把它移出书架。", "");
-    return;
-  }
-
-  const stageText =
-    stage === "graph_done" || run?.summary?.status_text === "workflow_complete"
-      ? "人物与关系已经落稳"
-      : summary || "这一卷已经可以继续";
-  setText("run-status-kicker", "已经可入场", "");
-  setText("run-status-stage", stageText, "");
-  setText("run-status-description", "可以开始聊天，也可以继续补入新书段与新人物。", "");
+  const state = buildRunStatusBannerState(run);
+  toggle("run-status-banner", state.visible);
+  if (!state.visible) return;
+  setText("run-status-kicker", state.kicker, "");
+  setText("run-status-stage", state.stage, "");
+  setText("run-status-description", state.description, "");
 }
 
 function renderBookshelf(runs) {
-  const listRoot = el("bookshelf-list");
-  const emptyRoot = el("bookshelf-empty");
-  if (!listRoot || !emptyRoot) return;
-
-  const groupedRuns = aggregateRunsByNovel(runs);
-  listRoot.innerHTML = "";
-  emptyRoot.classList.toggle("hidden", groupedRuns.length > 0);
-  if (!groupedRuns.length) {
-    renderBookshelfDetail(null);
-    return;
-  }
-
-  const fragment = document.createDocumentFragment();
-  groupedRuns.forEach((run) => {
-    const row = document.createElement("div");
-    row.className = "bookshelf-item-row";
-    const button = document.createElement("button");
-    button.type = "button";
-    const cardState = getBookshelfCardState(run);
-    button.className = `bookshelf-item ${cardState.className}`.trim();
-    button.setAttribute("data-run-id", run.run_id || "");
-    const characterCount = getRunCharacterNames(run).length;
-    const summary = humanizeSummary(run.summary?.status_text);
-    const updatedAt = formatWeakTime(run.updated_at || "");
-    button.innerHTML = `
-      <span class="bookshelf-item-top">
-        <span class="bookshelf-item-status-row">
-          <span class="bookshelf-item-dot" aria-hidden="true"></span>
-          <span class="bookshelf-item-status">${summary}</span>
-        </span>
-        <strong>${runNovelTitle(run)}</strong>
-      </span>
-      <span class="bookshelf-item-meta">
-        <span>${characterCount ? `已落成人物 ${characterCount}` : "人物仍在整理"}</span>
-        <span>${updatedAt || "刚刚放上书架"}</span>
-      </span>
-    `;
-    button.title = `${runNovelTitle(run)}${humanizeSummary(run.summary?.status_text) ? ` · ${humanizeSummary(run.summary?.status_text)}` : ""}`;
-    button.addEventListener("click", async () => {
-      if (typeof setWorkOverviewLoading === "function") {
-        setWorkOverviewLoading(true, "正在载入这一卷...");
-      }
-      try {
-        const freshRun = await apiJson(`/api/web/runs/${run.run_id}`);
-        renderRun(freshRun);
-      } catch (error) {
-        if (typeof setWorkOverviewLoading === "function") {
-          setWorkOverviewLoading(false);
-        }
-        setStatus("bookshelf-status", error.message || "这卷暂时没有载入。");
-      }
-    });
-
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "bookshelf-delete-button";
-    removeButton.textContent = "×";
-    removeButton.title = "删除这本书卷";
-    removeButton.setAttribute("aria-label", `删除《${runNovelTitle(run)}》`);
-    removeButton.disabled = run?.status === "running";
-    if (removeButton.disabled) {
-      removeButton.title = "这本书还在整理中，暂时不能删除";
-    }
-    removeButton.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      if (run?.status === "running") {
-        window.alert("这本书还在整理中，暂时不能删除。");
-        return;
-      }
-      const title = runNovelTitle(run);
-      if (!window.confirm(`确定把《${title}》从书架移走吗？`)) return;
-      if (!window.confirm(`最后确认：删除《${title}》后，这本书的人物、关系图和会话记录都会一起删除，且无法恢复。`)) return;
-      try {
-        const deleted = await apiJson(`/api/web/runs/${run.run_id}`, { method: "DELETE" }, "删除失败。");
-        if (currentRun && runNovelTitle(currentRun) === title) {
-          showBookshelfHome();
-        }
-        await loadRecentSessions();
-        await loadRunsOverview();
-        setStatus("bookshelf-status", formatBookshelfDeleteStatus(title, deleted));
-      } catch (error) {
-        window.alert(error.message || "删除失败。");
-      }
-    });
-
-    row.appendChild(button);
-    row.appendChild(removeButton);
-    fragment.appendChild(row);
-  });
-  listRoot.appendChild(fragment);
-  syncBookshelfSelection();
-  renderBookshelfDetail(currentRun || null);
+  window.__ZAOMENG_BOOKSHELF_LEGACY_RENDER__?.renderBookshelf?.(runs);
 }
 
 function formatBookshelfDeleteStatus(title, payload) {
-  const runCount = Number(payload?.deleted_run_count || 0);
-  const sessionCount = Number(payload?.deleted_session_count || 0);
-  return `已移走《${title}》，同时删除 ${runCount} 轮记录 / ${sessionCount} 个会话。`;
+  return window.__ZAOMENG_BOOKSHELF_STATE__?.formatBookshelfDeleteStatus?.(title, payload) || "";
 }
 
 function getBookshelfCardState(run) {
-  if (run?.status === "failed") {
-    return { className: "is-failed" };
-  }
-  if (run?.status === "stopped") {
-    return { className: "is-stopped" };
-  }
-  if (run?.status === "running") {
-    return { className: "is-running" };
-  }
-  if (run?.status === "ready") {
-    return { className: "is-ready" };
-  }
-  return { className: "" };
+  return window.__ZAOMENG_BOOKSHELF_STATE__?.getBookshelfCardState?.(run) || { className: "" };
 }
 
 async function loadRunsOverview() {
@@ -294,7 +220,43 @@ async function loadRunsOverview() {
   if (typeof setWorkOverviewLoading === "function") {
     setWorkOverviewLoading(false);
   }
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("runs-overview-loaded");
+  }
   return allRuns;
+}
+
+async function openBookshelfRun(runId) {
+  const target = String(runId || "").trim();
+  if (!target) return null;
+  if (typeof setWorkOverviewLoading === "function") {
+    setWorkOverviewLoading(true, "正在载入这一卷...");
+  }
+  const freshRun = await apiJson(`/api/web/runs/${target}`);
+  const actions = runDetailActions();
+  if (typeof actions.renderRunView === "function") {
+    actions.renderRunView(freshRun);
+  } else if (typeof actions.refreshRunView === "function") {
+    await actions.refreshRunView(target);
+  } else if (typeof window.renderRun === "function") {
+    window.renderRun(freshRun);
+  } else {
+    renderRunFallbackFromBookshelf(freshRun);
+  }
+  return freshRun;
+}
+
+async function deleteBookshelfRun(runId, title = "") {
+  const target = String(runId || "").trim();
+  if (!target) return null;
+  const deleted = await apiJson(`/api/web/runs/${target}`, { method: "DELETE" }, "删除失败。");
+  const currentTitle = String(title || "").trim();
+  if (currentTitle && currentRun && typeof runNovelTitle === "function" && runNovelTitle(currentRun) === currentTitle) {
+    showBookshelfHome();
+  }
+  await loadRecentSessions();
+  await loadRunsOverview();
+  return deleted;
 }
 
 function showBookshelfHome() {
@@ -334,4 +296,17 @@ function startNewRunFlow() {
   updateWorkflowState();
   syncBookshelfSelection();
   el("characters")?.focus();
+}
+
+if (typeof BOOKSHELF_BRIDGE_TOOLS.mergeLegacyActionBridge === "function") {
+  BOOKSHELF_BRIDGE_TOOLS.mergeLegacyActionBridge("__ZAOMENG_BOOKSHELF_ACTIONS__", {
+    deleteRun: deleteBookshelfRun,
+    openRun: openBookshelfRun,
+  });
+} else {
+  window.__ZAOMENG_BOOKSHELF_ACTIONS__ = {
+    ...(window.__ZAOMENG_BOOKSHELF_ACTIONS__ || {}),
+    deleteRun: deleteBookshelfRun,
+    openRun: openBookshelfRun,
+  };
 }

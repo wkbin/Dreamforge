@@ -242,6 +242,31 @@
   gap: 0.8rem;
 }
 
+.work-summary-vue-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.work-priority-vue-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.work-entry-vue-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.work-top-vue-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.work-character-vue-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
 .work-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1481,6 +1506,21 @@
   margin-bottom: 0.25rem;
 }
 
+.redistill-vue-root {
+  display: grid;
+  gap: 1rem;
+}
+
+.redistill-vue-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+#redistill-panel.has-vue-island > .redistill-summary-card,
+#redistill-panel.has-vue-island > #redistill-recommend-shell {
+  display: none !important;
+}
+
 .redistill-recommend-shell {
   gap: 0.85rem;
   padding: 1rem 1rem 0.95rem;
@@ -2075,6 +2115,33 @@ textarea::placeholder {
   color: var(--accent-strong);
   border-color: rgba(184, 132, 113, 0.16);
   font-size: 0.72rem;
+}
+
+.chat-setup-vue-root {
+  display: grid;
+  gap: 1rem;
+}
+
+.chat-setup-vue-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.chat-setup-character-grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.chat-setup-inline-note {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+#step-chat-setup.has-vue-island #dialogue-session-form,
+#step-chat-setup.has-vue-island #dialogue-session-status {
+  display: none !important;
 }
 
 .link-row a {

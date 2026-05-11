@@ -2,6 +2,58 @@ let appUpdateStatus = null;
 let appUpdatePollTimer = 0;
 
 const APP_UPDATE_DISMISS_PREFIX = "zaomeng:update-dismissed:";
+const UI_BRIDGE_TOOLS = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
+
+function applyRunViewSafely(run, options = {}) {
+  if (typeof window.__ZAOMENG_APPLY_RUN_VIEW__ === "function") {
+    window.__ZAOMENG_APPLY_RUN_VIEW__(run, options);
+    return true;
+  }
+  if (typeof window.renderRun === "function") {
+    window.renderRun(run, options);
+    return true;
+  }
+  return false;
+}
+
+function readNamedActionBridge(name) {
+  if (typeof UI_BRIDGE_TOOLS.readLegacyActionBridge === "function") {
+    return UI_BRIDGE_TOOLS.readLegacyActionBridge(name);
+  }
+  return window[String(name || "").trim()] || {};
+}
+
+function buildChatSetupState() {
+  const mode = valueOf("dialogue-mode", "observe");
+  return {
+    mode,
+    participants: String(valueOf("dialogue-participants", "")),
+    participantList: charactersOf("dialogue-participants"),
+    availableCharacters: getRunCharacterNames(currentRun),
+    controlledCharacter: trimmedValue("dialogue-controlled", ""),
+    selfCardId: selectedSelfCardId,
+    selfCards: Array.isArray(selfCards) ? selfCards.map((item) => ({
+      card_id: item.card_id || "",
+      preview: item.preview || {},
+      fields: item.fields || {},
+    })) : [],
+    selfName: trimmedValue("dialogue-self-name", ""),
+    selfIdentity: trimmedValue("dialogue-self-identity", ""),
+    selfStyle: trimmedValue("dialogue-self-style", ""),
+    status: String(el("dialogue-session-status")?.textContent || "").trim(),
+    canEditCurrentCard: Boolean(currentSelfCard),
+  };
+}
+
+window.__ZAOMENG_BUILD_CHAT_SETUP_STATE__ = buildChatSetupState;
+
+function publishChatSetupState(source = "chat-setup") {
+  if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
+    UI_BRIDGE_TOOLS.publishLegacyStateSlice(source, "chatSetup", buildChatSetupState());
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState(source, { chatSetup: buildChatSetupState() });
+  }
+}
 
 function syncModeFields() {
   const mode = valueOf("dialogue-mode", "observe");
@@ -16,7 +68,8 @@ function syncModeFields() {
   toggle("insert-self-fields", mode === "insert");
   toggle("self-card-preview-shell", mode === "insert");
   syncCustomSelect("dialogue-self-card");
-  renderSelectedSelfCardPreview();
+  renderSelectedSelfCardPreview(false);
+  publishChatSetupState("chat-setup-mode-updated");
 }
 
 async function handleModelSettingsSubmit(event) {
@@ -68,24 +121,23 @@ async function handleCreateRunSubmit(event) {
   updateWorkflowState();
   setStatus("form-status", "正在翻检正文，替你把人物请出来...");
   try {
-    renderRun(
-      await apiJson(
-        "/api/web/runs",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            novel_name: file.name,
-            novel_content_base64: await fileToBase64(file),
-            characters,
-            max_sentences: numberValue("max-sentences", 120),
-            max_chars: numberValue("max-chars", 50000),
-            auto_run: true,
-          }),
-        },
-        "蒸馏失败。"
-      )
+    const run = await apiJson(
+      "/api/web/runs",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          novel_name: file.name,
+          novel_content_base64: await fileToBase64(file),
+          characters,
+          max_sentences: numberValue("max-sentences", 120),
+          max_chars: numberValue("max-chars", 50000),
+          auto_run: true,
+        }),
+      },
+      "蒸馏失败。"
     );
+    applyRunViewSafely(run);
     await loadRunsOverview();
     setStatus("form-status", "人物整理已经开始，进度会在这里慢慢往前走。");
   } catch (error) {
@@ -119,23 +171,22 @@ async function handleRedistill() {
         : "正在沿着这卷书继续往下整理..."
   );
   try {
-    renderRun(
-      await apiJson(
-        `/api/web/runs/${currentRunId}/redistill`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            characters,
-            novel_name: file?.name || (selectedSegment ? `${String(redistillSuggestionState.character || "redistill").trim()}-推荐片段.txt` : ""),
-            novel_content_base64: file ? await fileToBase64(file) : selectedSegment ? textToBase64(selectedSegment.full_text || "") : "",
-            max_sentences: numberValue("max-sentences", 120),
-            max_chars: numberValue("max-chars", 50000),
-          }),
-        },
-        "继续蒸馏失败。"
-      )
+    const run = await apiJson(
+      `/api/web/runs/${currentRunId}/redistill`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          characters,
+          novel_name: file?.name || (selectedSegment ? `${String(redistillSuggestionState.character || "redistill").trim()}-推荐片段.txt` : ""),
+          novel_content_base64: file ? await fileToBase64(file) : selectedSegment ? textToBase64(selectedSegment.full_text || "") : "",
+          max_sentences: numberValue("max-sentences", 120),
+          max_chars: numberValue("max-chars", 50000),
+        }),
+      },
+      "继续蒸馏失败。"
     );
+    applyRunViewSafely(run);
     await loadRunsOverview();
     if (el("redistill-novel-file")) {
       el("redistill-novel-file").value = "";
@@ -204,6 +255,17 @@ async function handleRedistillRecommend() {
   }
 }
 
+if (typeof UI_BRIDGE_TOOLS.mergeLegacyActionBridge === "function") {
+  UI_BRIDGE_TOOLS.mergeLegacyActionBridge("__ZAOMENG_REDISTILL_ACTIONS__", {
+    recommend: () => handleRedistillRecommend(),
+  });
+} else {
+  window.__ZAOMENG_REDISTILL_ACTIONS__ = {
+    ...(window.__ZAOMENG_REDISTILL_ACTIONS__ || {}),
+    recommend: () => handleRedistillRecommend(),
+  };
+}
+
 async function handleStopRun() {
   if (!currentRunId || !currentRun || currentRun.status !== "running") {
     return;
@@ -218,16 +280,14 @@ async function handleStopRun() {
   setText("detail-action-note", "正在收束当前步骤，很快就会停下来。", "");
   toggle("detail-action-note", true);
   try {
-    renderRun(
-      await apiJson(
-        `/api/web/runs/${currentRunId}/stop`,
-        {
-          method: "POST",
-        },
-        "停止蒸馏失败。"
-      ),
-      { preserveDialogue: true }
+    const run = await apiJson(
+      `/api/web/runs/${currentRunId}/stop`,
+      {
+        method: "POST",
+      },
+      "停止蒸馏失败。"
     );
+    applyRunViewSafely(run, { preserveDialogue: true });
   } catch (error) {
     if (stopButton) {
       stopButton.disabled = false;
@@ -253,6 +313,7 @@ async function handleDialogueSessionSubmit(event) {
   event.preventDefault();
   if (!currentRunId) {
     setStatus("dialogue-session-status", "先让人物从书页里走出来，再进入这一幕。");
+    publishChatSetupState("chat-setup-submit-blocked");
     return;
   }
   try {
@@ -263,6 +324,7 @@ async function handleDialogueSessionSubmit(event) {
     if (mode === "act") {
       if (!controlledCharacter) {
         setStatus("dialogue-session-status", "先写下此刻由你扮演谁。");
+        publishChatSetupState("chat-setup-submit-blocked");
         return;
       }
       participants = uniq([controlledCharacter, ...participants]);
@@ -274,6 +336,7 @@ async function handleDialogueSessionSubmit(event) {
     renderSessionBooting(mode, participants);
     updateWorkflowState();
     setStatus("dialogue-session-status", "正在替你铺开这一幕...");
+    publishChatSetupState("chat-setup-submitting");
     await renderDialogueSession(
       await apiJson(
         `/api/web/runs/${currentRunId}/dialogue/sessions`,
@@ -300,68 +363,21 @@ async function handleDialogueSessionSubmit(event) {
       )
     );
     setStatus("dialogue-session-status", "这一幕已经铺好，你可以继续说下去。");
+    publishChatSetupState("chat-setup-submitted");
   } catch (error) {
     sessionBooting = false;
     setComposerEnabled(Boolean(currentDialogueSessionId));
     updateWorkflowState();
     setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
+    publishChatSetupState("chat-setup-submit-failed");
   }
 }
 
-const SELF_CARD_FIELD_BINDINGS = [
-  ["display_name", "self-card-display-name"],
-  ["scene_identity", "self-card-scene-identity"],
-  ["interaction_style", "self-card-interaction-style"],
-  ["core_identity", "self-card-core-identity"],
-  ["story_role", "self-card-story-role"],
-  ["identity_anchor", "self-card-identity-anchor"],
-  ["temperament_type", "self-card-temperament-type"],
-  ["soul_goal", "self-card-soul-goal"],
-  ["hidden_desire", "self-card-hidden-desire"],
-  ["inner_conflict", "self-card-inner-conflict"],
-  ["self_cognition", "self-card-self-cognition"],
-  ["private_self", "self-card-private-self"],
-  ["speech_style", "self-card-speech-style"],
-  ["cadence", "self-card-cadence"],
-  ["typical_lines", "self-card-typical-lines"],
-  ["signature_phrases", "self-card-signature-phrases"],
-  ["sentence_openers", "self-card-sentence-openers"],
-  ["sentence_endings", "self-card-sentence-endings"],
-  ["social_mode", "self-card-social-mode"],
-  ["thinking_style", "self-card-thinking-style"],
-  ["decision_rules", "self-card-decision-rules"],
-  ["reward_logic", "self-card-reward-logic"],
-  ["worldview", "self-card-worldview"],
-  ["belief_anchor", "self-card-belief-anchor"],
-  ["moral_bottom_line", "self-card-moral-bottom-line"],
-  ["restraint_threshold", "self-card-restraint-threshold"],
-  ["core_traits", "self-card-core-traits"],
-  ["key_bonds", "self-card-key-bonds"],
-  ["forbidden_behaviors", "self-card-forbidden-behaviors"],
-  ["stress_response", "self-card-stress-response"],
-  ["emotion_model", "self-card-emotion-model"],
-  ["anger_style", "self-card-anger-style"],
-  ["joy_style", "self-card-joy-style"],
-  ["grievance_style", "self-card-grievance-style"],
-  ["others_impression", "self-card-others-impression"],
-];
-
-const SELF_CARD_REQUIRED_FIELDS = [
-  "display_name",
-  "core_identity",
-  "story_role",
-  "identity_anchor",
-  "temperament_type",
-  "soul_goal",
-  "core_traits",
-  "key_bonds",
-  "speech_style",
-  "worldview",
-  "belief_anchor",
-  "moral_bottom_line",
-  "restraint_threshold",
-  "stress_response",
-];
+const EDITOR_SCHEMAS = window.__ZAOMENG_EDITOR_SCHEMAS__ || {};
+const SELF_CARD_FIELD_DEFINITIONS = Array.isArray(EDITOR_SCHEMAS.SELF_CARD_ALL_FIELDS) ? EDITOR_SCHEMAS.SELF_CARD_ALL_FIELDS : [];
+const SELF_CARD_FIELD_MAP = EDITOR_SCHEMAS.SELF_CARD_FIELD_MAP instanceof Map ? EDITOR_SCHEMAS.SELF_CARD_FIELD_MAP : new Map();
+const SELF_CARD_FIELD_BINDINGS = SELF_CARD_FIELD_DEFINITIONS.map((item) => [item.field, `self-card-${item.field.replaceAll("_", "-")}`]);
+const SELF_CARD_REQUIRED_FIELDS = Array.isArray(EDITOR_SCHEMAS.SELF_CARD_REQUIRED_FIELDS) ? EDITOR_SCHEMAS.SELF_CARD_REQUIRED_FIELDS : [];
 
 function selfCardFieldId(field) {
   const item = SELF_CARD_FIELD_BINDINGS.find(([key]) => key === field);
@@ -375,10 +391,7 @@ function collectSelfCardPayload() {
 function validateSelfCardPayload(fields) {
   const missing = SELF_CARD_REQUIRED_FIELDS.filter((field) => !String(fields?.[field] || "").trim());
   if (!missing.length) return "";
-  const labels = missing.map((field) => {
-    const span = el(selfCardFieldId(field))?.closest(".field-card")?.querySelector("span");
-    return span?.textContent?.trim() || field;
-  });
+  const labels = missing.map((field) => SELF_CARD_FIELD_MAP.get(field)?.label || field);
   return `请先补全这些必填项：${labels.join("、")}`;
 }
 
@@ -388,9 +401,33 @@ function fillSelfCardFields(fields = {}) {
   });
 }
 
-function updateSelfCardDeleteButton() {
+function buildSelfCardEditorState() {
+  return {
+    cardId: trimmedValue("self-card-id", ""),
+    status: String(el("self-card-status")?.textContent || "").trim(),
+    deleteVisible: !el("delete-self-card-button")?.classList.contains("hidden"),
+    modalOpen: !el("self-card-modal")?.classList.contains("hidden"),
+    fields: collectSelfCardPayload(),
+  };
+}
+
+window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__ = buildSelfCardEditorState;
+
+function publishSelfCardEditorState(source = "self-card-editor") {
+  currentSelfCardEditor = buildSelfCardEditorState();
+  if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
+    UI_BRIDGE_TOOLS.publishLegacyStateSlice(source, "currentSelfCardEditor", currentSelfCardEditor);
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState(source, { currentSelfCardEditor });
+  }
+}
+
+function updateSelfCardDeleteButton(shouldPublish = true) {
   const hasCard = Boolean(trimmedValue("self-card-id", ""));
   toggle("delete-self-card-button", hasCard);
+  if (shouldPublish) {
+    publishSelfCardEditorState("self-card-delete-visibility-updated");
+  }
 }
 
 function startSelfCardDraft(fields = {}) {
@@ -408,6 +445,7 @@ function openNewSelfCard() {
   });
   setStatus("self-card-status", "你可以手写，也可以让 AI 先随机捏一张。");
   openSelfCardModal();
+  publishSelfCardEditorState("self-card-new-opened");
 }
 
 async function openExistingSelfCard(cardId) {
@@ -416,6 +454,7 @@ async function openExistingSelfCard(cardId) {
     return;
   }
   setStatus("self-card-status", "正在载入角色卡...");
+  publishSelfCardEditorState("self-card-loading");
   try {
     const payload = await apiJson(`/api/web/self-cards/${encodeURIComponent(cardId)}`, {}, "角色卡载入失败。");
     currentSelfCard = payload;
@@ -424,8 +463,10 @@ async function openExistingSelfCard(cardId) {
     updateSelfCardDeleteButton();
     setStatus("self-card-status", "");
     openSelfCardModal();
+    publishSelfCardEditorState("self-card-loaded");
   } catch (error) {
     setStatus("dialogue-session-status", error.message || "角色卡载入失败。");
+    publishSelfCardEditorState("self-card-load-failed");
   }
 }
 
@@ -470,6 +511,9 @@ async function loadSelfCards() {
   const payload = await apiJson("/api/web/self-cards", {}, "角色卡列表载入失败。");
   selfCards = Array.isArray(payload?.items) ? payload.items : [];
   renderSelfCardOptions(selfCards);
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("self-cards-loaded");
+  }
   return selfCards;
 }
 
@@ -485,10 +529,14 @@ function syncSelectedSelfCardFromSelect() {
     }
     if (el("dialogue-self-style")) setValue("dialogue-self-style", currentSelfCard.fields.interaction_style || "");
   }
-  renderSelectedSelfCardPreview();
+  renderSelectedSelfCardPreview(false);
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("self-card-selection-changed");
+  }
+  publishChatSetupState("chat-setup-self-card-selection-changed");
 }
 
-function renderSelectedSelfCardPreview() {
+function renderSelectedSelfCardPreview(shouldPublish = true) {
   const card = currentSelfCard;
   const hasCards = selfCards.length > 0;
   const title = card?.preview?.display_name || card?.fields?.display_name || "";
@@ -521,6 +569,9 @@ function renderSelectedSelfCardPreview() {
     editButton.disabled = !card;
     editButton.classList.toggle("hidden", !card);
   }
+  if (shouldPublish) {
+    publishChatSetupState("chat-setup-self-card-preview-rendered");
+  }
 }
 
 async function handleSelfCardSelectionChange() {
@@ -546,6 +597,7 @@ async function handleGenerateSelfCard(event) {
   const button = el("generate-self-card-button");
   if (button) button.disabled = true;
   setStatus("self-card-status", "正在随机生成一张角色卡...");
+  publishSelfCardEditorState("self-card-generating");
   try {
     const payload = await apiJson(
       "/api/web/self-cards/generate",
@@ -554,8 +606,10 @@ async function handleGenerateSelfCard(event) {
     );
     fillSelfCardFields(payload.fields || {});
     setStatus("self-card-status", "AI 已经把整张卡先填好了，你可以直接保存，也可以再手修。");
+    publishSelfCardEditorState("self-card-generated");
   } catch (error) {
     setStatus("self-card-status", error.message || "角色卡生成失败。");
+    publishSelfCardEditorState("self-card-generate-failed");
   } finally {
     if (button) button.disabled = false;
   }
@@ -568,9 +622,11 @@ async function handleSelfCardSubmit(event) {
   const validationMessage = validateSelfCardPayload(fields);
   if (validationMessage) {
     setStatus("self-card-status", validationMessage);
+    publishSelfCardEditorState("self-card-validation-failed");
     return;
   }
   setStatus("self-card-status", "正在保存角色卡...");
+  publishSelfCardEditorState("self-card-saving");
   try {
     const payload = await apiJson(
       cardId ? `/api/web/self-cards/${encodeURIComponent(cardId)}` : "/api/web/self-cards",
@@ -591,9 +647,11 @@ async function handleSelfCardSubmit(event) {
     syncSelectedSelfCardFromSelect();
     setStatus("dialogue-session-status", "角色卡已经接好，现在可以直接带它入场。");
     setStatus("self-card-status", "角色卡已保存。");
+    publishSelfCardEditorState("self-card-saved");
     closeSelfCardModal();
   } catch (error) {
     setStatus("self-card-status", error.message || "角色卡保存失败。");
+    publishSelfCardEditorState("self-card-save-failed");
   }
 }
 
@@ -605,6 +663,7 @@ async function handleDeleteSelfCard(event) {
     return;
   }
   setStatus("self-card-status", "正在删除角色卡...");
+  publishSelfCardEditorState("self-card-deleting");
   try {
     await apiJson(
       `/api/web/self-cards/${encodeURIComponent(cardId)}`,
@@ -618,9 +677,11 @@ async function handleDeleteSelfCard(event) {
     currentSelfCard = null;
     renderSelectedSelfCardPreview();
     setStatus("dialogue-session-status", "角色卡已经删掉了。");
+    publishSelfCardEditorState("self-card-deleted");
     closeSelfCardModal();
   } catch (error) {
     setStatus("self-card-status", error.message || "角色卡删除失败。");
+    publishSelfCardEditorState("self-card-delete-failed");
   }
 }
 
@@ -637,6 +698,11 @@ async function openPersonaReviewForCharacter(characterName = "") {
     return;
   }
   openPersonaReviewModal();
+  const reviewActions = readNamedActionBridge("__ZAOMENG_PERSONA_REVIEW_ACTIONS__");
+  if (typeof reviewActions.openForCharacter === "function") {
+    reviewActions.openForCharacter(character);
+    return;
+  }
   setStatus("persona-review-status", "正在载入人物档案...");
   try {
     renderPersonaReview(await apiJson(`/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`));
@@ -688,6 +754,11 @@ async function openQuickDialogueMode(mode) {
 }
 
 async function handlePersonaCharacterChange() {
+  const reviewActions = readNamedActionBridge("__ZAOMENG_PERSONA_REVIEW_ACTIONS__");
+  if (typeof reviewActions.handleCharacterChange === "function") {
+    reviewActions.handleCharacterChange(valueOf("persona-review-character", ""));
+    return;
+  }
   if (!currentRunId) return;
   const character = valueOf("persona-review-character", "");
   if (!character) return;
@@ -708,6 +779,11 @@ function collectPersonaReviewPayload() {
 }
 
 async function handlePersonaFieldAutofill(event) {
+  const reviewActions = readNamedActionBridge("__ZAOMENG_PERSONA_REVIEW_ACTIONS__");
+  if (typeof reviewActions.handleLegacyAutofillEvent === "function") {
+    const consumed = reviewActions.handleLegacyAutofillEvent(event);
+    if (consumed) return;
+  }
   const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-persona-autofill-field]") : null;
   if (!(trigger instanceof HTMLButtonElement) || !currentRunId) return;
   const character = valueOf("persona-review-character", "");
@@ -761,6 +837,11 @@ async function handlePersonaFieldAutofill(event) {
 
 async function handlePersonaReviewSubmit(event) {
   event.preventDefault();
+  const reviewActions = readNamedActionBridge("__ZAOMENG_PERSONA_REVIEW_ACTIONS__");
+  if (typeof reviewActions.submit === "function") {
+    reviewActions.submit();
+    return;
+  }
   if (!currentRunId) return;
   const character = valueOf("persona-review-character", "");
   if (!character) {
@@ -783,7 +864,7 @@ async function handlePersonaReviewSubmit(event) {
     clearAllPersonaReviewAutofilledFields();
     clearAllPersonaReviewFieldFeedback();
     renderPersonaAutofillReferences(null);
-    renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
+    applyRunViewSafely(await apiJson(`/api/web/runs/${currentRunId}`));
     setStatus("persona-review-status", "人物校对已经写回这一卷。");
   } catch (error) {
     setStatus("persona-review-status", error.message || "这次校对没有保存成功。");
@@ -793,6 +874,10 @@ async function handlePersonaReviewSubmit(event) {
 async function openRelationDetails() {
   if (!currentRunId) return;
   openRelationDetailsModal();
+  currentRelationDetails = null;
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("relation-details-loading", { currentRelationDetails: null });
+  }
   setStatus("relation-details-status", "正在整理关系明细...");
   try {
     renderRelationDetails(await apiJson(`/api/web/runs/${currentRunId}/relations`));
@@ -932,6 +1017,34 @@ const OBSERVE_QUICK_REPLIES = [
 ];
 let currentDialogueMessageKind = "dialogue";
 
+function buildComposerUiState() {
+  const area = el("dialogue-message");
+  const sendButton = el("prepare-turn-button");
+  const suggestButton = el("suggest-turn-button");
+  const mode = currentDialogueSession?.mode || currentDialogueSession?.session_card?.mode || "";
+  return {
+    mode,
+    kind: normalizeDialogueMessageKind(currentDialogueMessageKind),
+    message: String(area?.value || ""),
+    placeholder: String(area?.placeholder || ""),
+    disabled: Boolean(area?.disabled),
+    suggestHidden: Boolean(suggestButton?.classList.contains("hidden")),
+    suggestDisabled: Boolean(suggestButton?.disabled),
+    sendDisabled: Boolean(sendButton?.disabled),
+    quickReplies: mode === "observe" ? OBSERVE_QUICK_REPLIES : [],
+  };
+}
+
+window.__ZAOMENG_BUILD_COMPOSER_STATE__ = buildComposerUiState;
+
+function publishComposerUiState(source = "composer") {
+  if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
+    UI_BRIDGE_TOOLS.publishLegacyStateSlice(source, "composer", buildComposerUiState());
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState(source, { composer: buildComposerUiState() });
+  }
+}
+
 function normalizeDialogueMessageKind(kind) {
   const value = String(kind || "").trim().toLowerCase();
   return value === "narration" ? "narration" : "dialogue";
@@ -959,6 +1072,7 @@ function setDialogueMessageKind(kind) {
     node.classList.toggle("active", normalizeDialogueMessageKind(node.dataset.kind) === currentDialogueMessageKind);
   });
   updateDialogueMessagePlaceholder();
+  publishComposerUiState("composer-kind-updated");
 }
 
 function setQuickRepliesEnabled(enabled) {
@@ -976,6 +1090,7 @@ function syncSuggestButtonVisibility(session = currentDialogueSession) {
   if (hidden) {
     suggestButton.disabled = true;
   }
+  publishComposerUiState("composer-suggest-visibility-updated");
 }
 
 function setComposerWaiting(waiting, message = "") {
@@ -997,6 +1112,7 @@ function setComposerWaiting(waiting, message = "") {
   }
   setQuickRepliesEnabled(!waiting);
   resizeComposer();
+  publishComposerUiState("composer-waiting-updated");
 }
 
 function setSuggestingState(waiting) {
@@ -1011,6 +1127,7 @@ function setSuggestingState(waiting) {
     suggestButton.setAttribute("aria-busy", waiting ? "true" : "false");
   }
   setQuickRepliesEnabled(!waiting);
+  publishComposerUiState("composer-suggesting-updated");
 }
 
 function renderObserveQuickReplies(session = currentDialogueSession) {
@@ -1020,6 +1137,7 @@ function renderObserveQuickReplies(session = currentDialogueSession) {
   if (mode !== "observe") {
     root.innerHTML = "";
     root.classList.add("hidden");
+    publishComposerUiState("composer-quick-replies-hidden");
     return;
   }
 
@@ -1036,13 +1154,29 @@ function renderObserveQuickReplies(session = currentDialogueSession) {
     root.appendChild(button);
   });
   root.classList.remove("hidden");
+  publishComposerUiState("composer-quick-replies-rendered");
 }
 
 async function applyQuickReply(value) {
   const message = String(value || "").trim();
   const area = el("dialogue-message");
   if (!message || !area || area.disabled) return;
+  publishComposerUiState("composer-quick-reply-picked");
   await handleSendTurn(message, "narration");
+}
+
+function setComposerDraft(value = "", options = {}) {
+  const area = el("dialogue-message");
+  if (!area) return;
+  area.value = String(value || "");
+  resizeComposer();
+  if (options.focus) {
+    area.focus();
+    area.setSelectionRange(area.value.length, area.value.length);
+  }
+  if (options.publish !== false) {
+    publishComposerUiState("composer-draft-updated");
+  }
 }
 
 function coerceMessageOverride(value) {
@@ -1325,6 +1459,9 @@ function bindEvents() {
 
   bind("dialogue-mode", "change", syncModeFields);
   bind("dialogue-self-card", "change", handleSelfCardSelectionChange);
+  el("self-card-form")?.addEventListener("input", () => {
+    publishSelfCardEditorState("self-card-input");
+  });
   bind("persona-review-character", "change", handlePersonaCharacterChange);
   el("persona-review-form")?.addEventListener("input", (event) => {
     const target = event.target;
@@ -1340,8 +1477,16 @@ function bindEvents() {
   el("persona-review-form")?.addEventListener("click", handlePersonaFieldAutofill);
   bind("dialogue-mode", "change", updateCharacterPillState);
   bind("dialogue-participants", "input", updateCharacterPillState);
+  bind("dialogue-participants", "input", () => publishChatSetupState("chat-setup-participants-input"));
+  bind("dialogue-controlled", "input", () => publishChatSetupState("chat-setup-controlled-input"));
+  bind("dialogue-self-name", "input", () => publishChatSetupState("chat-setup-self-name-input"));
+  bind("dialogue-self-identity", "input", () => publishChatSetupState("chat-setup-self-identity-input"));
+  bind("dialogue-self-style", "input", () => publishChatSetupState("chat-setup-self-style-input"));
   bind("redistill-characters", "input", updateRedistillPillState);
-  bind("dialogue-message", "input", resizeComposer);
+  bind("dialogue-message", "input", () => {
+    resizeComposer();
+    publishComposerUiState("composer-input");
+  });
   bind("novel-file", "change", updateNovelFileView);
   bind("characters", "input", refreshSamplingHintEstimate);
   bind("max-sentences", "input", refreshSamplingHintEstimate);
@@ -1402,6 +1547,83 @@ async function boot() {
 }
 
 bindEvents();
+const chatSetupActions = {
+  setMode(mode) {
+    setValue("dialogue-mode", mode);
+    syncModeFields();
+    updateCharacterPillState();
+  },
+  setParticipants(value) {
+    setValue("dialogue-participants", value);
+    updateCharacterPillState();
+    publishChatSetupState("chat-setup-participants-updated");
+  },
+  toggleParticipant(name) {
+    toggleNameInInput("dialogue-participants", name);
+    if (valueOf("dialogue-mode", "observe") === "act" && el("dialogue-controlled")) {
+      setValue("dialogue-controlled", name);
+    }
+    updateCharacterPillState();
+    publishChatSetupState("chat-setup-participant-toggled");
+  },
+  setControlledCharacter(value) {
+    setValue("dialogue-controlled", value);
+    publishChatSetupState("chat-setup-controlled-updated");
+  },
+  setSelfCardId(cardId) {
+    const select = el("dialogue-self-card");
+    if (select) {
+      select.value = cardId;
+      syncCustomSelect("dialogue-self-card");
+    }
+    syncSelectedSelfCardFromSelect();
+  },
+  setSelfProfileField(field, value) {
+    const idMap = {
+      display_name: "dialogue-self-name",
+      scene_identity: "dialogue-self-identity",
+      interaction_style: "dialogue-self-style",
+    };
+    const id = idMap[field] || "";
+    if (id) setValue(id, value);
+    publishChatSetupState("chat-setup-self-profile-updated");
+  },
+  submit() {
+    return handleDialogueSessionSubmit({ preventDefault() {} });
+  },
+  openNewSelfCard() {
+    return openNewSelfCard();
+  },
+  editCurrentSelfCard() {
+    return selectedSelfCardId ? openExistingSelfCard(selectedSelfCardId) : openNewSelfCard();
+  },
+};
+
+const composerActions = {
+  send(message = "", kind = "") {
+    return handleSendTurn(message, kind);
+  },
+  suggest() {
+    return handleSuggestTurn();
+  },
+  setKind(kind) {
+    setDialogueMessageKind(kind);
+  },
+  setDraft(value, options = {}) {
+    setComposerDraft(value, options);
+  },
+  quickReply(value) {
+    return applyQuickReply(value);
+  },
+};
+
+if (typeof UI_BRIDGE_TOOLS.mergeLegacyActionBridge === "function") {
+  UI_BRIDGE_TOOLS.mergeLegacyActionBridge("__ZAOMENG_CHAT_SETUP_ACTIONS__", chatSetupActions);
+  UI_BRIDGE_TOOLS.mergeLegacyActionBridge("__ZAOMENG_COMPOSER_ACTIONS__", composerActions);
+} else {
+  window.__ZAOMENG_CHAT_SETUP_ACTIONS__ = chatSetupActions;
+  window.__ZAOMENG_COMPOSER_ACTIONS__ = composerActions;
+}
 window.handleSuggestTurn = handleSuggestTurn;
 window.applyQuickReply = applyQuickReply;
 window.syncSuggestButtonVisibility = syncSuggestButtonVisibility;
