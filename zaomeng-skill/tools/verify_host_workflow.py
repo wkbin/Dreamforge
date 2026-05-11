@@ -46,7 +46,6 @@ def main() -> int:
             novel_id=relation_path.parent.name,
             html_path=relation_path.parent / f"{base_name}.html",
             mermaid_path=relation_path.parent / f"{base_name}.mermaid.md",
-            svg_path=relation_path.parent / f"{base_name}.svg",
         )
 
     payload = verify_host_workflow(

@@ -7,8 +7,6 @@ import html
 import json
 import re
 import shutil
-import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -40,36 +38,27 @@ def export_relation_graph(
     base_name = relation_path.stem
     mermaid_path = output_dir / f"{base_name}.mermaid.md"
     html_path = output_dir / f"{base_name}.html"
-    svg_path = output_dir / f"{base_name}.svg"
     mermaid_runtime_filename = _ensure_mermaid_runtime_asset(output_dir)
 
     characters_root = _infer_characters_root(relation_path, resolved_novel_id)
     node_styles = _build_visual_node_styles(characters_root, relations)
     mermaid_graph = _render_mermaid_graph(relations, node_styles=node_styles)
-    rendered_svg = _render_mermaid_svg(mermaid_graph)
     html_text = _render_relation_html(
         resolved_novel_id,
         relations,
         node_styles=node_styles,
         mermaid_graph=mermaid_graph,
-        rendered_svg=rendered_svg,
-        svg_filename=svg_path.name if rendered_svg else "",
         mermaid_runtime_filename=mermaid_runtime_filename,
     )
 
     mermaid_path.write_text(mermaid_graph + "\n", encoding="utf-8")
     html_path.write_text(html_text, encoding="utf-8")
-    if rendered_svg:
-        svg_path.write_text(rendered_svg, encoding="utf-8")
-    elif svg_path.exists():
-        svg_path.unlink()
 
     status_payload = build_relation_completion_status(
         relation_path,
         novel_id=resolved_novel_id,
         html_path=html_path,
         mermaid_path=mermaid_path,
-        svg_path=svg_path if rendered_svg else None,
     )
     status_path = write_json(output_dir / f"{base_name}.status.json", status_payload)
     capability_status_path = default_status_path(
@@ -86,7 +75,6 @@ def export_relation_graph(
         outputs={
             "html_path": str(html_path),
             "mermaid_path": str(mermaid_path),
-            "svg_path": str(svg_path) if rendered_svg else "",
             "relation_status_path": str(status_path),
         },
         manifest_path=manifest_path,
@@ -105,7 +93,6 @@ def export_relation_graph(
                 "relation_graph": {
                     "html_path": str(html_path),
                     "mermaid_path": str(mermaid_path),
-                    "svg_path": str(svg_path) if rendered_svg else "",
                     "relation_status_path": str(status_path),
                 },
                 "status_files": {"export_graph": str(capability_status_path.resolve())},
@@ -118,7 +105,6 @@ def export_relation_graph(
         "novel_id": resolved_novel_id,
         "html_path": str(html_path),
         "mermaid_path": str(mermaid_path),
-        "svg_path": str(svg_path) if rendered_svg else "",
         "status_path": str(status_path),
         "capability_status_path": str(capability_status_path),
     }
@@ -484,8 +470,6 @@ def _render_relation_html(
     *,
     node_styles: dict[str, dict[str, str]],
     mermaid_graph: str,
-    rendered_svg: str = "",
-    svg_filename: str = "",
     mermaid_runtime_filename: str = "",
 ) -> str:
     relation_entries = _build_relation_entries(relations)
@@ -549,11 +533,7 @@ def _render_relation_html(
         relation_cards.append("<li class=\"empty\">暂无关系卡片。</li>")
 
     escaped_mermaid = html.escape(mermaid_graph)
-    embedded_graph_html = (
-        f'<img class="graph-image" src="{html.escape(svg_filename)}" alt="{html.escape(novel_id)} 人物关系图谱" />'
-        if svg_filename
-        else rendered_svg
-    )
+    embedded_graph_html = ""
     relation_count = len(relation_entries)
     relation_entries_json = html.escape(json.dumps(relation_entries, ensure_ascii=False))
     node_styles_json = html.escape(json.dumps(node_styles, ensure_ascii=False))
@@ -862,83 +842,6 @@ def _edge_style(
     return ",".join(parts)
 
 
-def _render_mermaid_svg(mermaid_graph: str) -> str:
-    browser = _find_headless_browser()
-    mermaid_runtime = _load_vendored_mermaid_runtime()
-    if browser is None or not mermaid_runtime:
-        return ""
-
-    template = (
-        "<!DOCTYPE html>\n"
-        "<html lang=\"zh-CN\">\n"
-        "<head>\n"
-        "  <meta charset=\"utf-8\" />\n"
-        "  <script>\n"
-        + mermaid_runtime
-        + "\n  </script>\n"
-        "</head>\n"
-        "<body>\n"
-        "  <div id=\"graph-svg\"></div>\n"
-        "  <script>\n"
-        "    (async () => {\n"
-        "      const root = document.getElementById('graph-svg');\n"
-        "      try {\n"
-        "        if (!window.mermaid) {\n"
-        "          document.body.setAttribute('data-render-status', 'missing-mermaid');\n"
-        "          return;\n"
-        "        }\n"
-        "        window.mermaid.initialize({ startOnLoad: false, theme: 'base', securityLevel: 'loose' });\n"
-        f"        const definition = {json.dumps(mermaid_graph, ensure_ascii=False)};\n"
-        "        const rendered = await window.mermaid.render('exported-graph', definition);\n"
-        "        root.innerHTML = rendered.svg;\n"
-        "        document.body.setAttribute('data-render-status', 'ok');\n"
-        "      } catch (error) {\n"
-        "        document.body.setAttribute('data-render-status', 'error');\n"
-        "        root.textContent = String(error && error.message ? error.message : error);\n"
-        "      }\n"
-        "    })();\n"
-        "  </script>\n"
-        "</body>\n"
-        "</html>\n"
-    )
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        html_path = Path(tmpdir) / "graph.html"
-        html_path.write_text(template, encoding="utf-8")
-        command = [
-            str(browser),
-            "--headless",
-            "--disable-gpu",
-            "--virtual-time-budget=8000",
-            "--dump-dom",
-            html_path.as_uri(),
-        ]
-        try:
-            result = subprocess.run(
-                command,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-            )
-        except Exception:
-            return ""
-    return _extract_svg_from_dom(result.stdout)
-
-
-def _find_headless_browser() -> Path | None:
-    candidates = [
-        Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
-        Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
-        Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-        Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
-
-
 def _skill_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -962,13 +865,6 @@ def _ensure_mermaid_runtime_asset(output_dir: Path) -> str:
     if not target_path.exists():
         shutil.copy2(asset_path, target_path)
     return target_path.name
-
-
-def _extract_svg_from_dom(dom: str) -> str:
-    match = re.search(r"<div id=\"graph-svg\">(.*?</svg>)</div>", dom, flags=re.DOTALL)
-    if not match:
-        return ""
-    return html.unescape(match.group(1)).strip()
 
 
 def _type_tone(relation_type: str) -> str:

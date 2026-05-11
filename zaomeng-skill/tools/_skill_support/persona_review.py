@@ -3,13 +3,10 @@
 
 from __future__ import annotations
 
-import html
 import json
 import re
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import quote_plus
-from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from .persona_bundle import load_profile_source, render_profile_md
@@ -142,7 +139,6 @@ SELF_CARD_FIELD_LABELS = {
 }
 
 _LIST_STYLE_FIELDS = {"core_traits", "key_bonds"}
-_USER_AGENT = "zaomeng-persona-review/1.0 (+https://github.com/wkbin/zaomeng)"
 _SPEECH_LIST_FIELDS = {
     "signature_phrases",
     "sentence_openers",
@@ -344,35 +340,6 @@ def parse_persona_field_completion_response(text: str) -> dict[str, str]:
     if status != "filled" or not value:
         return {"status": "insufficient", "value": "", "reason": reason or "资料不足，无法可靠补全。"}
     return {"status": "filled", "value": value, "reason": reason}
-
-
-def collect_persona_web_references(
-    *,
-    character: str,
-    novel_title: str = "",
-    timeout_seconds: float = 8.0,
-    fetch_text: Callable[[str, float], str] | None = None,
-) -> list[dict[str, str]]:
-    fetcher = fetch_text or _fetch_text
-    queries = _build_search_queries(character=character, novel_title=novel_title)
-    results: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for query in queries:
-        for item in _search_bing(
-            query,
-            character=character,
-            novel_title=novel_title,
-            timeout_seconds=timeout_seconds,
-            fetch_text=fetcher,
-        ):
-            key = (item.get("title", ""), item.get("snippet", ""))
-            if key in seen:
-                continue
-            seen.add(key)
-            results.append(item)
-            if len(results) >= 6:
-                return results
-    return results
 
 
 def resolve_novel_title(*, profile: dict[str, Any]) -> str:
@@ -641,119 +608,6 @@ def _render_reference_summary(references: list[dict[str, str]]) -> str:
     return "\n\n".join(blocks)
 
 
-def _build_search_queries(*, character: str, novel_title: str) -> list[str]:
-    base = str(character or "").strip()
-    book = str(novel_title or "").strip()
-    queries = [
-        f"\"{base}\" \"{book}\" 人物介绍 角色".strip(),
-        f"\"{base}\" \"{book}\" 人物分析 角色设定".strip(),
-        f"\"{base}\" \"{book}\" 性格特点 人物".strip(),
-        f"\"{base}\" \"{book}\" 角色介绍".strip(),
-        f"\"{base}\" 人物介绍 {book}".strip(),
-        f"\"{base}\" 角色设定 {book}".strip(),
-    ]
-    return [item for item in dict.fromkeys(queries) if item]
-
-
-def _search_bing(
-    query: str,
-    *,
-    character: str,
-    novel_title: str,
-    timeout_seconds: float,
-    fetch_text: Callable[[str, float], str],
-) -> list[dict[str, str]]:
-    url = f"https://www.bing.com/search?q={quote_plus(query)}&setlang=zh-Hans"
-    try:
-        page = fetch_text(url, timeout_seconds)
-    except Exception:
-        return []
-    blocks = re.findall(r'<li class="b_algo".*?</li>', page, flags=re.DOTALL | re.IGNORECASE)
-    results: list[dict[str, str]] = []
-    for block in blocks:
-        title_match = re.search(r"<h2[^>]*>(.*?)</h2>", block, flags=re.DOTALL | re.IGNORECASE)
-        snippet_match = re.search(r"<p[^>]*>(.*?)</p>", block, flags=re.DOTALL | re.IGNORECASE)
-        title = _html_to_text(title_match.group(1)) if title_match else ""
-        snippet = _html_to_text(snippet_match.group(1)) if snippet_match else ""
-        if len(snippet) < 18:
-            continue
-        if _looks_like_dictionary_result(title=title, snippet=snippet):
-            continue
-        if not _looks_like_character_result(
-            title=title,
-            snippet=snippet,
-            character=character,
-            novel_title=novel_title,
-        ):
-            continue
-        results.append(
-            {
-                "title": title,
-                "snippet": snippet,
-                "source": "Bing",
-                "query": query,
-            }
-        )
-        if len(results) >= 4:
-            break
-    return results
-
-
-def _fetch_text(url: str, timeout_seconds: float) -> str:
-    request = Request(url, headers={"User-Agent": _USER_AGENT, "Accept-Language": "zh-CN,zh;q=0.9"})
-    with urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310
-        encoding = response.headers.get_content_charset() or "utf-8"
-        return response.read().decode(encoding, errors="replace")
-
-
-def _html_to_text(value: str) -> str:
-    text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", str(value or ""), flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = html.unescape(text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-
-def _looks_like_dictionary_result(*, title: str, snippet: str) -> bool:
-    haystack = f"{title}\n{snippet}".lower()
-    junk_keywords = (
-        "汉语字典",
-        "汉语词典",
-        "词典",
-        "字典",
-        "康熙字典",
-        "汉典",
-        "每日一字",
-        "部首",
-        "拼音",
-        "笔画",
-        "释义",
-        "字义",
-        "怎么读",
-        "什么意思",
-        "通用规范汉字",
-        "一级字",
-        "二级字",
-        "三级字",
-    )
-    return any(keyword in haystack for keyword in junk_keywords)
-
-
-def _looks_like_character_result(*, title: str, snippet: str, character: str, novel_title: str) -> bool:
-    joined = f"{title}\n{snippet}"
-    normalized_character = str(character or "").strip()
-    normalized_novel = str(novel_title or "").strip()
-    if normalized_character and normalized_character not in joined:
-        return False
-    if len(normalized_character) <= 1 and normalized_novel and normalized_novel not in joined:
-        return False
-    if normalized_novel:
-        novel_hit = normalized_novel in joined
-        role_hit = any(token in joined for token in ("人物", "角色", "主角", "配角", "设定", "性格"))
-        return novel_hit or role_hit
-    return True
-
-
 def _extract_json_object(text: str) -> dict[str, Any] | None:
     cleaned = str(text or "").strip()
     if cleaned.startswith("```"):
@@ -941,4 +795,3 @@ def _resolve_card_profile_path(card_dir: Path) -> Path | None:
         if candidate.exists():
             return candidate
     return None
-

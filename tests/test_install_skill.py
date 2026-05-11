@@ -227,7 +227,7 @@ class InstallSkillTests(unittest.TestCase):
             self.assertEqual(plan["steps"][0]["source_mode"], "model_knowledge")
             self.assertEqual(len(plan["steps"]), 1)
             self.assertFalse(plan["web_collection_enabled"])
-            self.assertIn("--collect-web", plan["host_hint"])
+            self.assertIn("retry_messages", plan["host_hint"])
 
             result_path = tmp_root / "autofill_result.json"
             response_path = tmp_root / "autofill_response.txt"
@@ -248,40 +248,6 @@ class InstallSkillTests(unittest.TestCase):
             result = json.loads(result_path.read_text(encoding="utf-8"))
             self.assertEqual(result["parsed"]["status"], "filled")
             self.assertIn("魏无羡", result["parsed"]["value"])
-
-    def test_installed_persona_autofill_web_fallback_requires_collected_references(self):
-        repo_root = Path(__file__).resolve().parents[1]
-        packaged_src = repo_root / "zaomeng-skill"
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_root = Path(tmpdir)
-            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
-            persona_dir = tmp_root / "data" / "characters" / "mdzs" / "江澄"
-            persona_dir.mkdir(parents=True, exist_ok=True)
-            (persona_dir / "PROFILE.generated.md").write_text(
-                "# PROFILE\n"
-                "- name: 江澄\n"
-                "- novel_id: mdzs\n"
-                "- core_identity: 云梦江氏家主\n",
-                encoding="utf-8",
-            )
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    str(dst / "tools" / "build_persona_autofill_payload.py"),
-                    "--persona-dir",
-                    str(persona_dir),
-                    "--field",
-                    "key_bonds",
-                    "--strategy",
-                    "web_fallback",
-                ],
-                cwd=dst,
-                capture_output=True,
-                text=True,
-            )
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("--collect-web", result.stderr)
 
     def test_installed_dialogue_suggestion_tool_builds_bundle_and_parses_result(self):
         repo_root = Path(__file__).resolve().parents[1]
@@ -479,11 +445,8 @@ class InstallSkillTests(unittest.TestCase):
             mermaid_path = Path(payload["mermaid_path"])
             self.assertTrue(html_path.exists())
             self.assertTrue(mermaid_path.exists())
-            self.assertIn("svg_path", payload)
             self.assertIn("status_path", payload)
             self.assertTrue(Path(payload["status_path"]).exists())
-            if payload["svg_path"]:
-                self.assertTrue(Path(payload["svg_path"]).exists())
             self.assertIn("mini_relations.html", payload["html_path"])
             self.assertIn("mini_relations.mermaid.md", payload["mermaid_path"])
             mermaid_text = mermaid_path.read_text(encoding="utf-8")
@@ -493,8 +456,6 @@ class InstallSkillTests(unittest.TestCase):
             self.assertNotIn(";;", mermaid_text)
             self.assertIn("mermaid-11.14.0.min.js", html_text)
             self.assertNotIn("cdn.jsdelivr.net", html_text)
-            if payload["svg_path"]:
-                self.assertIn(".svg", html_text)
 
     def test_installed_persona_bundle_tool_materializes_split_files_from_profile_markdown(self):
         repo_root = Path(__file__).resolve().parents[1]

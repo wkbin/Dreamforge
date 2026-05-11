@@ -5,7 +5,7 @@ license: MIT-0
 compatibility: 需要宿主支持 Markdown skill 目录、YAML frontmatter，以及本 skill 内置 Python helper
   scripts 所需的本地 Python 运行环境。
 metadata:
-  version: 4.1.7
+  version: 4.1.8
   hostMode: llm-first
   releaseTag: v2026.05.11
 ---
@@ -236,7 +236,7 @@ python tools/verify_host_workflow.py --characters-root <characters/<novel_id>> -
 如果宿主需要角色卡、人物字段补全或对话建议 helper，可直接调用：
 
 - `python tools/manage_self_card.py --mode blank|list|get|save|delete|build-random-payload|parse-random-response`
-- `python tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto|model_knowledge|web_fallback [--collect-web]`
+- `python tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto|model_knowledge`
 - `python tools/build_dialogue_suggestion_payload.py --context-file <context.json>`
 
 宿主结束提示建议直接说清楚：

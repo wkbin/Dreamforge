@@ -286,12 +286,10 @@ def build_relation_completion_status(
     novel_id: str,
     html_path: str | Path,
     mermaid_path: str | Path,
-    svg_path: str | Path | None = None,
 ) -> dict[str, Any]:
     relation_path = Path(relations_file)
     html_file = Path(html_path)
     mermaid_file = Path(mermaid_path)
-    svg_file = Path(svg_path) if svg_path else None
     required = [str(mermaid_file.name), str(html_file.name)]
     missing = []
     if not mermaid_file.exists():
@@ -309,8 +307,6 @@ def build_relation_completion_status(
         "missing_required_files": missing,
         "html_path": str(html_file.resolve()) if html_file.exists() else str(html_file),
         "mermaid_path": str(mermaid_file.resolve()) if mermaid_file.exists() else str(mermaid_file),
-        "svg_path": str(svg_file.resolve()) if svg_file and svg_file.exists() else "",
-        "svg_generated": bool(svg_file and svg_file.exists()),
     }
 
 
