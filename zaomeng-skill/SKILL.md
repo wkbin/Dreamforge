@@ -19,17 +19,18 @@ metadata:
 | 核心模式 | LLM-first |
 | 适用场景 | 人物蒸馏、人物包物化、关系图谱导出、角色 `act` / `insert` / `observe` |
 | 宿主职责 | 调用宿主 LLM，负责最终生成与对话推进 |
-| skill 职责 | 准备 prompt payload、物化人物包、导出图谱、校验产物、维护运行状态 |
+| skill 职责 | 准备 prompt payload、物化人物包、导出图谱、校验产物、维护运行状态，并提供角色卡/人物补全/对话建议 helper |
 
 ## 1. 定位
 
 - 这是一个宿主驱动的 prompt-first skill。
 - 宿主负责实际调用 LLM；skill 负责把任务整理成标准输入、标准产物和标准状态。
 - skill 的主路径是 `prompts + helper tools + run_manifest.json`，不是内嵌 chat CLI。
+- 对话阶段除了宿主直读人物包，也可以调用 skill helper 来生成角色卡、人物字段补全 payload、以及 `act` / `insert` / `observe` 的自动回复建议 payload。
 
 ## 2. 宿主能力契约
 
-宿主侧只需要理解四个标准能力：
+宿主侧只需要理解四个标准能力，以及三组对话 helper：
 
 | 能力 | 入口 | 作用 | 标准成功标记 |
 | --- | --- | --- | --- |
@@ -37,6 +38,14 @@ metadata:
 | `materialize` | `tools/materialize_persona_bundle.py` | 把 `PROFILE.generated.md` 物化为完整人物包 | `ARTIFACT_STATUS.generated.json` + capability status |
 | `export_graph` | `tools/export_relation_graph.py` | 导出人物关系图谱 HTML / Mermaid / SVG | `<relations>.status.json` + capability status |
 | `verify_workflow` | `tools/verify_host_workflow.py` | 校验整条宿主工作流产物是否完整 | capability status `status=complete, success=true` |
+
+对话 helper：
+
+| helper | 入口 | 作用 |
+| --- | --- | --- |
+| `self_card` | `tools/manage_self_card.py` | 创建 / 保存 / 读取 / 删除 self-insert 角色卡，并生成随机角色卡 prompt payload |
+| `persona_autofill` | `tools/build_persona_autofill_payload.py` | 为人物校对单字段生成宿主可调用的补全 payload，并解析模型返回 |
+| `dialogue_suggestion` | `tools/build_dialogue_suggestion_payload.py` | 为 `act` / `insert` / `observe` 生成自动回复建议 payload，并提供压缩重试版本 |
 
 所有能力都应该满足：
 
@@ -223,6 +232,12 @@ python tools/verify_host_workflow.py --characters-root <characters/<novel_id>> -
 - 关系图谱及关系 markdown
 - `run_manifest.json`
 - `references/output_schema.md`、`references/style_differ.md`、`references/logic_constraint.md`
+
+如果宿主想把 Web UI 那套新能力一起带走，可直接调用：
+
+- `python tools/manage_self_card.py --mode blank|list|get|save|delete|build-random-payload|parse-random-response`
+- `python tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto|model_knowledge|web_fallback`
+- `python tools/build_dialogue_suggestion_payload.py --context-file <context.json>`
 
 宿主结束提示建议直接说清楚：
 

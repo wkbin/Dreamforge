@@ -34,6 +34,9 @@ class InstallSkillTests(unittest.TestCase):
             self.assertTrue((dst / "references").exists())
             self.assertTrue((dst / "tools" / "prepare_novel_excerpt.py").exists())
             self.assertTrue((dst / "tools" / "build_prompt_payload.py").exists())
+            self.assertTrue((dst / "tools" / "build_persona_autofill_payload.py").exists())
+            self.assertTrue((dst / "tools" / "build_dialogue_suggestion_payload.py").exists())
+            self.assertTrue((dst / "tools" / "manage_self_card.py").exists())
             self.assertTrue((dst / "tools" / "export_relation_graph.py").exists())
             self.assertTrue((dst / "tools" / "init_host_run.py").exists())
             self.assertTrue((dst / "tools" / "materialize_persona_bundle.py").exists())
@@ -41,8 +44,266 @@ class InstallSkillTests(unittest.TestCase):
             self.assertTrue((dst / "tools" / "verify_host_workflow.py").exists())
             self.assertTrue((dst / "tools" / "_skill_support" / "novel_preparation.py").exists())
             self.assertTrue((dst / "tools" / "_skill_support" / "persona_bundle.py").exists())
+            self.assertTrue((dst / "tools" / "_skill_support" / "persona_review.py").exists())
+            self.assertTrue((dst / "tools" / "_skill_support" / "dialogue_payloads.py").exists())
             self.assertTrue((dst / "tools" / "_skill_support" / "workflow_completion.py").exists())
             self.assertFalse((dst / "runtime").exists())
+
+    def test_installed_manage_self_card_supports_blank_random_parse_and_save(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            schema_path = tmp_root / "self_card_schema.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "manage_self_card.py"),
+                    "--mode",
+                    "blank",
+                    "--output",
+                    str(schema_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            self.assertEqual(schema["kind"], "self_card_schema")
+            self.assertIn("display_name", schema["fields"])
+
+            random_payload_path = tmp_root / "random_payload.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "manage_self_card.py"),
+                    "--mode",
+                    "build-random-payload",
+                    "--output",
+                    str(random_payload_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+            random_payload = json.loads(random_payload_path.read_text(encoding="utf-8"))
+            self.assertEqual(random_payload["kind"], "self_card_random_payload")
+            self.assertTrue(random_payload["messages"])
+
+            response_path = tmp_root / "random_response.txt"
+            response_path.write_text(
+                json.dumps(
+                    {
+                        "display_name": "沈拂衣",
+                        "scene_identity": "夜里误入书局的借宿客",
+                        "interaction_style": "先试探后亲近，气氛微妙但不敌对",
+                        "core_identity": "见多识广却不肯轻易交底的游历者",
+                        "story_role": "外来搅局者",
+                        "identity_anchor": "宁可被误解，也不愿先把底牌摊开",
+                        "temperament_type": "冷静克制里藏着一点促狭",
+                        "soul_goal": "在局势失控前找到真正的线头",
+                        "hidden_desire": "想遇到一个能听懂弦外之音的人",
+                        "inner_conflict": "想靠近人群，却又习惯先留退路",
+                        "self_cognition": "知道自己多疑，也知道多疑救过命",
+                        "private_self": "独处时会把玩旧玉佩，显得比人前柔软",
+                        "speech_style": "话不多，但句句留有余味",
+                        "cadence": "慢起句，收尾轻",
+                        "typical_lines": "先别急着信我；话说满了反而不好收",
+                        "signature_phrases": "先别急；也未必",
+                        "sentence_openers": "先说清楚；你再想想",
+                        "sentence_endings": "就这样吧；也好",
+                        "social_mode": "慢热试探型",
+                        "thinking_style": "先看局，再看人",
+                        "decision_rules": "先保留余地；再试对方底线",
+                        "reward_logic": "只有真诚和胆识值得我加码",
+                        "worldview": "热闹的局里，真正值钱的是没说出口的那句话",
+                        "belief_anchor": "留一手不是失礼，是自保",
+                        "moral_bottom_line": "不拿无辜之人垫背",
+                        "restraint_threshold": "一旦有人故意算计弱者就会立刻翻脸",
+                        "core_traits": "敏锐；克制；会留后手",
+                        "key_bonds": "旧友阿照；下落不明的师兄",
+                        "forbidden_behaviors": "不会轻易赌命；不会先泄露同伴底牌",
+                        "stress_response": "越危险越平静，连语气都会更轻",
+                        "emotion_model": "情绪收着走，不轻易外露",
+                        "anger_style": "越生气越像在讲道理",
+                        "joy_style": "只会浅浅一笑，话反而更松一点",
+                        "grievance_style": "不诉苦，只把距离拉开",
+                        "others_impression": "像个永远还藏着半页真相的人",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            cards_root = tmp_root / "cards"
+            saved_path = tmp_root / "saved_card.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "manage_self_card.py"),
+                    "--mode",
+                    "save",
+                    "--cards-root",
+                    str(cards_root),
+                    "--response-file",
+                    str(response_path),
+                    "--output",
+                    str(saved_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+            saved = json.loads(saved_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["kind"], "self_card")
+            self.assertEqual(saved["fields"]["display_name"], "沈拂衣")
+            self.assertTrue((cards_root / saved["card_id"] / "PROFILE.md").exists())
+
+    def test_installed_persona_autofill_tool_builds_plan_and_parses_result(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            persona_dir = tmp_root / "data" / "characters" / "mdzs" / "江澄"
+            persona_dir.mkdir(parents=True, exist_ok=True)
+            (persona_dir / "PROFILE.generated.md").write_text(
+                "# PROFILE\n"
+                "- name: 江澄\n"
+                "- novel_id: mdzs\n"
+                "- core_identity: 云梦江氏家主\n"
+                "- story_role: 核心配角\n"
+                "- speech_style: 冷硬直截\n"
+                "- worldview: 责任比喜欢更重要\n",
+                encoding="utf-8",
+            )
+
+            plan_path = tmp_root / "autofill_plan.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_persona_autofill_payload.py"),
+                    "--persona-dir",
+                    str(persona_dir),
+                    "--field",
+                    "key_bonds",
+                    "--strategy",
+                    "auto",
+                    "--output",
+                    str(plan_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["kind"], "persona_autofill_plan")
+            self.assertEqual(plan["field"], "key_bonds")
+            self.assertTrue(plan["steps"])
+            self.assertEqual(plan["steps"][0]["source_mode"], "model_knowledge")
+
+            result_path = tmp_root / "autofill_result.json"
+            response_path = tmp_root / "autofill_response.txt"
+            response_path.write_text('{"status":"filled","value":"魏无羡（前师弟/执念对象）；江厌离（姐姐/精神支柱）","reason":"角色关系稳定。"}', encoding="utf-8")
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_persona_autofill_payload.py"),
+                    "--response-file",
+                    str(response_path),
+                    "--output",
+                    str(result_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            self.assertEqual(result["parsed"]["status"], "filled")
+            self.assertIn("魏无羡", result["parsed"]["value"])
+
+    def test_installed_dialogue_suggestion_tool_builds_bundle_and_parses_result(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            context_path = tmp_root / "context.json"
+            context_path.write_text(
+                json.dumps(
+                    {
+                        "mode": "insert",
+                        "speaker": "沈拂衣",
+                        "seed_text": "",
+                        "participants": ["魏无羡", "蓝忘机"],
+                        "history": [
+                            {"speaker": "魏无羡", "message": "你刚才为什么突然停下？"},
+                            {"speaker": "蓝忘机", "message": "前面有人。"},
+                        ],
+                        "relation_excerpt": "魏无羡与蓝忘机之间已有默契，但对外来者仍保持警惕。",
+                        "user_persona": {
+                            "display_name": "沈拂衣",
+                            "scene_identity": "临时同行者",
+                            "interaction_style": "先试探再靠近",
+                            "core_identity": "谨慎的外来者",
+                            "speech_style": "轻声试探，句子不长",
+                            "soul_goal": "先确认对方立场，再决定是否交底",
+                        },
+                        "persona_contexts": [
+                            {
+                                "name": "魏无羡",
+                                "preview": {"display_name": "魏无羡", "speech_style": "轻快带笑"},
+                                "profile": {"core_identity": "夷陵老祖", "speech_style": "轻快带笑"},
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            bundle_path = tmp_root / "suggest_bundle.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_dialogue_suggestion_payload.py"),
+                    "--context-file",
+                    str(context_path),
+                    "--output",
+                    str(bundle_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertEqual(bundle["kind"], "dialogue_suggestion_bundle")
+            self.assertEqual(bundle["payload"]["mode"], "insert")
+            self.assertTrue(bundle["messages"])
+            self.assertTrue(bundle["compact_messages"])
+
+            result_path = tmp_root / "suggest_result.json"
+            response_path = tmp_root / "suggest_response.txt"
+            response_path.write_text('{"suggestion":"那我先不往前走，你们谁先告诉我，前面到底是人还是局？"}', encoding="utf-8")
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_dialogue_suggestion_payload.py"),
+                    "--response-file",
+                    str(response_path),
+                    "--output",
+                    str(result_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            self.assertIn("前面到底是人还是局", result["suggestion"])
 
     def test_installed_prepare_excerpt_tool_runs_without_repo_src(self):
         repo_root = Path(__file__).resolve().parents[1]

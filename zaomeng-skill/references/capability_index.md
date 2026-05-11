@@ -128,7 +128,7 @@ Recommended use:
 
 ## Dialogue Stage
 
-`act`, `insert`, and `observe` are host-driven dialogue modes, not packaged helper capabilities.
+`act`, `insert`, and `observe` are host-driven dialogue modes, but the skill now provides packaged helpers for the most repetitive dialogue-side work.
 
 At dialogue time, the host should read:
 
@@ -141,6 +141,18 @@ At dialogue time, the host should read:
 Reference:
 
 - `references/chat_contract.md`
+
+Optional helpers for the dialogue stage:
+
+- `tools/manage_self_card.py`
+  - manage self-insert cards
+  - build random self-card generation payloads
+- `tools/build_persona_autofill_payload.py`
+  - build one-field persona autofill payloads
+  - parse model output for direct form write-back
+- `tools/build_dialogue_suggestion_payload.py`
+  - build one-line suggestion payloads for `act` / `insert` / `observe`
+  - provide compact retry payloads for long-context fallback
 
 ## Read Order
 

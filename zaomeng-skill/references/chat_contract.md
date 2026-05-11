@@ -76,6 +76,15 @@ For `insert`, the host should create or refresh a lightweight self-insert card, 
 - how they entered the scene
 - what the cast should currently know about them
 
+If the host wants packaged helpers instead of hand-writing this layer, use:
+
+- `tools/manage_self_card.py --mode blank`
+- `tools/manage_self_card.py --mode save`
+- `tools/manage_self_card.py --mode build-random-payload`
+- `tools/manage_self_card.py --mode parse-random-response`
+
+This lets the host support both manual role-card editing and AI-random role-card generation without binding itself to the Web UI implementation.
+
 ### 4. Dialogue Rendering
 
 The host performs the actual generation. It should use the persona bundle and constraints to keep the output:
@@ -84,6 +93,27 @@ The host performs the actual generation. It should use the persona bundle and co
 - mode-consistent
 - relation-aware
 - scene-aware
+
+If the host wants the same “自动生成一句下一条要发的话” flow as the Web UI, call:
+
+- `tools/build_dialogue_suggestion_payload.py --context-file <context.json>`
+
+The tool returns:
+
+- full messages
+- retry messages
+- compact fallback payload/messages
+
+For persona review autofill, call:
+
+- `tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto`
+
+The tool returns:
+
+- model-knowledge-first step
+- optional web-fallback step
+- retry messages
+- parser contract for model output
 
 ## Recommended Artifact Read Order
 
