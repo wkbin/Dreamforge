@@ -25,6 +25,7 @@
 
 ## 版本说明
 
+- `4.1.7`：补入角色卡管理、人物字段 AI 补全、`act` / `insert` / `observe` 自动回复建议这三组 skill helper，并继续收紧宿主中立文档口径、修复 helper 边界校验，避免同名角色卡覆盖、假 fallback 与 silent mode 降级。
 - `4.1.6`：升级 skill 包版本，补齐当前发布 tag 到 `v2026.05.09`，让 `SKILL.md`、`.metadata.json`、示例文件与发布元数据继续保持一致。
 - `4.1.5`：同步当前 skill 包版本元数据与中英文文档，补齐发布说明，确保打包与示例版本号一致。
 - `4.1.4`：整理 skill 打包产物，确保从 `zaomeng-skill/` 目录生成的 `zaomeng-<version>.skill.zip` 不混入 `__pycache__`、`.pytest_cache`、`.mypy_cache` 等缓存目录，同时收紧 stdout 输出格式，避免 JSON 以外内容干扰 Windows CI，并尽量保持 ASCII-safe，降低 GitHub Actions 在 `cp1252` 环境下的编码问题。

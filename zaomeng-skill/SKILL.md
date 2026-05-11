@@ -5,9 +5,9 @@ license: MIT-0
 compatibility: 需要宿主支持 Markdown skill 目录、YAML frontmatter，以及本 skill 内置 Python helper
   scripts 所需的本地 Python 运行环境。
 metadata:
-  version: 4.1.6
+  version: 4.1.7
   hostMode: llm-first
-  releaseTag: v2026.05.09
+  releaseTag: v2026.05.11
 ---
 
 # zaomeng-skill
