@@ -81,6 +81,21 @@
     "stress_response",
   ];
 
+  const SCENE_CARD_FIELDS = [
+    { field: "title", label: "场景名", control: "input", required: true, placeholder: "例如：雨夜探院；花厅夜宴；船舫对坐" },
+    { field: "time_hint", label: "时间提示", control: "input", required: false, placeholder: "例如：上元夜；雨后傍晚；三更将尽" },
+    { field: "location", label: "地点", control: "input", required: true, placeholder: "例如：荣府偏厅；临河船舫；后园回廊" },
+    { field: "atmosphere", label: "场面气氛", control: "input", required: true, placeholder: "例如：表面松弛，暗地试探" },
+    { field: "opening_situation", label: "开场局面", control: "textarea", required: true },
+    { field: "public_goal", label: "明面目标", control: "textarea", required: false },
+    { field: "hidden_tension", label: "暗线张力", control: "textarea", required: false },
+    { field: "scene_drive", label: "推进方向", control: "textarea", required: true },
+    { field: "expected_rhythm", label: "节奏手感", control: "input", required: false, placeholder: "例如：慢热试探；三句一推进；越聊越绷紧" },
+    { field: "forbidden_topics", label: "不想碰的话头", control: "textarea", required: false, placeholder: "用；分开" },
+  ];
+
+  const SCENE_CARD_REQUIRED_FIELDS = ["title", "location", "atmosphere", "opening_situation", "scene_drive"];
+
   function flattenFieldGroups(groups = []) {
     return groups.flatMap((group) => Array.isArray(group.fields) ? group.fields : []);
   }
@@ -97,6 +112,9 @@
     PERSONA_ADVANCED_GROUPS,
     PERSONA_ALL_FIELDS,
     PERSONA_FIELD_MAP: fieldMapFrom(PERSONA_ALL_FIELDS),
+    SCENE_CARD_FIELDS,
+    SCENE_CARD_REQUIRED_FIELDS,
+    SCENE_CARD_FIELD_MAP: fieldMapFrom(SCENE_CARD_FIELDS),
     SELF_CARD_ENTRY_FIELDS,
     SELF_CARD_REQUIRED_FIELDS,
     SELF_CARD_ALL_FIELDS,

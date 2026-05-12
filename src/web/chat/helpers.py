@@ -11,10 +11,21 @@ def build_dialogue_opening_message(session: dict[str, Any]) -> str:
     mode = str(session.get("mode", "observe")).strip() or "observe"
     participants = [str(item).strip() for item in session.get("participants", []) if str(item).strip()]
     cast = "、".join(participants) or "当前角色"
+    scene_card = dict(session.get("scene_card", {}) or {})
+    scene_title = str(scene_card.get("title", "")).strip()
+    location = str(scene_card.get("location", "")).strip()
+    atmosphere = str(scene_card.get("atmosphere", "")).strip()
+    opening = str(scene_card.get("opening_situation", "")).strip()
+    drive = str(scene_card.get("scene_drive", "")).strip()
+    scene_prefix_bits = [bit for bit in (scene_title, location, atmosphere) if bit]
+    scene_prefix = f"场景设定：{' / '.join(scene_prefix_bits)}。" if scene_prefix_bits else ""
+    opening_suffix = f" 开场局面是：{opening}。" if opening else ""
+    drive_suffix = f" 推进方向优先朝这边走：{drive}。" if drive else ""
     if mode == "act":
         controlled = str(session.get("controlled_character", "")).strip() or "该角色"
         return (
-            f"请先为 {controlled} 与 {cast} 生成一个自然开场。"
+            f"{scene_prefix}请先为 {controlled} 与 {cast} 生成一个自然开场。"
+            f"{opening_suffix}{drive_suffix}"
             "先给 1 条简短的场景提示或旁白，再让其他角色先接出第一轮对话，不要等待用户补充。"
         )
     if mode == "insert":
@@ -23,11 +34,13 @@ def build_dialogue_opening_message(session: dict[str, Any]) -> str:
         scene_identity = str(self_profile.get("scene_identity", "")).strip() or str(self_profile.get("core_identity", "")).strip()
         identity_suffix = f"，身份是{scene_identity}" if scene_identity else ""
         return (
-            f"请先为 {display_name}{identity_suffix} 与 {cast} 生成一个自然开场。"
+            f"{scene_prefix}请先为 {display_name}{identity_suffix} 与 {cast} 生成一个自然开场。"
+            f"{opening_suffix}{drive_suffix}"
             "先给 1 条简短的场景提示或旁白，再让角色们先开口，对这个进入场景的人作出第一轮反应。"
         )
     return (
-        f"请先为 {cast} 生成一个自然开场。"
+        f"{scene_prefix}请先为 {cast} 生成一个自然开场。"
+        f"{opening_suffix}{drive_suffix}"
         "先给 1 条简短的场景提示或旁白，再让角色们开始第一轮对话，让场景自己动起来。"
     )
 
@@ -73,6 +86,7 @@ def compact_dialogue_suggestion_payload(payload: dict[str, Any]) -> dict[str, An
     relation_context = dict(compact.get("relation_context", {}) or {})
     relation_context["relations_excerpt"] = _trim_text(str(relation_context.get("relations_excerpt", "")).strip(), 1200)
     compact["relation_context"] = relation_context
+    compact["memory_context"] = _compact_memory_context(dict(compact.get("memory_context", {}) or {}))
 
     compact["persona_contexts"] = [
         _compact_persona_context(item) for item in list(compact.get("persona_contexts", []) or [])[:4]
@@ -135,7 +149,68 @@ def _compact_user_persona(persona: dict[str, Any]) -> dict[str, Any]:
     }
     compact_persona = dict(persona)
     compact_persona["profile"] = compact_profile
+    scene_card = dict(persona.get("scene_card", {}) or {})
+    compact_persona["scene_card"] = {
+        key: value
+        for key, value in {
+            "title": str(scene_card.get("title", "")).strip(),
+            "location": str(scene_card.get("location", "")).strip(),
+            "atmosphere": str(scene_card.get("atmosphere", "")).strip(),
+            "opening_situation": _trim_text(str(scene_card.get("opening_situation", "")).strip(), 140),
+            "public_goal": _trim_text(str(scene_card.get("public_goal", "")).strip(), 140),
+            "hidden_tension": _trim_text(str(scene_card.get("hidden_tension", "")).strip(), 140),
+            "scene_drive": _trim_text(str(scene_card.get("scene_drive", "")).strip(), 140),
+            "expected_rhythm": str(scene_card.get("expected_rhythm", "")).strip(),
+        }.items()
+        if _has_meaningful_value(value)
+    }
     return compact_persona
+
+
+def _compact_memory_context(memory_context: dict[str, Any]) -> dict[str, Any]:
+    session_summary = dict(memory_context.get("session_summary", {}) or {})
+    archived_summary = dict(memory_context.get("archived_summary", {}) or {})
+    retrieved_memories = list(memory_context.get("retrieved_memories", []) or [])
+    compact_archived = {
+        key: value
+        for key, value in {
+            "summary": _trim_text(str(archived_summary.get("summary", "")).strip(), 180),
+            "key_points": [
+                _trim_text(str(item).strip(), 80)
+                for item in list(archived_summary.get("key_points", []) or [])[:3]
+                if str(item).strip()
+            ],
+            "compressed_turns": archived_summary.get("compressed_turns", 0),
+        }.items()
+        if _has_meaningful_value(value)
+    }
+    compact_hits: list[dict[str, Any]] = []
+    for item in retrieved_memories[:2]:
+        compact_hit = {
+            key: value
+            for key, value in {
+                "text": _trim_text(str(item.get("text", "")).strip(), 100),
+                "speaker": str(item.get("speaker", "")).strip(),
+                "target": str(item.get("target", "")).strip(),
+                "kind": str(item.get("kind", "")).strip(),
+            }.items()
+            if _has_meaningful_value(value)
+        }
+        if compact_hit:
+            compact_hits.append(compact_hit)
+    return {
+        key: value
+        for key, value in {
+            "session_summary": {
+                inner_key: _trim_text(str(inner_value).strip(), 120)
+                for inner_key, inner_value in session_summary.items()
+                if _has_meaningful_value(inner_value)
+            },
+            "archived_summary": compact_archived,
+            "retrieved_memories": compact_hits,
+        }.items()
+        if _has_meaningful_value(value)
+    }
 
 
 def _normalize_short_list(value: Any) -> list[str] | str:
@@ -171,8 +246,10 @@ def build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool
     persona_contexts = payload.get("persona_contexts", [])
     relation_excerpt = str(payload.get("relation_context", {}).get("relations_excerpt", "")).strip()
     history = payload.get("history", [])
+    memory_context = dict(payload.get("memory_context", {}) or {})
     instructions = dict(payload.get("instructions", {}) or {})
     host_action = dict(payload.get("host_action", {}) or {})
+    scene_card = dict(payload.get("scene_card", {}) or {})
     response_limit = int(host_action.get("response_limit_hint", 2) or 2)
 
     system_parts = [
@@ -181,6 +258,7 @@ def build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool
         str(instructions.get("mode_rule", "")).strip(),
         str(instructions.get("speaker_rule", "")).strip(),
         str(instructions.get("response_style", "")).strip(),
+        str(instructions.get("scene_rule", "")).strip(),
         str(instructions.get("response_count_rule", "")).strip(),
         str(host_action.get("output_rule", "")).strip(),
         "只返回 JSON 数组，每项必须包含 speaker 和 message。",
@@ -196,6 +274,8 @@ def build_dialogue_llm_messages(payload: dict[str, Any], *, retry_on_empty: bool
         "message": str(input_block.get("message", "")).strip(),
         "participants": participants,
         "active_participants": active_participants,
+        "scene_card": scene_card,
+        "memory_context": memory_context,
         "response_limit": response_limit,
         "persona_contexts": persona_contexts,
         "history": history,
@@ -222,8 +302,10 @@ def build_dialogue_suggestion_llm_messages(
     user_persona = dict(payload.get("user_persona", {}) or {})
     relation_excerpt = str(payload.get("relation_context", {}).get("relations_excerpt", "")).strip()
     history = payload.get("history", [])
+    memory_context = dict(payload.get("memory_context", {}) or {})
     instructions = dict(payload.get("instructions", {}) or {})
     host_action = dict(payload.get("host_action", {}) or {})
+    scene_card = dict(payload.get("scene_card", {}) or {})
 
     system_parts = [
         str(payload.get("host_prompt_brief", "")).strip(),
@@ -232,6 +314,7 @@ def build_dialogue_suggestion_llm_messages(
         str(instructions.get("mode_rule", "")).strip(),
         str(instructions.get("speaker_rule", "")).strip(),
         str(instructions.get("response_style", "")).strip(),
+        str(instructions.get("scene_rule", "")).strip(),
         str(host_action.get("output_rule", "")).strip(),
         "必须优先参考 user_persona：这代表当前应该由“你”如何说话。",
         "如果 mode=insert，就按 self-insert 的完整角色卡来写，不只参考上下文和别人刚才的回复。",
@@ -239,6 +322,7 @@ def build_dialogue_suggestion_llm_messages(
         "如果上下文允许多种接法，优先选更符合 user_persona 的那一种，而不是只做一个泛用接话。",
         "如果 mode=act，就按 controlled character 的 persona profile、speech_style、temperament 和典型说话习惯来写。",
         "如果 mode=observe，就把这句话写成推动剧情的场景提示：让局势往前走，而不是复述、总结或劝说。",
+        "如果 scene_card 存在，优先服从它给出的地点、气氛、开场局面、明面目标、暗线张力与推进方向。",
         "只输出一句最终可发送的成品台词，不要解释上下文，不要总结历史，不要提供建议理由，不要写“作为/当前场景/我们可以/你可以/建议/回复：”这类分析话术。",
         "不要分段，不要项目符号，不要加引号，不要加说话人标签。",
     ]
@@ -252,6 +336,8 @@ def build_dialogue_suggestion_llm_messages(
         "mode": session_mode,
         "speaker": str(input_block.get("speaker", "")).strip(),
         "seed_text": str(input_block.get("message", "")).strip(),
+        "scene_card": scene_card,
+        "memory_context": memory_context,
         "user_persona": user_persona,
         "participants": participants,
         "persona_contexts": persona_contexts,

@@ -65,13 +65,17 @@ function createMessageBubble(role, message) {
   return bubble;
 }
 
-function buildSessionMetaMessage({ mode = "", participants = [], controlledCharacter = "", selfInsert = {} }) {
+function buildSessionMetaMessage({ mode = "", participants = [], controlledCharacter = "", selfInsert = {}, sceneCard = {} }) {
   const lines = [];
   if (mode) lines.push(`今夜入场：${humanizeMode(mode)}`);
   if ((participants || []).length) lines.push(`与你同席：${joinCharacters(participants)}`);
   if (controlledCharacter) lines.push(`此刻你是：${controlledCharacter}`);
   if (selfInsert?.display_name) lines.push(`他们会称呼你：${selfInsert.display_name}`);
   if (selfInsert?.scene_identity) lines.push(`旁人眼中的你：${selfInsert.scene_identity}`);
+  if (sceneCard?.title || sceneCard?.location || sceneCard?.atmosphere) {
+    const sceneBits = [sceneCard?.title, sceneCard?.location, sceneCard?.atmosphere].filter(Boolean);
+    lines.push(`当前挂载场景：${sceneBits.join(" / ")}`);
+  }
   if (!lines.length) return null;
   return { role: "scene", message: lines.join("\n\n") };
 }
@@ -82,6 +86,7 @@ function renderDialogueTranscript(session) {
     mode: card.mode_display || session?.mode || "",
     participants: card.participants || [],
     controlledCharacter: card.controlled_character || "",
+    sceneCard: card.scene_card || {},
     selfInsert: card.self_insert || {},
   });
   const items = metaMessage ? [metaMessage, ...(session?.transcript || [])] : session?.transcript || [];
@@ -102,16 +107,18 @@ function buildDialogueMemorySnapshot(session) {
   const summaryCast = String(summary.cast || "").trim();
   const summaryRelation = String(summary.relation_drift || "").trim();
   const summaryPerspective = String(summary.perspective || "").trim();
+  const summaryScene = String(summary.scene_frame || "").trim();
   const summaryWorld = String(summary.world || "").trim();
   const summaryUpdated = String(summary.updated_at || "").trim();
 
-  if (summaryRecap || summaryCast || summaryRelation || summaryPerspective || summaryWorld) {
+  if (summaryRecap || summaryCast || summaryRelation || summaryPerspective || summaryScene || summaryWorld) {
     return {
       modeLabel: summaryModeLabel || humanizeMode(summaryMode || session?.mode || session?.session_card?.mode || "observe"),
       recap: summaryRecap || "这局刚开场，回顾会在这里滚动更新。",
       cast: summaryCast || "人物发言次序会在这里收住。",
       relation: summaryRelation || "关系线会在这里滚动提示。",
       perspective: summaryPerspective || "你当前的入场方式会在这里提示。",
+      scene: summaryScene || "当前这幕的地点、气氛与推进方向会在这里提醒你。",
       world: summaryWorld || "当前局势里的动作与情绪线会在这里提醒你。",
       updated: formatWeakTime(summaryUpdated) || formatWeakTime(session?.updated_at) || "刚刚更新",
     };
@@ -176,6 +183,13 @@ function buildDialogueMemorySnapshot(session) {
   }
 
   let world = "当前局势里的动作与情绪线会在这里提醒你。";
+  let scene = "当前这幕的地点、气氛与推进方向会在这里提醒你。";
+  const sceneCard = session?.session_card?.scene_card || {};
+  if (sceneCard && (sceneCard.title || sceneCard.location || sceneCard.atmosphere || sceneCard.scene_drive)) {
+    const sceneBits = [sceneCard.title, sceneCard.location, sceneCard.atmosphere].filter(Boolean);
+    const drive = trimInlineMessage(sceneCard.scene_drive || sceneCard.opening_situation || "");
+    scene = sceneBits.length ? `挂载场景：${sceneBits.join(" / ")}${drive ? ` · ${drive}` : ""}` : drive || scene;
+  }
   if (lastWorld?.message) {
     world = trimInlineMessage(lastWorld.message);
   } else if (lastCharacter?.message) {
@@ -188,6 +202,7 @@ function buildDialogueMemorySnapshot(session) {
     cast,
     relation,
     perspective,
+    scene,
     world,
     updated: formatWeakTime(session?.updated_at) || "刚刚更新",
   };
@@ -207,8 +222,16 @@ function renderDialogueMemory(session) {
   setText("dialogue-memory-cast", snapshot.cast, "");
   setText("dialogue-memory-relation", snapshot.relation, "");
   setText("dialogue-memory-perspective", snapshot.perspective, "");
+  setText("dialogue-memory-scene", snapshot.scene, "");
   setText("dialogue-memory-world", snapshot.world, "");
   setText("dialogue-memory-mode", `模式：${snapshot.modeLabel}`, "");
+  const branchNote = el("dialogue-memory-branch");
+  const branchOrigin = session?.branch_origin || {};
+  const branchTitle = String(branchOrigin?.scene_title || "").trim();
+  if (branchNote) {
+    branchNote.textContent = branchTitle ? `分支自：${branchTitle}` : "";
+    branchNote.classList.toggle("hidden", !branchTitle);
+  }
   setText("dialogue-memory-updated", `更新于 ${snapshot.updated}`, "");
   const toggle = el("dialogue-memory-toggle-button");
   if (toggle) {
@@ -218,6 +241,89 @@ function renderDialogueMemory(session) {
   if (body) {
     body.classList.toggle("hidden", collapsed);
   }
+  renderDialogueSceneTimeline(session);
+  if (typeof window.renderDialogueSceneSwitcher === "function") {
+    window.renderDialogueSceneSwitcher(session);
+  }
+}
+
+function renderDialogueSceneTimeline(session) {
+  const root = el("dialogue-scene-timeline");
+  if (!root) return;
+  const items = Array.isArray(session?.scene_history) ? session.scene_history : [];
+  if (!items.length) {
+    root.innerHTML = "";
+    root.classList.add("hidden");
+    return;
+  }
+  root.classList.remove("hidden");
+  root.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "dialogue-scene-timeline-head";
+  const title = document.createElement("strong");
+  title.textContent = "场景时间线";
+  const note = document.createElement("small");
+  note.textContent = "这一局从哪一幕走到哪一幕，会在这里顺着记下来。";
+  head.appendChild(title);
+  head.appendChild(note);
+  root.appendChild(head);
+
+  const list = document.createElement("div");
+  list.className = "dialogue-scene-timeline-list";
+  items.forEach((item, index) => {
+    const card = document.createElement("article");
+    card.className = "dialogue-scene-timeline-item";
+    card.tabIndex = 0;
+    if (String(item?.is_current || "").trim()) {
+      card.classList.add("is-current");
+    }
+    const strong = document.createElement("strong");
+    const titleText = String(item?.title || "").trim() || `第 ${index + 1} 幕`;
+    const location = String(item?.location || "").trim();
+    strong.textContent = location ? `${titleText} · ${location}` : titleText;
+    card.appendChild(strong);
+    const atmosphere = String(item?.atmosphere || "").trim();
+    if (atmosphere) {
+      const copy = document.createElement("p");
+      copy.textContent = atmosphere;
+      card.appendChild(copy);
+    }
+    const transition = String(item?.transition_message || "").trim();
+    if (transition) {
+      const transitionNode = document.createElement("small");
+      transitionNode.textContent = `转场提示：${transition}`;
+      card.appendChild(transitionNode);
+    }
+    const actions = document.createElement("div");
+    actions.className = "dialogue-scene-timeline-actions";
+    const branchButton = document.createElement("button");
+    branchButton.type = "button";
+    branchButton.className = "soft-button";
+    branchButton.textContent = "从这里重开";
+    branchButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (typeof window.branchDialogueSessionFromScene === "function") {
+        window.branchDialogueSessionFromScene(index);
+      }
+    });
+    actions.appendChild(branchButton);
+    card.appendChild(actions);
+    card.addEventListener("click", () => {
+      if (typeof window.applyDialogueSceneTimelineEntry === "function") {
+        window.applyDialogueSceneTimelineEntry(item);
+      }
+    });
+    card.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      if (typeof window.applyDialogueSceneTimelineEntry === "function") {
+        window.applyDialogueSceneTimelineEntry(item);
+      }
+    });
+    list.appendChild(card);
+  });
+  root.appendChild(list);
 }
 
 function buildDialogueMemoryClipboardText(session) {
@@ -233,6 +339,7 @@ function buildDialogueMemoryClipboardText(session) {
     `人物动向：${snapshot.cast}`,
     `关系变化：${snapshot.relation}`,
     `你的位置：${snapshot.perspective}`,
+    `场景框架：${snapshot.scene}`,
     `世界状态：${snapshot.world}`,
     `更新时间：${snapshot.updated}`,
   ].join("\n");

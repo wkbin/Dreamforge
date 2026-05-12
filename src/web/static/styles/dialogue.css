@@ -99,6 +99,201 @@
   gap: 0.52rem;
 }
 
+.dialogue-scene-switcher {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 14px;
+  border: 1px solid rgba(170, 146, 127, 0.12);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.dialogue-scene-chain-suggestions {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.dialogue-scene-chain-card {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.52rem 0.58rem;
+  border-radius: 12px;
+  border: 1px solid rgba(170, 146, 127, 0.12);
+  background: rgba(255, 252, 248, 0.78);
+}
+
+.dialogue-scene-chain-card strong {
+  color: var(--ink);
+  font-size: 0.69rem;
+  line-height: 1.4;
+}
+
+.dialogue-scene-chain-card p,
+.dialogue-scene-chain-card small {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.65rem;
+  line-height: 1.5;
+}
+
+.dialogue-scene-chain-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+}
+
+.dialogue-scene-chain-tags span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.3rem;
+  padding: 0 0.46rem;
+  border-radius: 999px;
+  background: rgba(184, 132, 113, 0.1);
+  color: var(--accent-strong);
+  font-size: 0.63rem;
+  line-height: 1.3;
+}
+
+.dialogue-scene-chain-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dialogue-scene-chain-actions .soft-button {
+  min-height: 1.68rem;
+  padding: 0 0.58rem;
+  font-size: 0.65rem;
+}
+
+.dialogue-scene-timeline {
+  display: grid;
+  gap: 0.42rem;
+  padding: 0.68rem 0.78rem;
+  border-radius: 14px;
+  border: 1px solid rgba(170, 146, 127, 0.12);
+  background: rgba(255, 249, 244, 0.7);
+}
+
+.dialogue-scene-timeline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.dialogue-scene-timeline-head strong {
+  color: var(--ink);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.dialogue-scene-timeline-head small {
+  color: var(--ink-faint);
+  font-size: 0.67rem;
+  line-height: 1.5;
+}
+
+.dialogue-scene-timeline-list {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.dialogue-scene-timeline-item {
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.48rem 0.56rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(170, 146, 127, 0.1);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.dialogue-scene-timeline-item.is-current {
+  border-color: rgba(184, 132, 113, 0.24);
+  background: rgba(255, 248, 242, 0.9);
+}
+
+.dialogue-scene-timeline-item:hover,
+.dialogue-scene-timeline-item:focus-visible {
+  border-color: rgba(184, 132, 113, 0.28);
+  background: rgba(255, 250, 246, 0.92);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.dialogue-scene-timeline-item strong {
+  color: var(--ink);
+  font-size: 0.71rem;
+  line-height: 1.45;
+}
+
+.dialogue-scene-timeline-item p,
+.dialogue-scene-timeline-item small {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.66rem;
+  line-height: 1.5;
+}
+
+.dialogue-scene-timeline-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.1rem;
+}
+
+.dialogue-scene-timeline-actions .soft-button {
+  min-height: 1.7rem;
+  padding: 0 0.58rem;
+  font-size: 0.66rem;
+}
+
+.dialogue-scene-switcher-head {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.dialogue-scene-switcher-head strong {
+  color: var(--ink);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.dialogue-scene-switcher-head small {
+  color: var(--ink-faint);
+  font-size: 0.67rem;
+  line-height: 1.5;
+}
+
+.dialogue-scene-switcher-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+#dialogue-live-scene-card,
+#dialogue-live-scene-transition {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(194, 157, 138, 0.18);
+  background: rgba(255, 252, 248, 0.82);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 0.62rem 0.72rem;
+  font: inherit;
+  line-height: 1.55;
+}
+
+#dialogue-live-scene-card {
+  min-height: 2.35rem;
+}
+
+#dialogue-live-scene-transition {
+  resize: vertical;
+  min-height: 4.4rem;
+}
+
 .dialogue-memory.is-collapsed .dialogue-memory-body {
   display: none;
 }
@@ -126,6 +321,9 @@
 }
 
 .dialogue-memory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   padding-left: 0.1rem;
 }
 
@@ -142,6 +340,16 @@
   border-radius: 999px;
   background: rgba(184, 132, 113, 0.11);
   color: var(--accent-strong);
+}
+
+.dialogue-memory-branch {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.35rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: rgba(122, 104, 90, 0.08);
+  color: var(--ink-faint);
 }
 
 .transcript {

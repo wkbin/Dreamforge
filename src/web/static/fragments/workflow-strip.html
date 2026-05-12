@@ -193,7 +193,6 @@
           </div>
           <button id="run-character-readiness-toggle" type="button" class="soft-button hidden">展开全部</button>
         </div>
-        <p class="detail-section-copy">先看谁已站稳、谁还缺关键字段，再决定下一步补谁。</p>
         <div id="work-character-vue-root" class="work-character-vue-root hidden"></div>
         <div id="work-character-legacy">
           <div id="run-character-readiness" class="work-character-list"></div>
@@ -287,7 +286,7 @@
           <p id="graph-empty-note" class="card-note hidden">关系图暂未生成，稍后会自动补到这里。</p>
           <div class="work-session-preview-head">
             <strong>最近会话</strong>
-            <small>可以直接从这里接着说</small>
+            <small>从这里续上就行</small>
           </div>
           <div id="work-session-resume-shell" class="card-actions hidden">
             <button id="work-session-resume-latest-button" type="button" class="soft-button">继续最近一局</button>
@@ -533,82 +532,18 @@
         <button id="back-to-detail-button" type="button" class="soft-button">返回书卷</button>
       </div>
     </div>
-    <div id="chat-setup-vue-root" class="chat-setup-vue-root hidden"></div>
-    <form id="dialogue-session-form" class="stack-form">
+    <div id="chat-setup-vue-root" class="chat-setup-vue-root hidden" tabindex="-1"></div>
+    <div id="chat-setup-state-cache" class="hidden" aria-hidden="true">
       <input id="dialogue-mode" type="hidden" value="observe" />
-
-      <div class="choice-deck" id="dialogue-mode-options">
-        <button type="button" class="choice-card active" data-value="observe">
-          <strong>旁观此局</strong>
-          <span>只看人物自然开口。</span>
-        </button>
-        <button type="button" class="choice-card" data-value="act">
-          <strong>化身书中人</strong>
-          <span>代入角色，亲自接话。</span>
-        </button>
-        <button type="button" class="choice-card" data-value="insert">
-          <strong>以自己入场</strong>
-          <span>保留自己，走进故事。</span>
-        </button>
-      </div>
-
-      <label class="field-card">
-        <span>这一场里，你想和谁同席</span>
-        <div id="dialogue-character-pills" class="pill-row"></div>
-        <input id="dialogue-participants" type="text" placeholder="点选上方人物，或自行补充名字" />
-      </label>
-
-      <label id="controlled-field" class="field-card hidden">
-        <span>此刻你是谁</span>
-        <input id="dialogue-controlled" type="text" placeholder="例如：贾宝玉" />
-      </label>
-
-      <label id="self-card-field" class="field-card hidden">
-        <span>直接带哪张角色卡入场</span>
-        <select id="dialogue-self-card" class="native-hidden"></select>
-        <div class="custom-select" id="dialogue-self-card-select">
-          <button id="dialogue-self-card-trigger" type="button" class="custom-select-trigger" aria-expanded="false">
-            <span class="custom-select-label">先挑一张角色卡</span>
-          </button>
-          <div id="dialogue-self-card-menu" class="custom-select-menu hidden"></div>
-        </div>
-        <small id="dialogue-self-card-hint">不选也能手动写，但选卡后会把完整人设一起带进场景。</small>
-      </label>
-
-      <div id="insert-self-fields" class="mini-grid insert-self-grid hidden">
-        <label id="self-name-field" class="field-card">
-          <span>他们会怎样称呼你</span>
-          <input id="dialogue-self-name" type="text" placeholder="例如：阿眠" />
-        </label>
-        <label id="self-identity-field" class="field-card">
-          <span>你在故事中的身份</span>
-          <input id="dialogue-self-identity" type="text" placeholder="例如：误入园中的来客" />
-        </label>
-        <label id="self-style-field" class="field-card">
-          <span>今夜的氛围</span>
-          <input id="dialogue-self-style" type="text" placeholder="例如：初见、夜谈、试探、久别重逢" />
-        </label>
-      </div>
-
-      <div id="self-card-preview-shell" class="detail-section hidden">
-        <div class="detail-section-head">
-          <div>
-            <p class="eyebrow">角色卡预览</p>
-            <h4 id="self-card-preview-title">还没有选中角色卡</h4>
-          </div>
-          <div class="card-actions">
-            <button id="create-self-card-button" type="button" class="soft-button">新建角色卡</button>
-            <button id="edit-self-card-button" type="button" class="soft-button hidden">编辑当前卡</button>
-          </div>
-        </div>
-        <p id="self-card-preview-copy" class="detail-section-copy">选一张卡后，你的身份、气质和说话方式都会一起带进这场聊天。</p>
-        <div id="self-card-preview-pills" class="bookshelf-links"></div>
-      </div>
-
-      <div class="card-actions">
-        <button type="submit" class="primary-button">进入这一幕</button>
-      </div>
-    </form>
-    <p id="dialogue-session-status" class="card-note"></p>
+      <input id="dialogue-participants" type="hidden" value="" />
+      <input id="dialogue-controlled" type="hidden" value="" />
+      <input id="dialogue-self-name" type="hidden" value="" />
+      <input id="dialogue-self-identity" type="hidden" value="" />
+      <input id="dialogue-self-style" type="hidden" value="" />
+      <select id="dialogue-opening-preset"></select>
+      <select id="dialogue-scene-card"></select>
+      <select id="dialogue-self-card"></select>
+    </div>
+    <p id="dialogue-session-status" class="card-note hidden"></p>
   </section>
 </section>

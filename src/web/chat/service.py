@@ -75,7 +75,10 @@ class DialogueService:
         mode: str,
         participants: list[str],
         controlled_character: str = "",
+        scene_profile: dict[str, str] | None = None,
         self_profile: dict[str, str] | None = None,
+        carried_memory_summary: dict[str, str] | None = None,
+        branch_origin: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         run_id = str(run_manifest.get("run_id", "")).strip()
         novel_id = str(run_manifest.get("novel_id", "")).strip()
@@ -102,15 +105,43 @@ class DialogueService:
             "mode": mode,
             "participants": selected,
             "controlled_character": controlled_character if mode == "act" else "",
+            "scene_card": dict(scene_profile or {}),
+            "scene_card_id": str((scene_profile or {}).get("scene_card_id", "")).strip(),
+            "scene_history": [],
             "self_insert": dict(self_profile or {}) if mode == "insert" else {},
             "self_card_id": str((self_profile or {}).get("self_card_id", "")).strip() if mode == "insert" else "",
+            "carried_memory_summary": dict(carried_memory_summary or {}),
+            "branch_origin": dict(branch_origin or {}),
             "history": [],
             "pending_turn": {},
             "created_at": _utc_now(),
             "updated_at": _utc_now(),
             "status": "ready",
         }
+        if dict(scene_profile or {}):
+            initial_summary = self._build_session_memory_summary(run_id, payload, [])
+            payload["scene_history"] = [
+                self._build_scene_history_entry(
+                    scene_profile or {},
+                    transition_message="",
+                    memory_summary=initial_summary,
+                )
+            ]
         self._write_json(root / "session.json", payload)
+        if carried_memory_summary:
+            session_store = self._resolve_memory_store(run_id)
+            if session_store is not None:
+                session_store.append_long_term_memory(
+                    session_id,
+                    self._branch_memory_seed_text(carried_memory_summary),
+                    metadata={
+                        "run_id": run_id,
+                        "kind": "branch_summary",
+                        "speaker": "分支摘要",
+                        "target": "",
+                        "ts": _utc_now(),
+                    },
+                )
         return self._serialize_session(run_id, payload)
 
     def get_session(self, run_id: str, session_id: str) -> dict[str, Any]:
@@ -122,6 +153,83 @@ class DialogueService:
         if not session_dir.exists():
             raise FileNotFoundError(str(session_dir))
         shutil.rmtree(session_dir)
+
+    def update_scene_card(
+        self,
+        run_id: str,
+        session_id: str,
+        *,
+        scene_profile: dict[str, str] | None = None,
+        transition_message: str = "",
+    ) -> dict[str, Any]:
+        session = self._read_json(self._session_file(run_id, session_id))
+        if session.get("pending_turn"):
+            raise ValueError("当前还有一轮待收口，请先等这拍结束再转场。")
+        normalized_scene = dict(scene_profile or {})
+        session["scene_card"] = normalized_scene
+        session["scene_card_id"] = str(normalized_scene.get("scene_card_id", "")).strip()
+        scene_note = self._build_scene_switch_note(normalized_scene, transition_message)
+        if scene_note:
+            session.setdefault("history", []).append(
+                {
+                    "speaker": "场景提示",
+                    "message": scene_note,
+                    "target": "",
+                    "ts": _utc_now(),
+                }
+            )
+        transcript = self._serialize_transcript(session)
+        memory_summary = self._build_session_memory_summary(run_id, session, transcript)
+        scene_history = list(session.get("scene_history", []) or [])
+        scene_history.append(
+            self._build_scene_history_entry(
+                normalized_scene,
+                transition_message=transition_message,
+                memory_summary=memory_summary,
+            )
+        )
+        session["scene_history"] = scene_history
+        session["updated_at"] = _utc_now()
+        session["status"] = "ready"
+        self._write_json(self._session_file(run_id, session_id), session)
+        return self._serialize_session(run_id, session)
+
+    def branch_session_from_scene(
+        self,
+        run_manifest: dict[str, Any],
+        session_id: str,
+        *,
+        scene_index: int,
+    ) -> dict[str, Any]:
+        run_id = str(run_manifest.get("run_id", "")).strip()
+        session = self._read_json(self._session_file(run_id, session_id))
+        scene_history = list(session.get("scene_history", []) or [])
+        if scene_index < 0 or scene_index >= len(scene_history):
+            raise ValueError("指定的场景时间线节点不存在。")
+        target = dict(scene_history[scene_index] or {})
+        scene_profile = dict(target.get("scene_card", {}) or {})
+        if not scene_profile:
+            scene_profile = {
+                "scene_card_id": str(target.get("scene_card_id", "")).strip(),
+                "title": str(target.get("title", "")).strip(),
+                "location": str(target.get("location", "")).strip(),
+                "atmosphere": str(target.get("atmosphere", "")).strip(),
+            }
+        memory_summary = dict(target.get("memory_summary", {}) or {})
+        return self.create_session(
+            run_manifest,
+            mode=str(session.get("mode", "observe")).strip() or "observe",
+            participants=list(session.get("participants", []) or []),
+            controlled_character=str(session.get("controlled_character", "")).strip(),
+            scene_profile=scene_profile,
+            self_profile=dict(session.get("self_insert", {}) or {}),
+            carried_memory_summary=memory_summary,
+            branch_origin={
+                "session_id": str(session.get("session_id", "")).strip(),
+                "scene_index": scene_index,
+                "scene_title": str(target.get("title", "")).strip(),
+            },
+        )
 
     def prepare_turn(
         self,
@@ -317,38 +425,37 @@ class DialogueService:
         character_index = self._character_index(run_manifest)
         persona_map = {item["name"]: item for item in character_index}
         relation_graph = dict(run_manifest.get("artifact_index", {}).get("relation_graph", {}) or {})
-        relation_excerpt = self._load_text_excerpt(relation_graph.get("relations_file", ""), limit=8000)
-
-        persona_contexts: list[dict[str, Any]] = []
-        for name in participants:
-            meta = persona_map.get(name, {})
-            profile_path = Path(str(meta.get("profile_file", "")))
-            normalized = {}
-            if profile_path.exists():
-                normalized = load_profile_source(profile_path)
-            persona_contexts.append(
-                {
-                    "name": name,
-                    "profile_file": str(profile_path.resolve()) if profile_path.exists() else "",
-                    "persona_dir": str(meta.get("persona_dir", "")),
-                    "preview": meta.get("preview", {}),
-                    "profile": {
-                        "core_identity": normalized.get("core_identity", ""),
-                        "story_role": normalized.get("story_role", ""),
-                        "soul_goal": normalized.get("soul_goal", ""),
-                        "speech_style": normalized.get("speech_style", ""),
-                        "temperament_type": normalized.get("temperament_type", ""),
-                        "social_mode": normalized.get("social_mode", ""),
-                        "reward_logic": normalized.get("reward_logic", ""),
-                        "stress_response": normalized.get("stress_response", ""),
-                        "key_bonds": normalized.get("key_bonds", []),
-                    },
-                }
-            )
-
         full_history = list(session.get("history", []))
-        latest_history = full_history[-8:]
         active_participants = self._resolve_active_participants(participants, full_history, mode, speaker)
+        scene_card = dict(session.get("scene_card", {}) or {})
+        transcript = self._serialize_transcript(session)
+
+        persona_contexts = self._build_persona_contexts(
+            participants=participants,
+            active_participants=active_participants,
+            persona_map=persona_map,
+            mode=mode,
+            controlled_character=str(session.get("controlled_character", "")).strip(),
+        )
+
+        latest_history = full_history[-8:]
+        relation_excerpt = self._build_relation_excerpt(
+            relation_graph.get("relations_file", ""),
+            participants=participants,
+            active_participants=active_participants,
+            message=message,
+            scene_card=scene_card,
+        )
+        memory_context = self._build_turn_memory_context(
+            run_id=str(run_manifest.get("run_id", "")).strip(),
+            session=session,
+            transcript=transcript,
+            speaker=speaker,
+            message=message,
+            participants=participants,
+            active_participants=active_participants,
+            scene_card=scene_card,
+        )
         response_limit_hint = self._choose_response_limit_hint(
             mode=mode,
             active_count=len(active_participants),
@@ -361,6 +468,7 @@ class DialogueService:
             "mode_rule": self._mode_rule(mode),
             "speaker_rule": self._speaker_rule(mode, session, normalized_message_kind),
             "response_style": self._response_style_rule(mode, normalized_message_kind),
+            "scene_rule": self._scene_rule(scene_card),
             "response_count_rule": (
                 f"Return 1-{response_limit_hint} in-world replies. "
                 "Let only characters who are currently present respond; do not force every participant to speak each turn."
@@ -382,9 +490,12 @@ class DialogueService:
                 "participants": participants,
                 "active_participants": active_participants,
                 "controlled_character": session.get("controlled_character", ""),
+                "scene_card": scene_card,
                 "self_insert": dict(session.get("self_insert", {})),
             },
             "history": latest_history,
+            "scene_card": scene_card,
+            "memory_context": memory_context,
             "persona_contexts": persona_contexts,
             "relation_context": {
                 "graph": relation_graph,
@@ -439,6 +550,24 @@ class DialogueService:
         return "Reply as the cast addressing the self-insert user naturally inside the scene."
 
     @staticmethod
+    def _scene_rule(scene_card: dict[str, Any]) -> str:
+        if not scene_card:
+            return "If no explicit scene card is provided, infer a natural continuation from the recent transcript and relation context."
+        details = [
+            f"location={str(scene_card.get('location', '')).strip()}",
+            f"atmosphere={str(scene_card.get('atmosphere', '')).strip()}",
+            f"opening_situation={str(scene_card.get('opening_situation', '')).strip()}",
+            f"public_goal={str(scene_card.get('public_goal', '')).strip()}",
+            f"hidden_tension={str(scene_card.get('hidden_tension', '')).strip()}",
+            f"scene_drive={str(scene_card.get('scene_drive', '')).strip()}",
+            f"expected_rhythm={str(scene_card.get('expected_rhythm', '')).strip()}",
+        ]
+        compact = " | ".join(part for part in details if not part.endswith("="))
+        if not compact:
+            compact = "keep replies anchored in the chosen scene framing"
+        return f"Keep the scene anchored to the selected scene card: {compact}."
+
+    @staticmethod
     def _suggestion_mode_rule(mode: str) -> str:
         if mode == "act":
             return "Draft the user's next line as the controlled character, fully in character."
@@ -460,6 +589,7 @@ class DialogueService:
         session: dict[str, Any],
         persona_contexts: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        scene_card = dict(session.get("scene_card", {}) or {})
         if mode == "act":
             controlled = str(session.get("controlled_character", "")).strip()
             matched = next(
@@ -473,6 +603,7 @@ class DialogueService:
                 "must_follow": "Write exactly as this controlled character would speak in the current scene.",
                 "profile": dict(matched.get("profile", {}) or {}),
                 "preview": dict(matched.get("preview", {}) or {}),
+                "scene_card": scene_card,
             }
         if mode == "insert":
             card = dict(session.get("self_insert", {}) or {})
@@ -482,6 +613,7 @@ class DialogueService:
                 "source": "self_insert_profile",
                 "must_follow": "Write as the self-insert user, keeping their full role card, identity, motives, and speaking flavor consistent.",
                 "profile": dict(card),
+                "scene_card": scene_card,
             }
         return {
             "mode": "observe",
@@ -498,6 +630,7 @@ class DialogueService:
                     "make someone notice something important",
                 ],
             },
+            "scene_card": scene_card,
         }
 
     @staticmethod
@@ -521,7 +654,7 @@ class DialogueService:
             return f"The user speaks as {speaker}. Let the other participants answer in character."
         if mode == "insert":
             return f"The user enters the scene as {speaker}. Let the cast react in character."
-        return f"The user is observing. Let {', '.join(participants)} continue the scene in character."
+        return f"The user is observing. Let {', '.join(participants)} continue the scene in character and keep the chosen scene moving."
 
     @staticmethod
     def _host_suggestion_prompt_brief(mode: str, speaker: str, participants: list[str]) -> str:
@@ -634,6 +767,263 @@ class DialogueService:
             return ""
         return path.read_text(encoding="utf-8")[:limit].strip()
 
+    def _build_persona_contexts(
+        self,
+        *,
+        participants: list[str],
+        active_participants: list[str],
+        persona_map: dict[str, dict[str, Any]],
+        mode: str,
+        controlled_character: str,
+    ) -> list[dict[str, Any]]:
+        detailed_names: list[str] = []
+        for name in active_participants:
+            normalized = str(name).strip()
+            if normalized and normalized not in detailed_names:
+                detailed_names.append(normalized)
+        if mode == "act" and controlled_character and controlled_character not in detailed_names:
+            detailed_names.append(controlled_character)
+        detailed_budget = 4 if mode == "observe" else 3
+        detailed_set = set(detailed_names[:detailed_budget])
+
+        ordered_names = [name for name in participants if name in detailed_set] + [
+            name for name in participants if name not in detailed_set
+        ]
+        contexts: list[dict[str, Any]] = []
+        for name in ordered_names:
+            normalized_name = str(name).strip()
+            if not normalized_name:
+                continue
+            meta = persona_map.get(normalized_name, {})
+            normalized_profile, profile_path = self._load_persona_profile(meta)
+            is_detailed = normalized_name in detailed_set
+            contexts.append(
+                {
+                    "name": normalized_name,
+                    "profile_file": str(profile_path.resolve()) if profile_path.exists() else "",
+                    "persona_dir": str(meta.get("persona_dir", "")),
+                    "preview": self._persona_preview_payload(meta, normalized_profile),
+                    "profile": self._persona_profile_payload(normalized_profile, detailed=is_detailed),
+                    "detail_level": "full" if is_detailed else "compact",
+                    "is_active": normalized_name in set(active_participants),
+                }
+            )
+        return contexts
+
+    @staticmethod
+    def _load_persona_profile(meta: dict[str, Any]) -> tuple[dict[str, Any], Path]:
+        profile_path = Path(str(meta.get("profile_file", "")))
+        normalized: dict[str, Any] = {}
+        if profile_path.exists():
+            normalized = load_profile_source(profile_path)
+        return normalized, profile_path
+
+    @staticmethod
+    def _persona_preview_payload(meta: dict[str, Any], normalized_profile: dict[str, Any]) -> dict[str, Any]:
+        preview = dict(meta.get("preview", {}) or {})
+        return {
+            "display_name": str(preview.get("display_name", "")).strip() or str(normalized_profile.get("display_name", "")).strip(),
+            "core_identity": str(preview.get("core_identity", "")).strip() or str(normalized_profile.get("core_identity", "")).strip(),
+            "speech_style": str(preview.get("speech_style", "")).strip() or str(normalized_profile.get("speech_style", "")).strip(),
+        }
+
+    @staticmethod
+    def _persona_profile_payload(normalized_profile: dict[str, Any], *, detailed: bool) -> dict[str, Any]:
+        base = {
+            "core_identity": normalized_profile.get("core_identity", ""),
+            "story_role": normalized_profile.get("story_role", ""),
+            "speech_style": normalized_profile.get("speech_style", ""),
+            "temperament_type": normalized_profile.get("temperament_type", ""),
+            "stress_response": normalized_profile.get("stress_response", ""),
+            "key_bonds": normalized_profile.get("key_bonds", []),
+        }
+        if detailed:
+            base.update(
+                {
+                    "soul_goal": normalized_profile.get("soul_goal", ""),
+                    "social_mode": normalized_profile.get("social_mode", ""),
+                    "reward_logic": normalized_profile.get("reward_logic", ""),
+                }
+            )
+        return base
+
+    def _build_relation_excerpt(
+        self,
+        path_text: str,
+        *,
+        participants: list[str],
+        active_participants: list[str],
+        message: str,
+        scene_card: dict[str, Any],
+    ) -> str:
+        raw_excerpt = self._load_text_excerpt(
+            path_text,
+            limit=self._choose_relation_excerpt_scan_limit(participants=participants, active_participants=active_participants),
+        )
+        if not raw_excerpt:
+            return ""
+        excerpt_limit = self._choose_relation_excerpt_limit(participants=participants, active_participants=active_participants)
+        if len(raw_excerpt) <= excerpt_limit:
+            return raw_excerpt
+
+        focus_terms: list[str] = []
+        for item in [*active_participants, *participants]:
+            normalized = str(item).strip()
+            if normalized and normalized not in focus_terms:
+                focus_terms.append(normalized)
+        for item in (
+            str(scene_card.get("title", "")).strip(),
+            str(scene_card.get("location", "")).strip(),
+            str(scene_card.get("scene_drive", "")).strip(),
+        ):
+            if item and item not in focus_terms:
+                focus_terms.append(item)
+        trimmed_message = self._trim_summary_text(message, 48)
+        if trimmed_message:
+            focus_terms.append(trimmed_message)
+
+        relevant = self._extract_relevant_relation_excerpt(raw_excerpt, focus_terms, excerpt_limit)
+        if relevant:
+            return relevant
+        return self._trim_summary_text(raw_excerpt, excerpt_limit)
+
+    @staticmethod
+    def _choose_relation_excerpt_limit(*, participants: list[str], active_participants: list[str]) -> int:
+        active_count = max(1, len([item for item in active_participants if str(item).strip()]))
+        participant_count = max(active_count, len([item for item in participants if str(item).strip()]))
+        return min(3200, 1200 + active_count * 500 + max(0, participant_count - active_count) * 180)
+
+    @staticmethod
+    def _choose_relation_excerpt_scan_limit(*, participants: list[str], active_participants: list[str]) -> int:
+        return min(8000, DialogueService._choose_relation_excerpt_limit(participants=participants, active_participants=active_participants) * 2)
+
+    def _extract_relevant_relation_excerpt(self, text: str, focus_terms: list[str], limit: int) -> str:
+        cleaned_terms = [term for term in (str(item).strip() for item in focus_terms) if len(term) >= 2]
+        if not cleaned_terms:
+            return ""
+
+        lines = [line.strip() for line in str(text or "").splitlines()]
+        kept: list[str] = []
+        seen: set[str] = set()
+        for index, line in enumerate(lines):
+            if not line:
+                continue
+            if not any(term in line for term in cleaned_terms):
+                continue
+            for neighbor in range(max(0, index - 1), min(len(lines), index + 2)):
+                candidate = lines[neighbor].strip()
+                if not candidate or candidate in seen:
+                    continue
+                seen.add(candidate)
+                kept.append(candidate)
+                joined = "\n".join(kept)
+                if len(joined) >= limit:
+                    return self._trim_summary_text(joined, limit)
+        if kept:
+            return self._trim_summary_text("\n".join(kept), limit)
+        return ""
+
+    def _build_turn_memory_context(
+        self,
+        *,
+        run_id: str,
+        session: dict[str, Any],
+        transcript: list[dict[str, Any]],
+        speaker: str,
+        message: str,
+        participants: list[str],
+        active_participants: list[str],
+        scene_card: dict[str, Any],
+    ) -> dict[str, Any]:
+        state_summary = dict(session.get("state", {}).get("memory_summary", {}) or {})
+        archived_summary = {
+            "summary": self._trim_summary_text(str(state_summary.get("summary", "")).strip(), 360),
+            "key_points": [
+                self._trim_summary_text(str(item).strip(), 120)
+                for item in list(state_summary.get("key_points", []) or [])[:5]
+                if str(item).strip()
+            ],
+            "compressed_turns": int(state_summary.get("compressed_turns", 0) or 0),
+            "recent_turns_kept": int(state_summary.get("recent_turns_kept", 0) or 0),
+        }
+        archived_summary = {
+            key: value
+            for key, value in archived_summary.items()
+            if value not in ("", [], 0)
+        }
+        memory_hits = self._search_turn_memory_hits(
+            run_id=run_id,
+            session_id=str(session.get("session_id", "")).strip(),
+            speaker=speaker,
+            message=message,
+            participants=participants,
+            active_participants=active_participants,
+            scene_card=scene_card,
+        )
+        return {
+            "session_summary": self._build_session_memory_summary(run_id, session, transcript),
+            "archived_summary": archived_summary,
+            "retrieved_memories": memory_hits,
+        }
+
+    def _search_turn_memory_hits(
+        self,
+        *,
+        run_id: str,
+        session_id: str,
+        speaker: str,
+        message: str,
+        participants: list[str],
+        active_participants: list[str],
+        scene_card: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        if not session_id:
+            return []
+        store = self._resolve_memory_store(run_id)
+        if store is None:
+            return []
+        query_parts: list[str] = []
+        for item in [speaker, *active_participants[:3], *participants[:2]]:
+            normalized = str(item).strip()
+            if normalized and normalized not in query_parts:
+                query_parts.append(normalized)
+        for item in (
+            str(scene_card.get("title", "")).strip(),
+            str(scene_card.get("location", "")).strip(),
+            str(scene_card.get("scene_drive", "")).strip(),
+        ):
+            if item and item not in query_parts:
+                query_parts.append(item)
+        trimmed_message = self._trim_summary_text(message, 80)
+        if trimmed_message:
+            query_parts.append(trimmed_message)
+        if not query_parts:
+            return []
+        try:
+            hits = store.search_long_term_memory(session_id, " ".join(query_parts), top_k=3)
+        except Exception:
+            return []
+        normalized_hits: list[dict[str, Any]] = []
+        for item in hits:
+            text = self._trim_summary_text(str((item or {}).get("text", "")).strip(), 140)
+            if not text:
+                continue
+            normalized_hit = {
+                "text": text,
+                "score": round(float(item.get("score", 0.0) or 0.0), 4),
+                "speaker": str(item.get("speaker", "")).strip(),
+                "target": str(item.get("target", "")).strip(),
+                "kind": str(item.get("kind", "")).strip(),
+            }
+            normalized_hits.append(
+                {
+                    key: value
+                    for key, value in normalized_hit.items()
+                    if value not in ("", 0.0)
+                }
+            )
+        return normalized_hits
+
     @staticmethod
     def _character_index(run_manifest: dict[str, Any]) -> list[dict[str, Any]]:
         return list(run_manifest.get("artifact_index", {}).get("characters", []) or [])
@@ -646,6 +1036,8 @@ class DialogueService:
         session["transcript"] = transcript
         session["last_entry_preview"] = self._build_last_entry_preview(session)
         session["session_card"] = self._build_session_card(session)
+        session["scene_history"] = self._serialize_scene_history(session)
+        session["branch_origin"] = dict(session.get("branch_origin", {}) or {})
         session["pending_turn_summary"] = self._build_pending_turn_summary(session)
         session["session_memory_summary"] = self._build_session_memory_summary(run_id, session, transcript)
         return session
@@ -691,10 +1083,55 @@ class DialogueService:
             "mode_display": self._mode_display(mode),
             "participants": list(session.get("participants", [])),
             "controlled_character": str(session.get("controlled_character", "")).strip(),
+            "scene_card_id": str(session.get("scene_card_id", "")).strip(),
+            "scene_card": dict(session.get("scene_card", {})),
             "self_card_id": str(session.get("self_card_id", "")).strip(),
             "self_insert": dict(session.get("self_insert", {})),
         }
         return card
+
+    def _serialize_scene_history(self, session: dict[str, Any]) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        current_scene_id = str(session.get("scene_card_id", "")).strip()
+        for entry in list(session.get("scene_history", []) or []):
+            title = str(entry.get("title", "")).strip()
+            location = str(entry.get("location", "")).strip()
+            atmosphere = str(entry.get("atmosphere", "")).strip()
+            transition_message = str(entry.get("transition_message", "")).strip()
+            scene_card_id = str(entry.get("scene_card_id", "")).strip()
+            items.append(
+                {
+                    "scene_card_id": scene_card_id,
+                    "title": title,
+                    "location": location,
+                    "atmosphere": atmosphere,
+                    "transition_message": transition_message,
+                    "scene_card": dict(entry.get("scene_card", {}) or {}),
+                    "memory_summary": dict(entry.get("memory_summary", {}) or {}),
+                    "ts": str(entry.get("ts", "")).strip(),
+                    "is_current": "true" if current_scene_id and scene_card_id == current_scene_id else "",
+                }
+            )
+        return items
+
+    @staticmethod
+    def _build_scene_history_entry(
+        scene_profile: dict[str, Any],
+        *,
+        transition_message: str = "",
+        memory_summary: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        scene = dict(scene_profile or {})
+        return {
+            "scene_card_id": str(scene.get("scene_card_id", "")).strip(),
+            "title": str(scene.get("title", "")).strip(),
+            "location": str(scene.get("location", "")).strip(),
+            "atmosphere": str(scene.get("atmosphere", "")).strip(),
+            "transition_message": str(transition_message or "").strip(),
+            "scene_card": dict(scene),
+            "memory_summary": dict(memory_summary or {}),
+            "ts": _utc_now(),
+        }
 
     def _build_pending_turn_summary(self, session: dict[str, Any]) -> dict[str, Any]:
         pending = dict(session.get("pending_turn", {}) or {})
@@ -757,6 +1194,14 @@ class DialogueService:
             perspective = f"你以「{self_name}」入场（{identity}）。" if identity else f"你以「{self_name}」入场，直接参与这幕。"
         else:
             perspective = "你在旁观推进模式里，主要作用是推动局势进入下一拍。"
+        scene_card = dict(session.get("scene_card", {}) or {})
+        if scene_card:
+            location = str(scene_card.get("location", "")).strip()
+            atmosphere = str(scene_card.get("atmosphere", "")).strip()
+            title = str(scene_card.get("title", "")).strip()
+            scene_bits = [bit for bit in (title, location, atmosphere) if bit]
+            if scene_bits:
+                perspective = f"{perspective} 当前挂载场景：{' / '.join(scene_bits)}。"
 
         world = "当前局势里的动作与情绪线会在这里提醒你。"
         for item in reversed(transcript):
@@ -801,6 +1246,41 @@ class DialogueService:
         if semantic_hint:
             relation = f"{relation} · 长期记忆：{self._trim_summary_text(semantic_hint, 68)}"
 
+        carried_summary = dict(session.get("carried_memory_summary", {}) or {})
+        if carried_summary and not history:
+            carried_recap = str(carried_summary.get("recap", "")).strip()
+            carried_cast = str(carried_summary.get("cast", "")).strip()
+            carried_relation = str(carried_summary.get("relation_drift", "") or carried_summary.get("relation", "")).strip()
+            carried_world = str(carried_summary.get("world", "")).strip()
+            if carried_recap:
+                recap = f"承接旧线：{self._trim_summary_text(carried_recap, 88)}"
+            if carried_cast:
+                cast = self._trim_summary_text(carried_cast, 88)
+            if carried_relation:
+                relation = self._trim_summary_text(carried_relation, 88)
+            if carried_world:
+                world = self._trim_summary_text(carried_world, 88)
+
+        scene_frame = "当前这幕的地点、气氛与推进方向会在这里提醒你。"
+        scene_card = dict(session.get("scene_card", {}) or {})
+        if scene_card:
+            scene_bits = [
+                str(scene_card.get("title", "")).strip(),
+                str(scene_card.get("location", "")).strip(),
+                str(scene_card.get("atmosphere", "")).strip(),
+            ]
+            scene_bits = [bit for bit in scene_bits if bit]
+            drive = self._trim_summary_text(
+                str(scene_card.get("scene_drive", "")).strip() or str(scene_card.get("opening_situation", "")).strip(),
+                72,
+            )
+            if scene_bits:
+                scene_frame = f"挂载场景：{' / '.join(scene_bits)}"
+                if drive:
+                    scene_frame = f"{scene_frame} · {drive}"
+            elif drive:
+                scene_frame = drive
+
         return {
             "mode": mode,
             "mode_display": mode_display,
@@ -808,9 +1288,20 @@ class DialogueService:
             "cast": cast,
             "relation_drift": relation,
             "perspective": perspective,
+            "scene_frame": scene_frame,
             "world": world,
             "updated_at": str(session.get("updated_at", "")).strip(),
         }
+
+    @staticmethod
+    def _branch_memory_seed_text(summary: dict[str, Any]) -> str:
+        recap = str(summary.get("recap", "")).strip()
+        cast = str(summary.get("cast", "")).strip()
+        relation = str(summary.get("relation_drift", "") or summary.get("relation", "")).strip()
+        scene = str(summary.get("scene_frame", "") or summary.get("scene", "")).strip()
+        world = str(summary.get("world", "")).strip()
+        parts = [part for part in (recap, cast, relation, scene, world) if part]
+        return " / ".join(parts[:5])
 
     def _ensure_memory_store(self, run_id: str) -> bool:
         return self._resolve_memory_store(run_id) is not None
@@ -877,6 +1368,23 @@ class DialogueService:
             if pending_relative is not None:
                 urls["pending_turn_payload"] = self._file_url(run_id, pending_relative)
         return urls
+
+    @staticmethod
+    def _build_scene_switch_note(scene_card: dict[str, Any], transition_message: str) -> str:
+        transition = str(transition_message or "").strip()
+        if transition:
+            return transition
+        if not scene_card:
+            return ""
+        title = str(scene_card.get("title", "")).strip()
+        location = str(scene_card.get("location", "")).strip()
+        atmosphere = str(scene_card.get("atmosphere", "")).strip()
+        opening = str(scene_card.get("opening_situation", "")).strip()
+        scene_bits = [bit for bit in (title, location, atmosphere) if bit]
+        prefix = f"场景转到：{' / '.join(scene_bits)}。" if scene_bits else "场景发生了变化。"
+        if opening:
+            return f"{prefix}{opening}"
+        return prefix
 
     @staticmethod
     def _entry_to_memory_text(entry: dict[str, Any]) -> str:

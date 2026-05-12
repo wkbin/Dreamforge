@@ -15,6 +15,21 @@
             <small id="dialogue-memory-copy-status" class="dialogue-memory-copy-status"></small>
           </div>
           <div id="dialogue-memory-body" class="dialogue-memory-body">
+            <div id="dialogue-scene-switcher" class="dialogue-scene-switcher hidden">
+              <div class="dialogue-scene-switcher-head">
+                <strong>中途转场</strong>
+                <small>切一张场景卡，再补一句转场提示，就能把这一幕顺手推过去。</small>
+              </div>
+              <div class="dialogue-scene-switcher-row">
+                <button id="dialogue-live-scene-recommend" type="button" class="soft-button">推荐下一幕</button>
+                <select id="dialogue-live-scene-card"></select>
+                <button id="dialogue-live-scene-apply" type="button" class="soft-button">切换场景</button>
+              </div>
+              <textarea id="dialogue-live-scene-transition" rows="2" placeholder="例如：雨势更大，众人不得不转入花厅。"></textarea>
+              <p id="dialogue-live-scene-status" class="card-note"></p>
+              <div id="dialogue-scene-chain-suggestions" class="dialogue-scene-chain-suggestions hidden"></div>
+            </div>
+            <div id="dialogue-scene-timeline" class="dialogue-scene-timeline hidden"></div>
             <div class="dialogue-memory-grid">
               <article class="dialogue-memory-card">
                 <span>场景回顾</span>
@@ -33,12 +48,17 @@
                 <p id="dialogue-memory-perspective">你当前的入场方式会在这里提示。</p>
               </article>
               <article class="dialogue-memory-card">
+                <span>当前场景框架</span>
+                <p id="dialogue-memory-scene">当前这幕的地点、气氛与推进方向会在这里提醒你。</p>
+              </article>
+              <article class="dialogue-memory-card">
                 <span>世界状态提示</span>
                 <p id="dialogue-memory-world">当前局势里的动作与情绪线会在这里提醒你。</p>
               </article>
             </div>
             <div class="dialogue-memory-meta">
               <span id="dialogue-memory-mode" class="dialogue-memory-mode">模式：未入场</span>
+              <span id="dialogue-memory-branch" class="dialogue-memory-branch hidden"></span>
             </div>
           </div>
         </section>

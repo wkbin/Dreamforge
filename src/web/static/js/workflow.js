@@ -223,7 +223,7 @@ async function openNewDialogueSession() {
   if (typeof publishChatSetupState === "function") {
     publishChatSetupState("chat-setup-opened");
   }
-  el("dialogue-participants")?.focus();
+  el("chat-setup-vue-root")?.focus();
 }
 
 async function loadModelSettings() {

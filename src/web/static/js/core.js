@@ -45,10 +45,20 @@ var currentCharacterOverview = null;
 var currentPersonaReview = null;
 var currentPersonaAutofill = null;
 var currentRelationDetails = null;
+var currentSceneCardEditor = null;
+var sceneCards = [];
+var currentSceneCard = null;
+var selectedSceneCardId = "";
+var currentSceneCardRecommendation = null;
 var currentSelfCardEditor = null;
 var selfCards = [];
 var currentSelfCard = null;
 var selectedSelfCardId = "";
+var currentDialogueSceneChainSuggestions = [];
+var currentDialogueSceneChainSessionId = "";
+var openingPresets = [];
+var currentOpeningPreset = null;
+var selectedOpeningPresetId = "";
 var samplingSuggestion = null;
 var redistillSuggestionState = {
   runId: "",
@@ -102,10 +112,20 @@ function buildLegacyUiStateSnapshot(overrides = {}) {
     currentPersonaReview,
     currentPersonaAutofill,
     currentRelationDetails,
+    currentSceneCardEditor,
+    sceneCards,
+    currentSceneCard,
+    selectedSceneCardId,
+    currentSceneCardRecommendation,
     currentSelfCardEditor,
     selfCards,
     currentSelfCard,
     selectedSelfCardId,
+    currentDialogueSceneChainSuggestions,
+    currentDialogueSceneChainSessionId,
+    openingPresets,
+    currentOpeningPreset,
+    selectedOpeningPresetId,
     redistillSuggestionState,
     redistillDraft: buildRedistillDraftState(),
     chatSetup: typeof window.__ZAOMENG_BUILD_CHAT_SETUP_STATE__ === "function" ? window.__ZAOMENG_BUILD_CHAT_SETUP_STATE__() : {},
@@ -161,6 +181,21 @@ function syncLegacyUiState(source = "legacy", overrides = {}) {
   if (Object.prototype.hasOwnProperty.call(nextState, "currentRelationDetails")) {
     currentRelationDetails = nextState.currentRelationDetails || null;
   }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentSceneCardEditor")) {
+    currentSceneCardEditor = nextState.currentSceneCardEditor || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "sceneCards")) {
+    sceneCards = Array.isArray(nextState.sceneCards) ? nextState.sceneCards : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentSceneCard")) {
+    currentSceneCard = nextState.currentSceneCard || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "selectedSceneCardId")) {
+    selectedSceneCardId = String(nextState.selectedSceneCardId || "");
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentSceneCardRecommendation")) {
+    currentSceneCardRecommendation = nextState.currentSceneCardRecommendation || null;
+  }
   if (Object.prototype.hasOwnProperty.call(nextState, "currentSelfCardEditor")) {
     currentSelfCardEditor = nextState.currentSelfCardEditor || null;
   }
@@ -172,6 +207,21 @@ function syncLegacyUiState(source = "legacy", overrides = {}) {
   }
   if (Object.prototype.hasOwnProperty.call(nextState, "selectedSelfCardId")) {
     selectedSelfCardId = String(nextState.selectedSelfCardId || "");
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentDialogueSceneChainSuggestions")) {
+    currentDialogueSceneChainSuggestions = Array.isArray(nextState.currentDialogueSceneChainSuggestions) ? nextState.currentDialogueSceneChainSuggestions : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentDialogueSceneChainSessionId")) {
+    currentDialogueSceneChainSessionId = String(nextState.currentDialogueSceneChainSessionId || "");
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "openingPresets")) {
+    openingPresets = Array.isArray(nextState.openingPresets) ? nextState.openingPresets : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentOpeningPreset")) {
+    currentOpeningPreset = nextState.currentOpeningPreset || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "selectedOpeningPresetId")) {
+    selectedOpeningPresetId = String(nextState.selectedOpeningPresetId || "");
   }
   if (Object.prototype.hasOwnProperty.call(nextState, "redistillSuggestionState")) {
     redistillSuggestionState = nextState.redistillSuggestionState || {
@@ -1205,6 +1255,42 @@ function closeSelfCardModal() {
   } else {
     publishLegacyUiState("self-card-modal-closed", { currentSelfCardEditor });
   }
+}
+
+function openSceneCardModal() {
+  toggle("scene-card-modal", true);
+  syncModalScrollLock();
+  currentSceneCardEditor = typeof window.__ZAOMENG_BUILD_SCENE_CARD_EDITOR_STATE__ === "function"
+    ? window.__ZAOMENG_BUILD_SCENE_CARD_EDITOR_STATE__()
+    : currentSceneCardEditor;
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("scene-card-modal-opened", { currentSceneCardEditor });
+  } else {
+    publishLegacyUiState("scene-card-modal-opened", { currentSceneCardEditor });
+  }
+}
+
+function closeSceneCardModal() {
+  toggle("scene-card-modal", false);
+  syncModalScrollLock();
+  currentSceneCardEditor = typeof window.__ZAOMENG_BUILD_SCENE_CARD_EDITOR_STATE__ === "function"
+    ? window.__ZAOMENG_BUILD_SCENE_CARD_EDITOR_STATE__()
+    : currentSceneCardEditor;
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("scene-card-modal-closed", { currentSceneCardEditor });
+  } else {
+    publishLegacyUiState("scene-card-modal-closed", { currentSceneCardEditor });
+  }
+}
+
+function openOpeningPresetModal() {
+  toggle("opening-preset-modal", true);
+  syncModalScrollLock();
+}
+
+function closeOpeningPresetModal() {
+  toggle("opening-preset-modal", false);
+  syncModalScrollLock();
 }
 
 async function apiJson(url, options = {}, fallbackMessage = "请求失败。") {

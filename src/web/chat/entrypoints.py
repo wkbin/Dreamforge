@@ -13,6 +13,7 @@ def create_dialogue_session_payload(
     mode: str,
     participants: list[str],
     controlled_character: str,
+    scene_profile: dict[str, str] | None,
     self_profile: dict[str, str] | None,
     build_dialogue_opening_message: Callable[[dict[str, Any]], str],
     load_pending_turn_payload: Callable[[str, str], dict[str, Any]],
@@ -25,6 +26,7 @@ def create_dialogue_session_payload(
         mode=mode,
         participants=participants,
         controlled_character=controlled_character,
+        scene_profile=scene_profile,
         self_profile=self_profile,
     )
     session_id = str(session.get("session_id", "")).strip()

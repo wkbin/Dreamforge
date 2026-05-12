@@ -55,14 +55,12 @@
             <div class="work-character-head">
               <div class="work-character-title">
                 <strong>{{ item.name }}</strong>
-                <small>{{ item.preview.core_identity || item.preview.story_role || '人物包已经落地，可继续补细节' }}</small>
               </div>
               <span class="work-character-status" :class="'is-' + item.statusTone">{{ item.statusText }}</span>
             </div>
-            <p class="work-character-copy">{{ item.preview.speech_style || item.preview.soul_goal || '说话方式或灵魂目标还可以继续补得更稳。' }}</p>
             <div class="work-character-meta">
-              <span>{{ item.weakCount > 0 ? ('待补关键字段 ' + item.weakCount) : '关键字段已齐' }}</span>
-              <span>{{ item.updatedText ? ('最近更新 ' + item.updatedText) : '刚刚落成' }}</span>
+              <span>{{ item.preview.core_identity || item.preview.story_role || '已落成人物包' }}</span>
+              <span>{{ item.weakCount > 0 ? ('待补 ' + item.weakCount) : '已齐' }}</span>
             </div>
           </button>
         </div>
