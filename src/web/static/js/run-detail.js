@@ -1,59 +1,15 @@
-const CHARACTER_OVERVIEW_KEY_FIELDS = [
-  ["core_identity", "核心身份"],
-  ["story_role", "故事位置"],
-  ["identity_anchor", "身份锚点"],
-  ["temperament_type", "气质底色"],
-  ["soul_goal", "灵魂目标"],
-  ["core_traits", "核心特质"],
-  ["key_bonds", "重要牵系"],
-  ["speech_style", "说话方式"],
-  ["worldview", "世界观"],
-  ["belief_anchor", "信念支点"],
-  ["moral_bottom_line", "道德底线"],
-  ["restraint_threshold", "失控阈值"],
-  ["stress_response", "应激反应"],
-];
+(() => {
+const existingRunDetailModule = window.__ZAOMENG_RUN_DETAIL_MODULE__;
+if (existingRunDetailModule?.initialized) {
+  return;
+}
 
-const CHARACTER_OVERVIEW_ADVANCED_GROUPS = [
-  ["内核细调", ["hidden_desire", "inner_conflict", "self_cognition", "private_self", "social_mode", "thinking_style", "decision_rules", "reward_logic", "others_impression"]],
-  ["对白细调", ["cadence", "typical_lines", "signature_phrases", "sentence_openers", "sentence_endings"]],
-  ["情绪细调", ["forbidden_behaviors", "emotion_model", "anger_style", "joy_style", "grievance_style"]],
-];
-
-const CHARACTER_OVERVIEW_FIELD_LABELS = {
-  core_identity: "核心身份",
-  story_role: "故事位置",
-  identity_anchor: "身份锚点",
-  temperament_type: "气质底色",
-  soul_goal: "灵魂目标",
-  hidden_desire: "隐秘渴望",
-  inner_conflict: "内在冲突",
-  self_cognition: "自我认知",
-  private_self: "私下的一面",
-  speech_style: "说话方式",
-  cadence: "语句节奏",
-  typical_lines: "代表句",
-  signature_phrases: "口头禅",
-  sentence_openers: "起句习惯",
-  sentence_endings: "句尾习惯",
-  social_mode: "社交模式",
-  thinking_style: "思考方式",
-  decision_rules: "决策规则",
-  reward_logic: "回报逻辑",
-  worldview: "世界观",
-  belief_anchor: "信念支点",
-  moral_bottom_line: "道德底线",
-  restraint_threshold: "失控阈值",
-  core_traits: "核心特质",
-  key_bonds: "重要牵系",
-  forbidden_behaviors: "不会做的事",
-  stress_response: "应激反应",
-  emotion_model: "情绪底模",
-  anger_style: "发怒方式",
-  joy_style: "开心方式",
-  grievance_style: "委屈方式",
-  others_impression: "他人观感",
-};
+const WORK_OVERVIEW_STATE = window.__ZAOMENG_WORK_OVERVIEW_STATE__ || {};
+const CHARACTER_OVERVIEW_STATE = window.__ZAOMENG_CHARACTER_OVERVIEW_STATE__ || {};
+const RUN_DETAIL_SUPPORT_STATE = window.__ZAOMENG_RUN_DETAIL_SUPPORT_STATE__ || {};
+const CHARACTER_OVERVIEW_KEY_FIELDS = Array.isArray(CHARACTER_OVERVIEW_STATE.KEY_FIELDS) ? CHARACTER_OVERVIEW_STATE.KEY_FIELDS : [];
+const CHARACTER_OVERVIEW_ADVANCED_GROUPS = Array.isArray(CHARACTER_OVERVIEW_STATE.ADVANCED_GROUPS) ? CHARACTER_OVERVIEW_STATE.ADVANCED_GROUPS : [];
+const CHARACTER_OVERVIEW_FIELD_LABELS = CHARACTER_OVERVIEW_STATE.FIELD_LABELS || {};
 
 const characterOverviewExpandedGroups = new Set();
 const characterOverviewAutofillHistory = new Map();
@@ -106,30 +62,17 @@ function renderRunSummary(run) {
 }
 
 function buildWorkImportStatus(run) {
-  const source = getCurrentNovelSource(run);
-  const sourceName = String(source?.source_name || "").trim();
-  if (!sourceName) {
-    return "未开始";
+  if (typeof WORK_OVERVIEW_STATE.buildWorkImportStatus === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkImportStatus(run);
   }
-  return `已完成 · ${sourceName}`;
+  return "未开始";
 }
 
 function buildWorkDistillStatus(run) {
-  const total = Number(run?.progress?.total_characters || run?.locked_characters?.length || 0);
-  const completed = Number(run?.progress?.completed_count || run?.artifact_index?.characters?.length || 0);
-  if (total <= 0 && completed <= 0) {
-    return "未开始";
+  if (typeof WORK_OVERVIEW_STATE.buildWorkDistillStatus === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkDistillStatus(run);
   }
-  if (run?.status === "failed" || run?.status === "stopped") {
-    return `已中断 · ${completed}/${Math.max(total, completed)}`;
-  }
-  if (completed >= total && total > 0) {
-    return `已完成 · ${completed}/${total}`;
-  }
-  if (run?.status === "running") {
-    return `进行中 · ${completed}/${Math.max(total, completed)}`;
-  }
-  return `待校对 · ${completed}/${Math.max(total, completed)}`;
+  return "未开始";
 }
 
 function renderWorkHeroMetrics(run) {
@@ -150,7 +93,22 @@ function renderWorkSummaryNarrative(run) {
   renderWorkRecommendedAction(run);
 }
 
+function buildWorkSummaryEvents(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkSummaryEvents === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkSummaryEvents(run);
+  }
+  return Array.isArray(run?.events)
+    ? run.events.slice(-3).reverse().map((item) => ({
+      stageLabel: humanizeRunEventStage(String(item?.stage || "").trim()),
+      message: String(item?.message || "").trim() || "这一轮有新的变化落在这里。",
+    }))
+    : [];
+}
+
 function buildWorkSummaryLine(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkSummaryLine === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkSummaryLine(run);
+  }
   if (!run) {
     return "先放入一本书，这里会开始归纳整卷状态。";
   }
@@ -179,6 +137,9 @@ function buildWorkSummaryLine(run) {
 }
 
 function buildWorkSummaryBottleneck(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkSummaryBottleneck === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkSummaryBottleneck(run);
+  }
   if (!run) {
     return "当前还没有工作对象。";
   }
@@ -205,14 +166,12 @@ function renderWorkSummaryEvents(run) {
   const root = el("work-summary-events");
   if (!root) return;
   root.innerHTML = "";
-  const events = Array.isArray(run?.events) ? run.events.slice(-3).reverse() : [];
-  events.forEach((item) => {
-    const stageLabel = humanizeRunEventStage(String(item?.stage || "").trim());
+  buildWorkSummaryEvents(run).forEach((item) => {
     const row = document.createElement("div");
     row.className = "work-summary-event";
     row.innerHTML = `
-      <strong>${escapeHtml(stageLabel)}</strong>
-      <p>${String(item.message || "").trim() || "这一轮有新的变化落在这里。"}</p>
+      <strong>${escapeHtml(item.stageLabel)}</strong>
+      <p>${escapeHtml(item.message)}</p>
     `;
     root.appendChild(row);
   });
@@ -221,6 +180,9 @@ function renderWorkSummaryEvents(run) {
 }
 
 function buildWorkRecommendedAction(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkRecommendedAction === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkRecommendedAction(run);
+  }
   const priority = buildWorkPriorityReviewItems(run)[0];
   if (!run) {
     return {
@@ -295,381 +257,294 @@ function renderWorkRecommendedAction(run) {
   button.dataset.workRecommendedAction = recommendation.action || "";
   button.dataset.workRecommendedPayload = recommendation.payload || "";
   button.onclick = () => {
-    handleWorkRecommendedAction(button.dataset.workRecommendedAction || "", button.dataset.workRecommendedPayload || "");
+    if (typeof window.__ZAOMENG_HANDLE_WORK_RECOMMENDED_ACTION__ === "function") {
+      window.__ZAOMENG_HANDLE_WORK_RECOMMENDED_ACTION__(button.dataset.workRecommendedAction || "", button.dataset.workRecommendedPayload || "");
+    }
   };
 }
 
-function handleWorkRecommendedAction(action, payload = "") {
-  if (action === "new_run") {
-    startNewRunFlow();
-    return;
+function buildQualitySnapshotState(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildQualitySnapshotState === "function") {
+    return WORK_OVERVIEW_STATE.buildQualitySnapshotState(run);
   }
-  if (action === "focus_timeline") {
-    el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    return;
-  }
-  if (action === "open_redistill") {
-    redistillPanelOpen = true;
-    renderBookshelfDetail(currentRun);
-    updateWorkflowState();
-    el("redistill-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    el("redistill-characters")?.focus();
-    return;
-  }
-  if (action === "redistill_character") {
-    openIncrementalDistillForCharacter(payload);
-    return;
-  }
-  if (action === "open_character") {
-    openCharacterOverview(payload).catch((error) => {
-      setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
-    });
-    return;
-  }
-  if (action === "start_chat") {
-    openNewDialogueSession().catch((error) => {
-      setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
-    });
-    return;
-  }
-  if (action === "open_relations") {
-    openRelationDetails().catch((error) => {
-      setStatus("bookshelf-status", error.message || "关系明细暂时没有载入。");
-    });
-  }
-}
+  const quality = run?.quality || {};
+  const summaryChunking = run?.summary?.chunking || {};
+  const progressChunking = run?.progress?.chunking || {};
+  const focus = quality.excerpt_focus || {};
+  const matched = Array.isArray(focus.matched_characters) ? focus.matched_characters : [];
+  const missing = Array.isArray(focus.missing_characters) ? focus.missing_characters : [];
+  const stages = Array.isArray(quality.stage_presence) ? quality.stage_presence : [];
 
-function buildWorkOverviewNextStep(run) {
-  if (!run) {
-    return "先放入一本书，人物和关系才会在这里出现。";
-  }
-  if (run.status === "running") {
-    return "先盯住这轮进度，等人物落定后再决定是否补人或开聊。";
-  }
-  if (run.status === "failed") {
-    return "这一轮停在半途，先继续蒸馏把人物和关系接上。";
-  }
-  if (run.status === "stopped") {
-    return "这卷已经收住，下一步可继续蒸馏，或先校对已落成人物。";
-  }
-  if (!getRunCharacterNames(run).length) {
-    return "这一卷还没有稳定人物包，先继续蒸馏把角色请出来。";
-  }
-  if (!run?.artifact_index?.relation_graph?.relations_file) {
-    return "人物已开始成形，可先校对角色，关系图谱补出后再看全局。";
-  }
-  return "这卷可以继续校对人物、查看关系，或直接进入其中一幕。";
-}
+  const profileRepairs = quality.profile_repairs || {};
+  const relationRepairs = quality.relation_repairs || {};
+  const profileCount = Number(profileRepairs.count || 0);
+  const relationCount = Number(relationRepairs.count || 0);
+  const profileNames = joinCharacters(profileRepairs.characters || []);
+  const relationPairs = Array.isArray(relationRepairs.pairs) ? relationRepairs.pairs : [];
+  const characterFocus = quality.character_focus || {};
+  const chunkedCharacters = Object.entries(characterFocus).filter(([, item]) => Number(item?.chunk_count || 1) > 1);
+  const relationChunked = Boolean(relationRepairs.chunked) || Number(relationRepairs.chunk_count || 1) > 1;
+  const relationChunkCount = Number(relationRepairs.chunk_count || 1);
+  const distillChunkSummary = summaryChunking?.distill || {};
+  const relationChunkSummary = summaryChunking?.relation || {};
+  const distillChunkProgress = progressChunking?.distill || {};
+  const relationChunkProgress = progressChunking?.relation || {};
 
-function buildWorkReviewStatus(run) {
-  const weakCount = countWeakCharacters(run);
-  if (!getRunCharacterNames(run).length) {
-    return "未开始";
+  const repairSegments = [];
+  if (profileCount > 0) {
+    repairSegments.push(`人物字段收束 ${profileCount} 次${profileNames ? `：${profileNames}` : ""}`);
   }
-  if (weakCount <= 0) {
-    return "已完成";
+  if (relationCount > 0) {
+    repairSegments.push(`关系字段收束 ${relationCount} 次${relationPairs.length ? `：${relationPairs.slice(0, 3).join("、")}` : ""}`);
   }
-  return `待校对 · ${weakCount} 位`;
-}
 
-function buildWorkGraphStatus(run) {
-  const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
-  const graphFailed = String(run?.summary?.graph_status || "").trim() === "failed" || String(run?.progress?.graph_status || "").trim() === "failed";
-  if (hasGraph) {
-    return "已完成";
-  }
-  if (graphFailed) {
-    return "图谱失败但不影响聊天";
-  }
-  if (run?.status === "failed" || run?.status === "stopped") {
-    return "已中断";
-  }
-  if (run?.status === "running") {
-    return "进行中";
-  }
-  return "未开始";
-}
-
-function countWeakCharacters(run) {
-  return buildCharacterReadinessItems(run).filter((item) => item.weakCount > 0 || item.statusTone !== "stable").length;
-}
-
-function buildCharacterReadinessItems(run) {
-  const qualityMissing = new Set(Array.isArray(run?.quality?.excerpt_focus?.missing_characters) ? run.quality.excerpt_focus.missing_characters : []);
-  const cards = Array.isArray(run?.artifact_index?.characters) ? run.artifact_index.characters : [];
-  return cards.map((item) => {
-    const preview = item?.preview || {};
-    const missingFields = [
-      !String(preview.core_identity || "").trim() ? "核心身份" : "",
-      !String(preview.story_role || "").trim() ? "故事位置" : "",
-      !String(preview.soul_goal || "").trim() ? "灵魂目标" : "",
-      !String(preview.speech_style || "").trim() ? "说话方式" : "",
-      !String(preview.temperament_type || "").trim() ? "气质底色" : "",
-    ].filter(Boolean);
-    const weakCount = missingFields.length;
-    let statusText = "稳定";
-    let statusTone = "stable";
-    if (qualityMissing.has(item.name)) {
-      statusText = "证据偏薄";
-      statusTone = "weak";
-    } else if (weakCount >= 3) {
-      statusText = "待校对";
-      statusTone = "weak";
-    } else if (weakCount > 0) {
-      statusText = "待补全";
-      statusTone = "warning";
+  const chunkSegments = [];
+  if (distillChunkSummary.mode === "chunked" || Number(distillChunkSummary.chunk_count || 0) > 1) {
+    const currentChunk = Number(distillChunkProgress.current_chunk || 0);
+    const totalChunks = Number(distillChunkSummary.chunk_count || distillChunkProgress.chunk_count || 0);
+    const mergeStatus = String(distillChunkSummary.merge_status || distillChunkProgress.merge_status || "").trim();
+    const currentLabel = String(distillChunkProgress.current_label || "").trim();
+    let line = `人物实际分为 ${totalChunks} 块`;
+    if (currentChunk > 0 && totalChunks > 0) {
+      line += `，当前进行到 ${currentChunk}/${totalChunks}`;
     }
-    return {
-      name: item.name,
-      preview,
-      weakCount,
-      missingFields,
-      statusText,
-      statusTone,
-      hasEvidenceGap: qualityMissing.has(item.name),
-      priorityScore: qualityMissing.has(item.name) ? 100 + weakCount : weakCount,
-      updatedText: formatWeakTime(run.updated_at || ""),
-    };
-  });
-}
-
-function renderCharacterReadiness(run) {
-  const root = el("run-character-readiness");
-  const toggleButton = el("run-character-readiness-toggle");
-  if (!root) return;
-  root.innerHTML = "";
-  const items = buildCharacterReadinessItems(run);
-  const canExpand = items.length > 3;
-  const visibleItems = characterReadinessExpanded ? items : items.slice(0, 3);
-  visibleItems.forEach((item) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "work-character-card";
-    button.innerHTML = `
-      <div class="work-character-head">
-        <div class="work-character-title">
-          <strong>${item.name}</strong>
-          <small>${item.preview.core_identity || item.preview.story_role || "人物包已经落地，可继续补细节"}</small>
-        </div>
-        <span class="work-character-status is-${item.statusTone}">${item.statusText}</span>
-      </div>
-      <p class="work-character-copy">${item.preview.speech_style || item.preview.soul_goal || "说话方式或灵魂目标还可以继续补得更稳。"}</p>
-      <div class="work-character-meta">
-        <span>${item.weakCount > 0 ? `待补关键字段 ${item.weakCount}` : "关键字段已齐"}</span>
-        <span>${item.updatedText ? `最近更新 ${item.updatedText}` : "刚刚落成"}</span>
-      </div>
-    `;
-    button.addEventListener("click", () => {
-      openCharacterOverview(item.name).catch((error) => {
-        setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
-      });
-    });
-    root.appendChild(button);
-  });
-  if (toggleButton) {
-    toggleButton.classList.toggle("hidden", !canExpand);
-    toggleButton.textContent = characterReadinessExpanded ? "收起部分" : "展开全部";
+    if (currentLabel) {
+      line += `（${currentLabel}）`;
+    }
+    if (mergeStatus && mergeStatus !== "pending") {
+      line += `，汇总状态：${mergeStatus === "running" ? "正在汇总" : "已汇总"}`;
+    }
+    chunkSegments.push(line);
+  } else if (chunkedCharacters.length) {
+    chunkSegments.push(
+      `人物实际分为 ${chunkedCharacters.reduce((total, [, item]) => total + Number(item?.chunk_count || 0), 0)} 块：${chunkedCharacters
+        .map(([name, item]) => `${name}${Number(item?.chunk_count || 1)}块`)
+        .join("、")}`
+    );
+  } else {
+    chunkSegments.push("人物蒸馏这轮没有触发分批。");
   }
-  root.classList.toggle("hidden", root.childElementCount === 0);
-  toggle("run-character-readiness-empty", root.childElementCount === 0);
-}
-
-function buildWorkPriorityReviewItems(run) {
-  return buildCharacterReadinessItems(run)
-    .filter((item) => item.hasEvidenceGap || item.weakCount > 0 || item.statusTone !== "stable")
-    .sort((left, right) => {
-      if (right.priorityScore !== left.priorityScore) {
-        return right.priorityScore - left.priorityScore;
-      }
-      if (right.weakCount !== left.weakCount) {
-        return right.weakCount - left.weakCount;
-      }
-      return String(left.name).localeCompare(String(right.name), "zh-Hans-CN");
-    })
-    .slice(0, 3)
-    .map((item, index) => ({
-      ...item,
-      order: index + 1,
-      headline: buildWorkPriorityHeadline(item),
-      reason: buildWorkPriorityReason(item),
-      actionHint: item.hasEvidenceGap ? "建议换入新书段做增量蒸馏，别只靠字段补全硬补。" : "可以先打开角色页，把关键字段补稳后再决定要不要继续增量蒸馏。",
-    }));
-}
-
-function buildWorkPriorityHeadline(item) {
-  if (item.hasEvidenceGap) {
-    return "正文证据偏薄，优先补素材";
+  if (relationChunkSummary.mode === "chunked" || Number(relationChunkSummary.chunk_count || 0) > 1) {
+    const currentChunk = Number(relationChunkProgress.current_chunk || 0);
+    const totalChunks = Number(relationChunkSummary.chunk_count || relationChunkProgress.chunk_count || 0);
+    const mergeStatus = String(relationChunkSummary.merge_status || relationChunkProgress.merge_status || "").trim();
+    const currentLabel = String(relationChunkProgress.current_label || "").trim();
+    let line = `关系抽取实际分为 ${totalChunks} 块`;
+    if (currentChunk > 0 && totalChunks > 0) {
+      line += `，当前进行到 ${currentChunk}/${totalChunks}`;
+    }
+    if (currentLabel) {
+      line += `（${currentLabel}）`;
+    }
+    if (mergeStatus && mergeStatus !== "pending") {
+      line += `，汇总状态：${mergeStatus === "running" ? "正在汇总" : "已汇总"}`;
+    }
+    chunkSegments.push(line);
+  } else if (relationChunked) {
+    chunkSegments.push(`关系抽取实际分为 ${relationChunkCount} 块，并做了最终汇总。`);
+  } else {
+    chunkSegments.push("关系抽取这轮没有触发分批。");
   }
-  if (item.weakCount >= 3) {
-    return "关键骨架还没站稳，优先校对";
-  }
-  return "还差最后几笔，适合快速补齐";
+
+  const standardChunkingVisible =
+    Number(distillChunkSummary.chunk_count || 0) > 0 ||
+    Number(relationChunkSummary.chunk_count || 0) > 0 ||
+    String(distillChunkSummary.mode || "").trim() === "chunked" ||
+    String(relationChunkSummary.mode || "").trim() === "chunked";
+  const visible =
+    Boolean(matched.length) ||
+    Boolean(missing.length) ||
+    Boolean(stages.length) ||
+    profileCount > 0 ||
+    relationCount > 0 ||
+    Boolean(chunkedCharacters.length) ||
+    relationChunked ||
+    standardChunkingVisible;
+
+  return {
+    visible,
+    open: Boolean(run?.status === "running"),
+    emptyCopyVisible: !visible,
+    matched,
+    missing,
+    stages,
+    repairsText: repairSegments.join("；") || "暂时没有发生自动收束。",
+    chunksText: chunkSegments.join("；"),
+  };
 }
 
-function buildWorkPriorityReason(item) {
-  if (item.hasEvidenceGap) {
-    return "当前正文里对这个角色的有效片段还偏少，容易出现信息薄、口气虚或关系不稳。";
+function buildWorkPriorityReviewViewState(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkPriorityReviewViewState === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkPriorityReviewViewState(run);
   }
-  if (item.missingFields.length) {
-    return `当前最薄的地方是：${item.missingFields.slice(0, 3).join("、")}。`;
-  }
-  return "这个角色已经有轮廓，但还有几处字段偏薄，适合顺手补稳。";
+  return {
+    items: buildWorkPriorityReviewItems(run),
+    emptyCopy: "目前没有明显掉队角色，可以直接开聊或查看关系图。",
+  };
 }
 
-function renderWorkPriorityReview(run) {
-  const root = el("work-priority-review-list");
-  if (!root) return;
-  root.innerHTML = "";
-  const items = buildWorkPriorityReviewItems(run);
-  items.forEach((item) => {
-    const card = document.createElement("article");
-    card.className = "work-priority-card";
-    card.innerHTML = `
-      <div class="work-priority-card-head">
-        <span class="work-priority-rank">优先 ${item.order}</span>
-        <span class="work-character-status is-${item.statusTone}">${item.statusText}</span>
-      </div>
-      <div class="work-priority-title">
-        <strong>${item.name}</strong>
-        <small>${item.preview.core_identity || item.preview.story_role || "人物轮廓还在慢慢站稳"}</small>
-      </div>
-      <p class="work-priority-headline">${item.headline}</p>
-      <p class="work-priority-copy">${item.reason}</p>
-      <div class="work-priority-meta">
-        <span>${item.weakCount > 0 ? `待补关键字段 ${item.weakCount}` : "关键字段已齐"}</span>
-        <span>${item.updatedText ? `最近更新 ${item.updatedText}` : "刚刚落成"}</span>
-      </div>
-      <p class="work-priority-hint">${item.actionHint}</p>
-      <div class="work-priority-actions">
-        <button type="button" class="soft-button" data-work-priority-open="${item.name}">打开角色页</button>
-        <button type="button" class="soft-button" data-work-priority-redistill="${item.name}">增量蒸馏</button>
-      </div>
-    `;
-    root.appendChild(card);
-  });
-  root.classList.toggle("hidden", root.childElementCount === 0);
-  toggle("work-priority-review-empty", root.childElementCount === 0);
-  root.querySelectorAll("[data-work-priority-open]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openCharacterOverview(button.getAttribute("data-work-priority-open") || "").catch((error) => {
-        setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
-      });
-    });
-  });
-  root.querySelectorAll("[data-work-priority-redistill]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openIncrementalDistillForCharacter(button.getAttribute("data-work-priority-redistill") || "");
-    });
-  });
-}
-
-function renderWorkGraphSummary(run) {
+function buildWorkGraphSummaryState(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkGraphSummaryState === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkGraphSummaryState(run);
+  }
   const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
   const graphFailed = String(run?.summary?.graph_status || "").trim() === "failed" || String(run?.progress?.graph_status || "").trim() === "failed";
   const hasCharacters = getRunCharacterNames(run).length > 0;
   if (hasGraph) {
-    setWorkGraphStatusBadge("已完成", "stable");
-    setText("run-graph-status-copy", "关系线已经能看，先看牵系和张力，再决定从哪种方式入场。", "");
-    return;
+    return { badgeText: "已完成", badgeTone: "stable", copy: "关系线已经能看，先看牵系和张力，再决定从哪种方式入场。" };
   }
   if (graphFailed) {
-    setWorkGraphStatusBadge("失败可跳过", "weak");
-    setText("run-graph-status-copy", "这轮关系图谱生成失败，但不会阻塞聊天；可以先入场，稍后再补图谱。", "");
-    return;
+    return { badgeText: "失败可跳过", badgeTone: "weak", copy: "这轮关系图谱生成失败，但不会阻塞聊天；可以先入场，稍后再补图谱。" };
   }
   if (run?.status === "running") {
-    setWorkGraphStatusBadge("进行中", "warning");
-    setText("run-graph-status-copy", "关系网还在织，但不妨先盯住人物进度；图谱落下后会自动接到这里。", "");
-    return;
+    return { badgeText: "进行中", badgeTone: "warning", copy: "关系网还在织，但不妨先盯住人物进度；图谱落下后会自动接到这里。" };
   }
   if (hasCharacters) {
-    setWorkGraphStatusBadge("待补图谱", "warning");
-    setText("run-graph-status-copy", "关系图暂时还没落成，但人物已经可以继续校对，也不影响你先进入聊天。", "");
-    return;
+    return { badgeText: "待补图谱", badgeTone: "warning", copy: "关系图暂时还没落成，但人物已经可以继续校对，也不影响你先进入聊天。" };
   }
-  setWorkGraphStatusBadge("未开始", "warning");
-  setText("run-graph-status-copy", "先把人物请出来，关系网才会在这里慢慢织成。", "");
+  return { badgeText: "未开始", badgeTone: "warning", copy: "先把人物请出来，关系网才会在这里慢慢织成。" };
 }
 
-function setWorkGraphStatusBadge(text, tone = "warning") {
-  const badge = el("run-graph-status-badge");
-  if (!badge) return;
-  badge.textContent = text || "未开始";
-  badge.className = `work-character-status is-${tone}`;
+function buildWorkGraphLinks(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkGraphLinks === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkGraphLinks(run);
+  }
+  return [
+    run?.file_urls?.graph_html ? { url: run.file_urls.graph_html, label: "查看关系图谱" } : null,
+    run?.file_urls?.graph_svg ? { url: run.file_urls.graph_svg, label: "查看 SVG" } : null,
+  ].filter(Boolean);
 }
 
-function renderWorkSessionPreview(run) {
-  const root = el("work-session-preview");
-  const toggleButton = el("work-session-preview-toggle");
-  const resumeShell = el("work-session-resume-shell");
-  const resumeButton = el("work-session-resume-latest-button");
-  if (!root) return;
-  root.innerHTML = "";
+function buildWorkSessionPreviewState(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkSessionPreviewState === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkSessionPreviewState(run);
+  }
   const novelTitle = runNovelTitle(run);
   const characterNames = getRunCharacterNames(run);
   const allSessions = (recentSessionsCache || [])
     .filter((item) => normalizeNovelTitle(item?.novel_id || "") === novelTitle)
     .sort((left, right) => String(right?.updated_at || "").localeCompare(String(left?.updated_at || "")));
   const rankedSessions = [...allSessions].sort((left, right) => {
-    const rightMatch = Boolean(findMatchedSessionCharacter(getSessionPreviewSnippet(right), characterNames));
-    const leftMatch = Boolean(findMatchedSessionCharacter(getSessionPreviewSnippet(left), characterNames));
+    const rightMatch = Boolean(findMatchedSessionCharacter(getSessionPreviewSnippet(right), characterNames).character);
+    const leftMatch = Boolean(findMatchedSessionCharacter(getSessionPreviewSnippet(left), characterNames).character);
     if (rightMatch !== leftMatch) {
       return Number(rightMatch) - Number(leftMatch);
     }
     return String(right?.updated_at || "").localeCompare(String(left?.updated_at || ""));
   });
-  const canExpand = rankedSessions.length > 3;
-  const visibleSessions = workSessionPreviewExpanded ? rankedSessions : rankedSessions.slice(0, 3);
-  if (resumeShell && resumeButton) {
-    const latest = allSessions[0] || null;
-    resumeShell.classList.toggle("hidden", !latest);
-    if (latest) {
-      const label = joinCharacters(latest.participants || []) || "最近会话";
-      resumeButton.textContent = `继续：${label}`;
-      resumeButton.onclick = () => {
-        openWorkSessionFromPreviewItem(latest).catch((error) => {
-          setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
-        });
+  return {
+    canExpand: rankedSessions.length > 3,
+    expanded: Boolean(workSessionPreviewExpanded),
+    toggleLabel: workSessionPreviewExpanded ? "收起部分" : "展开全部",
+    latest: allSessions[0]
+      ? {
+        label: `继续：${joinCharacters(allSessions[0].participants || []) || "最近会话"}`,
+        raw: allSessions[0],
+      }
+      : null,
+    items: (workSessionPreviewExpanded ? rankedSessions : rankedSessions.slice(0, 3)).map((item) => {
+      const snippet = getSessionPreviewSnippet(item);
+      const matchInfo = findMatchedSessionCharacter(snippet, characterNames);
+      return {
+        label: joinCharacters(item?.participants || []) || "未命名会话",
+        modeLabel: item?.mode_display || humanizeMode(item?.mode) || "这一幕",
+        participantCount: Array.isArray(item?.participants) ? item.participants.length : 0,
+        hasMatch: Boolean(matchInfo.character),
+        matchText: matchInfo.character ? `命中 ${matchInfo.character} · ${matchInfo.reason}` : "",
+        snippet,
+        updatedText: formatWeakTime(item?.updated_at) || "刚刚",
+        statusText: humanizeSessionStatus(item?.status),
+        raw: item,
       };
-    } else {
-      resumeButton.onclick = null;
-      resumeButton.textContent = "继续最近一局";
-    }
+    }),
+    emptyCopy: "还没有会话，随时可以从下方三种方式开局。",
+  };
+}
+
+
+function buildWorkOverviewNextStep(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkOverviewNextStep === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkOverviewNextStep(run);
   }
-  visibleSessions.forEach((item) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    const snippet = getSessionPreviewSnippet(item);
-    const matchInfo = findMatchedSessionCharacter(snippet, characterNames);
-    button.className = `work-session-card${matchInfo.character ? " has-match" : ""}`;
-    const participantCount = Array.isArray(item.participants) ? item.participants.length : 0;
-    button.innerHTML = `
-      <div class="work-session-head">
-        <div class="work-session-title">
-          <strong>${joinCharacters(item.participants || []) || "未命名会话"}</strong>
-          <small>${item.mode_display || humanizeMode(item.mode) || "这一幕"} · ${participantCount || 0} 人</small>
-        </div>
-      </div>
-      ${matchInfo.character ? `<span class="work-session-match">命中 ${escapeHtml(matchInfo.character)} · ${escapeHtml(matchInfo.reason)}</span>` : ""}
-      ${snippet ? `<p class="work-session-copy">${escapeHtml(snippet)}</p>` : ""}
-      <div class="work-session-meta">
-        <span>${formatWeakTime(item.updated_at) || "刚刚"}</span>
-        <span>${humanizeSessionStatus(item.status)}</span>
-      </div>
-    `;
-    button.addEventListener("click", () => {
-      openWorkSessionFromPreviewItem(item).catch((error) => {
-        setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
-      });
-    });
-    root.appendChild(button);
-  });
-  if (toggleButton) {
-    toggleButton.classList.toggle("hidden", !canExpand);
-    toggleButton.textContent = workSessionPreviewExpanded ? "收起部分" : "展开全部";
+  return "这一卷的下一步会在这里告诉你。";
+}
+
+function buildWorkReviewStatus(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkReviewStatus === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkReviewStatus(run);
   }
-  root.classList.toggle("hidden", root.childElementCount === 0);
-  toggle("work-session-preview-empty", root.childElementCount === 0);
+  return "未开始";
+}
+
+function buildWorkGraphStatus(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkGraphStatus === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkGraphStatus(run);
+  }
+  return "未开始";
+}
+
+function countWeakCharacters(run) {
+  if (typeof WORK_OVERVIEW_STATE.countWeakCharacters === "function") {
+    return WORK_OVERVIEW_STATE.countWeakCharacters(run);
+  }
+  return 0;
+}
+
+function buildCharacterReadinessItems(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildCharacterReadinessItems === "function") {
+    return WORK_OVERVIEW_STATE.buildCharacterReadinessItems(run);
+  }
+  return [];
+}
+
+function buildCharacterReadinessViewState(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildCharacterReadinessViewState === "function") {
+    return WORK_OVERVIEW_STATE.buildCharacterReadinessViewState(run);
+  }
+  return {
+    items: [],
+    canExpand: false,
+    expanded: false,
+    toggleLabel: "展开全部",
+    emptyCopy: "还没有角色卡，先继续蒸馏把人物请出来。",
+  };
+}
+
+function renderCharacterReadiness(run) {
+  window.__ZAOMENG_WORK_OVERVIEW_LEGACY_RENDER__?.renderCharacterReadiness?.(run);
+}
+
+function buildWorkPriorityReviewItems(run) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkPriorityReviewItems === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkPriorityReviewItems(run);
+  }
+  return [];
+}
+
+function buildWorkPriorityHeadline(item) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkPriorityHeadline === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkPriorityHeadline(item);
+  }
+  return "";
+}
+
+function buildWorkPriorityReason(item) {
+  if (typeof WORK_OVERVIEW_STATE.buildWorkPriorityReason === "function") {
+    return WORK_OVERVIEW_STATE.buildWorkPriorityReason(item);
+  }
+  return "";
+}
+
+function renderWorkPriorityReview(run) {
+  window.__ZAOMENG_WORK_OVERVIEW_LEGACY_RENDER__?.renderWorkPriorityReview?.(run);
+}
+
+function renderWorkGraphSummary(run) {
+  window.__ZAOMENG_WORK_OVERVIEW_LEGACY_RENDER__?.renderWorkGraphSummary?.(run);
+}
+
+function renderWorkSessionPreview(run) {
+  window.__ZAOMENG_WORK_OVERVIEW_LEGACY_RENDER__?.renderWorkSessionPreview?.(run);
 }
 
 function getSessionPreviewSnippet(item) {
@@ -689,6 +564,10 @@ function findMatchedSessionCharacter(snippet, characterNames) {
 
 async function openWorkSessionFromPreviewItem(item) {
   if (!item?.run_id || !item?.session_id) return;
+  const previousRunId = currentRunId;
+  const previousRun = currentRun;
+  const previousSessionId = currentDialogueSessionId;
+  const previousSession = currentDialogueSession;
   currentRunId = item.run_id || currentRunId;
   currentDialogueSessionId = item.session_id || "";
   currentDialogueSession = null;
@@ -697,12 +576,36 @@ async function openWorkSessionFromPreviewItem(item) {
   setSessionBadge("入场中");
   renderSessionBooting(item.mode, item.participants || []);
   updateWorkflowState();
-  const [freshRun, session] = await Promise.all([
-    apiJson(`/api/web/runs/${item.run_id}`),
-    apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
-  ]);
-  renderRun(freshRun, { preserveDialogue: true, suppressWorkflowUpdate: true });
-  await renderDialogueSession(session);
+  try {
+    const [freshRun, session] = await Promise.all([
+      apiJson(`/api/web/runs/${item.run_id}`),
+      apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
+    ]);
+    if (typeof window.renderRun === "function") {
+      window.renderRun(freshRun, { preserveDialogue: true, suppressWorkflowUpdate: true });
+    } else {
+      currentRun = freshRun;
+      currentRunId = String(freshRun?.run_id || item.run_id || "").trim();
+      updateWorkflowState();
+    }
+    await renderDialogueSession(session);
+  } catch (error) {
+    currentRunId = previousRunId;
+    currentRun = previousRun;
+    currentDialogueSessionId = previousSessionId;
+    currentDialogueSession = previousSession;
+    sessionBooting = false;
+    if (previousSession) {
+      renderDialogueMemory(previousSession);
+      renderDialogueTranscript(previousSession);
+      setComposerEnabled(true);
+      setSessionBadge("对话中");
+    } else {
+      resetDialogueView();
+    }
+    updateWorkflowState();
+    setStatus("dialogue-session-status", error.message || "这段会话暂时没有载入成功。");
+  }
 }
 
 function openWorkSummaryExport() {
@@ -720,13 +623,7 @@ function openWorkSummaryExport() {
 }
 
 async function openCharacterOverview(characterName) {
-  if (!currentRunId || !currentRun || !characterName) return;
-  const payload = await apiJson(`/api/web/runs/${currentRunId}/personas/${encodeURIComponent(characterName)}`);
-  characterOverviewExpandedGroups.clear();
-  currentCharacterOverview = payload;
-  characterOverviewOpen = true;
-  renderCharacterOverview(payload);
-  updateWorkflowState();
+  return window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.openCharacterOverview?.(characterName);
 }
 
 function renderCharacterOverview(payload) {
@@ -760,6 +657,9 @@ function renderCharacterOverview(payload) {
 }
 
 function buildCharacterOverviewChangeTimelineItems(character) {
+  if (typeof CHARACTER_OVERVIEW_STATE.buildChangeTimelineItems === "function") {
+    return CHARACTER_OVERVIEW_STATE.buildChangeTimelineItems(getCurrentRunEvents(), character, formatWeakTime);
+  }
   const name = String(character || "").trim();
   if (!name) return [];
   const events = getCurrentRunEvents()
@@ -793,28 +693,13 @@ function buildCharacterOverviewChangeTimelineItems(character) {
 }
 
 function renderCharacterOverviewChangeTimeline(payload) {
-  const root = el("character-overview-change-timeline");
-  if (!root) return;
-  root.innerHTML = "";
-  const items = buildCharacterOverviewChangeTimelineItems(payload?.character || "");
-  items.forEach((item) => {
-    const card = document.createElement("article");
-    card.className = "character-overview-change-item";
-    card.innerHTML = `
-      <div class="character-overview-change-item-head">
-        <strong>${item.title}</strong>
-        <small>${item.updated}</small>
-      </div>
-      <p>${item.copy}</p>
-      <span>${item.badge}</span>
-    `;
-    root.appendChild(card);
-  });
-  root.classList.toggle("hidden", root.childElementCount === 0);
-  toggle("character-overview-change-timeline-empty", root.childElementCount === 0);
+  window.__ZAOMENG_CHARACTER_OVERVIEW_LEGACY_RENDER__?.renderChangeTimeline?.(payload);
 }
 
 function buildCharacterOverviewHealthSnapshot(fields) {
+  if (typeof CHARACTER_OVERVIEW_STATE.buildHealthSnapshot === "function") {
+    return CHARACTER_OVERVIEW_STATE.buildHealthSnapshot(fields, currentRun?.updated_at || "", formatWeakTime);
+  }
   let filledKeyCount = 0;
   let weakKeyCount = 0;
   CHARACTER_OVERVIEW_KEY_FIELDS.forEach(([field]) => {
@@ -853,25 +738,13 @@ function buildCharacterOverviewHealthSnapshot(fields) {
 }
 
 function renderCharacterOverviewHealthMetrics(snapshot) {
-  const root = el("character-overview-health-metrics");
-  if (!root) return;
-  root.innerHTML = "";
-  const metrics = [
-    ["完整度", `${snapshot.completeness}%`, "按关键字段与细调字段的当前覆盖度估算"],
-    ["稳住的关键字段", `${snapshot.stableKeyCount} / ${CHARACTER_OVERVIEW_KEY_FIELDS.length}`, "这些字段已经足够支撑角色概览与基础对话"],
-    ["待补位置", `${snapshot.weakKeyCount} 处`, snapshot.weakKeyCount > 0 ? "优先补这些地方，人物会更像自己" : "关键骨架已经收住，可以转去细修"],
-    ["细调覆盖", `${snapshot.advancedFilledCount} / ${snapshot.advancedTotalCount}`, "用于抠语气、情绪和更细的人设纹理"],
-    ["最近更新", snapshot.updatedText, "显示这一卷最近一次落盘或校对的大致时间"],
-  ];
-  metrics.forEach(([label, value, hint]) => {
-    const card = document.createElement("article");
-    card.className = "character-overview-health-card";
-    card.innerHTML = `<span>${label}</span><strong>${value}</strong><small>${hint}</small>`;
-    root.appendChild(card);
-  });
+  window.__ZAOMENG_CHARACTER_OVERVIEW_LEGACY_RENDER__?.renderHealthMetrics?.(snapshot);
 }
 
 function buildCharacterOverviewEvidenceSnapshot(character) {
+  if (typeof CHARACTER_OVERVIEW_STATE.buildEvidenceSnapshot === "function") {
+    return CHARACTER_OVERVIEW_STATE.buildEvidenceSnapshot(currentRun, character, formatWeakTime, formatSourceStats, getCurrentNovelSource);
+  }
   const name = String(character || "").trim();
   const focus = currentRun?.quality?.excerpt_focus || {};
   const missing = new Set(Array.isArray(focus.missing_characters) ? focus.missing_characters : []);
@@ -919,81 +792,33 @@ function buildCharacterOverviewEvidenceSnapshot(character) {
 }
 
 function renderCharacterOverviewEvidenceMetrics(snapshot) {
-  const root = el("character-overview-evidence-metrics");
-  if (!root) return;
-  root.innerHTML = "";
-  const items = [
-    ["证据判断", snapshot.evidenceLabel, snapshot.evidenceCopy],
-    ["当前依据书段", snapshot.sourceLabel, snapshot.sourceCopy],
-    ["来源足迹", snapshot.traceLabel, snapshot.traceCopy],
-    [snapshot.recommendationLabel, "下一步", snapshot.recommendationCopy],
-  ];
-  items.forEach(([label, value, hint]) => {
-    const card = document.createElement("article");
-    card.className = "character-overview-evidence-card";
-    card.innerHTML = `<span>${label}</span><strong>${value}</strong><small>${hint}</small>`;
-    root.appendChild(card);
-  });
+  window.__ZAOMENG_CHARACTER_OVERVIEW_LEGACY_RENDER__?.renderEvidenceMetrics?.(snapshot);
 }
 
 function characterOverviewHistoryKey(character) {
-  return `${currentRunId || ""}::${String(character || "").trim()}`;
+  return window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.historyKey?.(character) || `${currentRunId || ""}::${String(character || "").trim()}`;
 }
 
 function getCharacterOverviewAutofillItems(character) {
-  const historyItems = characterOverviewAutofillHistory.get(characterOverviewHistoryKey(character)) || [];
-  const eventItems = getCurrentRunEvents()
-    .filter((item) => {
-      const eventCharacter = String(item?.character || "").trim();
-      const eventStage = String(item?.stage || "").trim();
-      const reviewSource = String(item?.review_source || "").trim();
-      return eventCharacter === String(character || "").trim() && eventStage === "persona_review_saved" && reviewSource === "character_overview_autofill";
-    })
-    .slice()
-    .reverse()
-    .map((item) => {
-      const changedFields = Array.isArray(item?.changed_fields) ? item.changed_fields : [];
-      const firstField = String(changedFields[0] || "").trim();
-      const reviewNote = String(item?.review_note || "").trim();
-      return {
-        field: firstField,
-        label: CHARACTER_OVERVIEW_FIELD_LABELS[firstField] || reviewNote || firstField || "最近补全",
-        value: "",
-        message: String(item?.message || "").trim(),
-        sourceMode: reviewNote,
-        timestamp: String(item?.timestamp || "").trim(),
-      };
-    });
-  const merged = [];
-  const seen = new Set();
-  [...historyItems, ...eventItems].forEach((item) => {
-    const key = `${String(item?.field || "").trim()}::${String(item?.timestamp || "").trim()}::${String(item?.sourceMode || "").trim()}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    merged.push(item);
-  });
-  return merged
-    .sort((left, right) => String(right?.timestamp || "").localeCompare(String(left?.timestamp || "")))
-    .slice(0, 6);
+  return window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.getAutofillItems?.(character) || [];
 }
 
 function rememberCharacterOverviewAutofill(character, payload) {
-  const field = String(payload?.field || "").trim();
-  if (!character || !field) return;
-  const key = characterOverviewHistoryKey(character);
-  const items = getCharacterOverviewAutofillItems(character).filter((item) => item.field !== field);
-  items.unshift({
-    field,
-    label: CHARACTER_OVERVIEW_FIELD_LABELS[field] || String(payload?.label || field).trim() || field,
-    value: String(payload?.value || "").trim(),
-    message: String(payload?.message || "").trim(),
-    sourceMode: String(payload?.source_mode || "").trim(),
-    timestamp: new Date().toISOString(),
-  });
-  characterOverviewAutofillHistory.set(key, items.slice(0, 6));
+  window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.rememberAutofill?.(character, payload);
 }
 
 function buildCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSnapshot) {
+  if (typeof CHARACTER_OVERVIEW_STATE.buildTrustSignals === "function") {
+    return CHARACTER_OVERVIEW_STATE.buildTrustSignals({
+      payload,
+      healthSnapshot,
+      evidenceSnapshot,
+      autofillItems: getCharacterOverviewAutofillItems(String(payload?.character || "").trim()),
+      reviewEvent: findLatestRunEventForCharacter(String(payload?.character || "").trim(), "persona_review_saved"),
+      redistillSignal: buildCharacterOverviewRedistillSignal(String(payload?.character || "").trim()),
+      formatWeakTime,
+    });
+  }
   const character = String(payload?.character || "").trim();
   const autofillItems = getCharacterOverviewAutofillItems(character);
   const lastAutofill = autofillItems[0] || null;
@@ -1050,22 +875,13 @@ function buildCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSna
 }
 
 function renderCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSnapshot) {
-  const root = el("character-overview-trust-signals");
-  if (!root) return;
-  root.innerHTML = "";
-  buildCharacterOverviewTrustSignals(payload, healthSnapshot, evidenceSnapshot).forEach((item) => {
-    const card = document.createElement("article");
-    card.className = `character-overview-trust-card is-${item.tone || "neutral"}`;
-    card.innerHTML = `
-      <span>${escapeHtml(item.label)}</span>
-      <strong>${escapeHtml(item.value)}</strong>
-      <small>${escapeHtml(item.copy)}</small>
-    `;
-    root.appendChild(card);
-  });
+  window.__ZAOMENG_CHARACTER_OVERVIEW_LEGACY_RENDER__?.renderTrustSignals?.(payload, healthSnapshot, evidenceSnapshot);
 }
 
 function findLatestRunEventForCharacter(character, stage = "") {
+  if (typeof CHARACTER_OVERVIEW_STATE.findLatestRunEvent === "function") {
+    return CHARACTER_OVERVIEW_STATE.findLatestRunEvent(getCurrentRunEvents(), character, stage);
+  }
   const name = String(character || "").trim();
   const expectedStage = String(stage || "").trim();
   const events = getCurrentRunEvents();
@@ -1080,6 +896,9 @@ function findLatestRunEventForCharacter(character, stage = "") {
 }
 
 function buildCharacterOverviewReviewCopy(reviewEvent) {
+  if (typeof CHARACTER_OVERVIEW_STATE.buildReviewCopy === "function") {
+    return CHARACTER_OVERVIEW_STATE.buildReviewCopy(reviewEvent, formatWeakTime);
+  }
   const timestampText = formatWeakTime(reviewEvent?.timestamp || "") || "最近";
   const reviewSource = String(reviewEvent?.review_source || "").trim();
   const reviewNote = String(reviewEvent?.review_note || "").trim();
@@ -1103,6 +922,9 @@ function openWorkTimeline() {
 }
 
 function buildCharacterOverviewRedistillSignal(character) {
+  if (typeof CHARACTER_OVERVIEW_STATE.buildRedistillSignal === "function") {
+    return CHARACTER_OVERVIEW_STATE.buildRedistillSignal(currentRun, character, getCurrentNovelSource);
+  }
   const name = String(character || "").trim();
   const redistill = currentRun?.redistill || {};
   const existing = new Set(Array.isArray(redistill.existing_characters) ? redistill.existing_characters : []);
@@ -1138,6 +960,9 @@ function buildCharacterOverviewRedistillSignal(character) {
 }
 
 function formatCharacterOverviewAutofillSource(sourceMode) {
+  if (typeof CHARACTER_OVERVIEW_STATE.formatAutofillSource === "function") {
+    return CHARACTER_OVERVIEW_STATE.formatAutofillSource(sourceMode);
+  }
   if (sourceMode === "web_fallback") {
     return "联网参考";
   }
@@ -1148,6 +973,13 @@ function formatCharacterOverviewAutofillSource(sourceMode) {
 }
 
 function buildCharacterOverviewFieldTags(field, value, evidenceSnapshot) {
+  if (typeof CHARACTER_OVERVIEW_STATE.buildFieldTags === "function") {
+    const recentAutofill = getCharacterOverviewAutofillItems(currentCharacterOverview?.character).find((item) => item.field === field);
+    return CHARACTER_OVERVIEW_STATE.buildFieldTags(field, value, evidenceSnapshot, {
+      recentAutofill,
+      editableProfilePath: String(currentCharacterOverview?.editable_profile_path || "").trim(),
+    });
+  }
   const text = String(value || "").trim();
   const tags = [];
   const recentAutofill = getCharacterOverviewAutofillItems(currentCharacterOverview?.character).find((item) => item.field === field);
@@ -1166,75 +998,25 @@ function buildCharacterOverviewFieldTags(field, value, evidenceSnapshot) {
 }
 
 function renderCharacterOverviewKeyFields(fields) {
-  const root = el("character-overview-key-fields");
-  if (!root) return;
-  root.innerHTML = "";
-  const evidenceSnapshot = buildCharacterOverviewEvidenceSnapshot(currentCharacterOverview?.character || "");
-  CHARACTER_OVERVIEW_KEY_FIELDS.forEach(([field, label]) => {
-    const value = String(fields[field] || "").trim();
-    const weak = isCharacterOverviewFieldWeak(field, value);
-    const tags = buildCharacterOverviewFieldTags(field, value, evidenceSnapshot);
-    const card = document.createElement("article");
-    card.className = `character-overview-field-card${weak ? " is-missing" : ""}`;
-    const canAutofill = weak;
-    card.innerHTML = `
-      <div class="character-overview-field-head">
-        <span>${label}</span>
-        <div class="character-overview-field-actions">
-          ${tags.map((tag) => `<span class="character-overview-field-tag is-${tag.tone}">${tag.label}</span>`).join("")}
-          ${canAutofill ? `<button type="button" class="character-overview-mini-button" data-character-overview-field="${field}">AI补全</button>` : ""}
-          <button type="button" class="character-overview-mini-button" data-character-overview-save="${field}" disabled>已保存</button>
-        </div>
-      </div>
-      <textarea class="character-overview-field-input" data-character-overview-input="${field}" rows="4" placeholder="可以直接在这里修改，然后点保存改动。"></textarea>
-      <small class="character-overview-field-hint">${buildCharacterOverviewFieldHint(field, value)}</small>
-    `;
-    const input = card.querySelector(`[data-character-overview-input="${field}"]`);
-    if (input instanceof HTMLTextAreaElement) {
-      input.value = value;
-      input.dataset.initialValue = value;
-      syncCharacterOverviewFieldSaveButton(input);
-    }
-    root.appendChild(card);
-  });
+  window.__ZAOMENG_CHARACTER_OVERVIEW_LEGACY_RENDER__?.renderKeyFields?.(fields);
 }
 
 function syncCharacterOverviewFieldSaveButton(inputNode) {
-  if (!(inputNode instanceof HTMLTextAreaElement)) return;
-  const field = String(inputNode.getAttribute("data-character-overview-input") || "").trim();
-  if (!field) return;
-  const card = inputNode.closest(".character-overview-field-card");
-  if (!(card instanceof HTMLElement)) return;
-  const button = card.querySelector(`[data-character-overview-save="${field}"]`);
-  if (!(button instanceof HTMLButtonElement)) return;
-  const initialValue = String(inputNode.dataset.initialValue || "").trim();
-  const currentValue = String(inputNode.value || "").trim();
-  const dirty = currentValue !== initialValue;
-  card.classList.toggle("is-dirty", dirty);
-  if (button.dataset.saving !== "true") {
-    button.disabled = !dirty;
-    button.textContent = dirty ? "保存改动" : "已保存";
-  }
+  window.__ZAOMENG_CHARACTER_OVERVIEW_LEGACY_RENDER__?.syncFieldSaveButton?.(inputNode);
 }
 
 function handleCharacterOverviewFieldInput(event) {
-  const target = event.target;
-  if (!(target instanceof HTMLTextAreaElement)) return;
-  if (!target.hasAttribute("data-character-overview-input")) return;
-  syncCharacterOverviewFieldSaveButton(target);
+  window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.handleFieldInput?.(event);
 }
 
 function buildCharacterOverviewSavePayload(nextFields, reviewSource = "", reviewNote = "") {
-  const payload = {};
-  (PERSONA_REVIEW_FIELD_BINDINGS || []).forEach(([field]) => {
-    payload[field] = String(nextFields?.[field] || "").trim();
-  });
-  payload.review_source = reviewSource;
-  payload.review_note = reviewNote;
-  return payload;
+  return window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.buildSavePayload?.(nextFields, reviewSource, reviewNote) || {};
 }
 
 function isCharacterOverviewFieldWeak(field, value) {
+  if (typeof CHARACTER_OVERVIEW_STATE.isFieldWeak === "function") {
+    return CHARACTER_OVERVIEW_STATE.isFieldWeak(field, value);
+  }
   const text = String(value || "").trim();
   if (!text) return true;
   if (["worldview", "belief_anchor", "moral_bottom_line", "restraint_threshold", "stress_response", "speech_style", "identity_anchor", "soul_goal"].includes(field)) {
@@ -1247,6 +1029,9 @@ function isCharacterOverviewFieldWeak(field, value) {
 }
 
 function buildCharacterOverviewFieldHint(field, value) {
+  if (typeof CHARACTER_OVERVIEW_STATE.buildFieldHint === "function") {
+    return CHARACTER_OVERVIEW_STATE.buildFieldHint(field, value);
+  }
   const text = String(value || "").trim();
   if (!text) {
     return "这块还空着，可以先让 AI 补一版，再进人物校对里细修。";
@@ -1258,402 +1043,55 @@ function buildCharacterOverviewFieldHint(field, value) {
 }
 
 function renderCharacterOverviewVoiceSummary(fields) {
-  const root = el("character-overview-voice-summary");
-  if (!root) return;
-  root.innerHTML = "";
-  const items = [
-    ["说话方式", fields.speech_style || "这部分还可以继续抠细。"],
-    ["代表句", fields.typical_lines || fields.signature_phrases || "人物口气还没有完全落稳。"],
-    ["句子习惯", [fields.sentence_openers, fields.sentence_endings].filter(Boolean).join(" / ") || "起句和句尾还可以继续补。"],
-  ];
-  items.forEach(([label, value]) => {
-    const card = document.createElement("article");
-    card.className = "character-overview-summary-card";
-    card.innerHTML = `<span>${label}</span><p>${value}</p>`;
-    root.appendChild(card);
-  });
+  window.__ZAOMENG_CHARACTER_OVERVIEW_LEGACY_RENDER__?.renderVoiceSummary?.(fields);
 }
 
 function renderCharacterOverviewRelationSummary(fields) {
-  const root = el("character-overview-relation-summary");
-  if (!root) return;
-  root.innerHTML = "";
-  const items = [
-    ["重要牵系", fields.key_bonds || "这部分还没有完全落下来。"],
-    ["气质底色", fields.temperament_type || "气质底色还可以继续补稳。"],
-    ["世界观", fields.worldview || "世界观还没有完全成形。"],
-  ];
-  items.forEach(([label, value]) => {
-    const card = document.createElement("article");
-    card.className = "character-overview-summary-card";
-    card.innerHTML = `<span>${label}</span><p>${value}</p>`;
-    root.appendChild(card);
-  });
+  window.__ZAOMENG_CHARACTER_OVERVIEW_LEGACY_RENDER__?.renderRelationSummary?.(fields);
 }
 
 function renderCharacterOverviewAdvancedGroups(fields) {
-  const root = el("character-overview-advanced-groups");
-  if (!root) return;
-  root.innerHTML = "";
-  CHARACTER_OVERVIEW_ADVANCED_GROUPS.forEach(([title, fieldNames]) => {
-    const values = fieldNames
-      .map((field) => {
-        const value = String(fields[field] || "").trim();
-        return value ? { field, label: CHARACTER_OVERVIEW_FIELD_LABELS[field] || field, value } : null;
-      })
-      .filter(Boolean);
-    const expanded = characterOverviewExpandedGroups.has(title);
-    const previewText = values
-      .slice(0, 2)
-      .map((item) => `${item.label}：${item.value}`)
-      .join("；");
-    const card = document.createElement("article");
-    card.className = "character-overview-advanced-group";
-    card.innerHTML = `
-      <button type="button" class="character-overview-advanced-toggle${expanded ? " is-open" : ""}" data-character-overview-group="${title}" aria-expanded="${expanded ? "true" : "false"}">
-        <span class="character-overview-advanced-title">${title}</span>
-        <span class="character-overview-advanced-meta">${values.length > 0 ? `已填 ${values.length} / ${fieldNames.length}` : "这一组还没铺开"}</span>
-        <span class="character-overview-advanced-arrow">${expanded ? "收起" : "展开"}</span>
-      </button>
-      <p class="character-overview-advanced-preview${expanded ? " hidden" : ""}">${previewText || "这一组还可以继续补更多细节，不必一次写满。"}</p>
-      <div class="character-overview-advanced-body${expanded ? "" : " hidden"}">
-        ${
-          values.length
-            ? values.map((item) => `<article class="character-overview-advanced-field"><span>${item.label}</span><p>${item.value}</p></article>`).join("")
-            : `<p class="character-overview-advanced-empty">这一组暂时还没写开，可以先稳住关键字段，再决定要不要继续细修。</p>`
-        }
-      </div>
-    `;
-    root.appendChild(card);
-  });
+  window.__ZAOMENG_CHARACTER_OVERVIEW_LEGACY_RENDER__?.renderAdvancedGroups?.(fields);
 }
 
 function handleCharacterOverviewAdvancedGroupToggle(event) {
-  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-character-overview-group]") : null;
-  if (!(trigger instanceof HTMLButtonElement) || !currentCharacterOverview?.fields) return;
-  const groupName = String(trigger.getAttribute("data-character-overview-group") || "").trim();
-  if (!groupName) return;
-  if (characterOverviewExpandedGroups.has(groupName)) {
-    characterOverviewExpandedGroups.delete(groupName);
-  } else {
-    characterOverviewExpandedGroups.add(groupName);
-  }
-  renderCharacterOverviewAdvancedGroups(currentCharacterOverview.fields || {});
+  window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.handleAdvancedGroupToggle?.(event);
 }
 
 async function handleCharacterOverviewFieldAutofill(event) {
-  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-character-overview-field]") : null;
-  if (!(trigger instanceof HTMLButtonElement) || !currentRunId || !currentCharacterOverview) return;
-  const character = String(currentCharacterOverview.character || "").trim();
-  const field = String(trigger.getAttribute("data-character-overview-field") || "").trim();
-  if (!character || !field) return;
-  const labelText = CHARACTER_OVERVIEW_FIELD_LABELS[field] || field;
-  const originalText = trigger.textContent || "AI补全";
-  trigger.disabled = true;
-  trigger.textContent = "生成中...";
-  setStatus("character-overview-status", `正在补全「${labelText}」...`);
-  try {
-    const payload = await apiJson(
-      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}/suggest-field`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field }),
-      },
-      "人物信息补全失败。"
-    );
-    if (payload?.status !== "filled" || !payload?.value) {
-      setStatus("character-overview-status", payload?.message || payload?.reason || "人物信息补全无法生成。");
-      return;
-    }
-    const nextFields = {
-      ...(currentCharacterOverview.fields || {}),
-      [field]: payload.value,
-    };
-    const saved = await apiJson(
-      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...nextFields,
-          review_source: "character_overview_autofill",
-          review_note: String(payload?.source_mode || "").trim(),
-        }),
-      },
-      "保存人物校对失败。"
-    );
-    rememberCharacterOverviewAutofill(character, payload);
-    currentCharacterOverview = saved;
-    renderCharacterOverview(saved);
-    renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
-    characterOverviewOpen = true;
-    currentCharacterOverview = saved;
-    updateWorkflowState();
-    setStatus("character-overview-status", payload.message || `「${labelText}」已经补上，并写回这一卷。`);
-  } catch (error) {
-    setStatus("character-overview-status", error.message || "人物信息补全无法生成。");
-  } finally {
-    trigger.disabled = false;
-    trigger.textContent = originalText;
-  }
+  return window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.handleFieldAutofill?.(event);
 }
 
 async function handleCharacterOverviewFieldSave(event) {
-  const trigger = event.target instanceof HTMLElement ? event.target.closest("[data-character-overview-save]") : null;
-  if (!(trigger instanceof HTMLButtonElement) || !currentRunId || !currentCharacterOverview) return;
-  const character = String(currentCharacterOverview.character || "").trim();
-  const field = String(trigger.getAttribute("data-character-overview-save") || "").trim();
-  if (!character || !field) return;
-  const input = el("character-overview-key-fields")?.querySelector(`[data-character-overview-input="${field}"]`);
-  if (!(input instanceof HTMLTextAreaElement)) return;
-  const labelText = CHARACTER_OVERVIEW_FIELD_LABELS[field] || field;
-  const nextValue = String(input.value || "").trim();
-  const currentValue = String(currentCharacterOverview?.fields?.[field] || "").trim();
-  if (nextValue === currentValue) {
-    syncCharacterOverviewFieldSaveButton(input);
-    return;
-  }
-  const previousText = trigger.textContent || "保存改动";
-  trigger.dataset.saving = "true";
-  trigger.disabled = true;
-  trigger.textContent = "保存中...";
-  setStatus("character-overview-status", `正在保存「${labelText}」...`);
-  try {
-    const nextFields = {
-      ...(currentCharacterOverview.fields || {}),
-      [field]: nextValue,
-    };
-    const saved = await apiJson(
-      `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildCharacterOverviewSavePayload(nextFields, "character_overview_inline_edit", "field_direct_save")),
-      },
-      "保存人物校对失败。"
-    );
-    currentCharacterOverview = saved;
-    renderCharacterOverview(saved);
-    renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
-    characterOverviewOpen = true;
-    currentCharacterOverview = saved;
-    updateWorkflowState();
-    setStatus("character-overview-status", `「${labelText}」已经写回这一卷。`);
-  } catch (error) {
-    trigger.textContent = previousText;
-    setStatus("character-overview-status", error.message || "这次保存没有成功。");
-  } finally {
-    delete trigger.dataset.saving;
-  }
+  return window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.handleFieldSave?.(event);
 }
 
 function openCharacterOverviewIncrementalDistill() {
-  const character = String(currentCharacterOverview?.character || "").trim();
-  openIncrementalDistillForCharacter(character);
+  window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.openCharacterOverviewIncrementalDistill?.();
 }
 
 function openIncrementalDistillForCharacter(characterName) {
-  const character = String(characterName || "").trim();
-  if (!character || !currentRun) return;
-  characterOverviewOpen = false;
-  redistillPanelOpen = true;
-  renderBookshelfDetail(currentRun);
-  updateWorkflowState();
-  const mergedCharacters = joinCharacters([character, ...parseCharacters(valueOf("redistill-characters", ""))]);
-  setValue("redistill-characters", mergedCharacters);
-  syncRedistillPreview();
-  setStatus("redistill-status", `这轮会把「${character}」按增量方式继续补稳。`);
-  el("redistill-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  el("redistill-characters")?.focus();
+  window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.openIncrementalDistillForCharacter?.(characterName);
 }
 
 async function openCharacterOverviewSessionMode(mode) {
-  const character = String(currentCharacterOverview?.character || "").trim();
-  if (!character || !currentRun) return;
-  await openNewDialogueSession();
-  const characters = getRunCharacterNames(currentRun);
-  setValue("dialogue-participants", joinCharacters(characters));
-  setValue("dialogue-mode", mode);
-  if (mode === "act") {
-    setValue("dialogue-controlled", character);
-  }
-  syncModeFields();
-  updateCharacterPillState();
+  return window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.openCharacterOverviewSessionMode?.(mode);
 }
 
 function openCurrentCharacterProfileFile() {
-  const character = String(currentCharacterOverview?.character || "").trim();
-  if (!character || !currentRun?.file_urls) return;
-  const url = currentRun.file_urls[`character_${character}`];
-  if (url) {
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
+  window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__?.openCurrentCharacterProfileFile?.();
 }
 
 function renderQualitySnapshot(run) {
-  const quality = run?.quality || {};
-  const summaryChunking = run?.summary?.chunking || {};
-  const progressChunking = run?.progress?.chunking || {};
-  const focus = quality.excerpt_focus || {};
-  const matched = Array.isArray(focus.matched_characters) ? focus.matched_characters : [];
-  const missing = Array.isArray(focus.missing_characters) ? focus.missing_characters : [];
-  const stages = Array.isArray(quality.stage_presence) ? quality.stage_presence : [];
-  renderQualityPills("quality-matched", matched, "quality-matched-empty");
-  renderQualityPills("quality-missing", missing, "quality-missing-empty");
-  renderQualityPills("quality-stages", stages, "quality-stages-empty");
-
-  const profileRepairs = quality.profile_repairs || {};
-  const relationRepairs = quality.relation_repairs || {};
-  const profileCount = Number(profileRepairs.count || 0);
-  const relationCount = Number(relationRepairs.count || 0);
-  const profileNames = joinCharacters(profileRepairs.characters || []);
-  const relationPairs = Array.isArray(relationRepairs.pairs) ? relationRepairs.pairs : [];
-  const characterFocus = quality.character_focus || {};
-  const chunkedCharacters = Object.entries(characterFocus).filter(([, item]) => Number(item?.chunk_count || 1) > 1);
-  const relationChunked = Boolean(relationRepairs.chunked) || Number(relationRepairs.chunk_count || 1) > 1;
-  const relationChunkCount = Number(relationRepairs.chunk_count || 1);
-  const distillChunkSummary = summaryChunking?.distill || {};
-  const relationChunkSummary = summaryChunking?.relation || {};
-  const distillChunkProgress = progressChunking?.distill || {};
-  const relationChunkProgress = progressChunking?.relation || {};
-
-  const segments = [];
-  if (profileCount > 0) {
-    segments.push(`人物字段收束 ${profileCount} 次${profileNames ? `：${profileNames}` : ""}`);
-  }
-  if (relationCount > 0) {
-    segments.push(`关系字段收束 ${relationCount} 次${relationPairs.length ? `：${relationPairs.slice(0, 3).join("、")}` : ""}`);
-  }
-  setText("quality-repairs", segments.join("；") || "暂时没有发生自动收束。", "");
-
-  const chunkSegments = [];
-  if (distillChunkSummary.mode === "chunked" || Number(distillChunkSummary.chunk_count || 0) > 1) {
-    const currentChunk = Number(distillChunkProgress.current_chunk || 0);
-    const totalChunks = Number(distillChunkSummary.chunk_count || distillChunkProgress.chunk_count || 0);
-    const mergeStatus = String(distillChunkSummary.merge_status || distillChunkProgress.merge_status || "").trim();
-    const currentLabel = String(distillChunkProgress.current_label || "").trim();
-    let line = `人物实际分为 ${totalChunks} 块`;
-    if (currentChunk > 0 && totalChunks > 0) {
-      line += `，当前进行到 ${currentChunk}/${totalChunks}`;
-    }
-    if (currentLabel) {
-      line += `（${currentLabel}）`;
-    }
-    if (mergeStatus && mergeStatus !== "pending") {
-      line += `，汇总状态：${mergeStatus === "running" ? "正在汇总" : "已汇总"}`;
-    }
-    chunkSegments.push(line);
-  } else if (chunkedCharacters.length) {
-    chunkSegments.push(
-      `人物实际分为 ${chunkedCharacters.reduce((total, [, item]) => total + Number(item?.chunk_count || 0), 0)} 块：${chunkedCharacters
-        .map(([name, item]) => `${name}${Number(item?.chunk_count || 1)}块`)
-        .join("、")}`
-    );
-  } else {
-    chunkSegments.push("人物蒸馏这轮没有触发分批。");
-  }
-  if (relationChunkSummary.mode === "chunked" || Number(relationChunkSummary.chunk_count || 0) > 1) {
-    const currentChunk = Number(relationChunkProgress.current_chunk || 0);
-    const totalChunks = Number(relationChunkSummary.chunk_count || relationChunkProgress.chunk_count || 0);
-    const mergeStatus = String(relationChunkSummary.merge_status || relationChunkProgress.merge_status || "").trim();
-    const currentLabel = String(relationChunkProgress.current_label || "").trim();
-    let line = `关系抽取实际分为 ${totalChunks} 块`;
-    if (currentChunk > 0 && totalChunks > 0) {
-      line += `，当前进行到 ${currentChunk}/${totalChunks}`;
-    }
-    if (currentLabel) {
-      line += `（${currentLabel}）`;
-    }
-    if (mergeStatus && mergeStatus !== "pending") {
-      line += `，汇总状态：${mergeStatus === "running" ? "正在汇总" : "已汇总"}`;
-    }
-    chunkSegments.push(line);
-  } else if (relationChunked) {
-    chunkSegments.push(`关系抽取实际分为 ${relationChunkCount} 块，并做了最终汇总。`);
-  } else {
-    chunkSegments.push("关系抽取这轮没有触发分批。");
-  }
-  setText("quality-chunks", chunkSegments.join("；"), "");
-
-  const standardChunkingVisible =
-    Number(distillChunkSummary.chunk_count || 0) > 0 ||
-    Number(relationChunkSummary.chunk_count || 0) > 0 ||
-    String(distillChunkSummary.mode || "").trim() === "chunked" ||
-    String(relationChunkSummary.mode || "").trim() === "chunked";
-  const shouldShow =
-    matched.length ||
-    missing.length ||
-    stages.length ||
-    profileCount > 0 ||
-    relationCount > 0 ||
-    chunkedCharacters.length ||
-    relationChunked ||
-    standardChunkingVisible;
-  toggle("quality-section", shouldShow);
-  toggle("quality-empty-copy", !shouldShow);
-  const qualitySection = el("quality-section");
-  if (qualitySection) {
-    qualitySection.open = Boolean(run?.status === "running");
-  }
-}
-
-function renderQualityPills(rootId, values, emptyId) {
-  const root = el(rootId);
-  if (!root) return;
-  root.innerHTML = "";
-  (values || []).forEach((value) => {
-    const chip = document.createElement("span");
-    chip.textContent = value;
-    root.appendChild(chip);
-  });
-  root.classList.toggle("hidden", root.childElementCount === 0);
-  toggle(emptyId, root.childElementCount === 0);
+  window.__ZAOMENG_WORK_OVERVIEW_LEGACY_RENDER__?.renderQualitySnapshot?.(run);
 }
 
 function renderRunEvents(run) {
-  const eventsRoot = el("events");
-  if (!eventsRoot) return;
-  eventsRoot.innerHTML = "";
-  (run.events || []).slice(-8).forEach((event) => {
-    const stageLabel = humanizeRunEventStage(String(event?.stage || "").trim());
-    const message = String(event?.message || "").trim();
-    const updated = formatWeakTime(String(event?.timestamp || "").trim()) || "刚刚";
-    const item = document.createElement("li");
-    item.innerHTML = `
-      <strong>${escapeHtml(stageLabel)}</strong>
-      <p>${escapeHtml(message || "这一轮有新的变化落在这里。")}</p>
-      <small>${escapeHtml(updated)}</small>
-    `;
-    eventsRoot.appendChild(item);
-  });
-  toggle("timeline-empty-note", eventsRoot.childElementCount === 0);
+  window.__ZAOMENG_RUN_DETAIL_SUPPORT_RENDER__?.renderRunEvents?.(run);
 }
 
 function renderRunGraphLinks(run) {
-  const graphLinksRoot = el("graph-links");
-  if (!graphLinksRoot) return;
-  graphLinksRoot.innerHTML = "";
-  [
-    run.file_urls?.graph_html ? { url: run.file_urls.graph_html, label: "查看关系图谱" } : null,
-    run.file_urls?.graph_svg ? { url: run.file_urls.graph_svg, label: "查看 SVG" } : null,
-  ]
-    .filter(Boolean)
-    .forEach((entry) => {
-      const link = document.createElement("a");
-      link.href = entry.url;
-      link.textContent = entry.label;
-      link.target = "_blank";
-      link.rel = "noreferrer";
-      graphLinksRoot.appendChild(link);
-    });
-  graphLinksRoot.classList.toggle("hidden", graphLinksRoot.childElementCount === 0);
-  toggle("graph-empty-note", graphLinksRoot.childElementCount === 0);
-  const relationButton = el("open-relation-details-button");
-  if (relationButton) {
-    relationButton.classList.remove("hidden");
-    relationButton.disabled = !Boolean(run?.artifact_index?.relation_graph?.relations_file);
-  }
+  window.__ZAOMENG_RUN_DETAIL_SUPPORT_RENDER__?.renderRunGraphLinks?.(run);
 }
 
 function syncRunArtifacts(run) {
@@ -1704,14 +1142,47 @@ function renderRun(run, options = {}) {
   } else {
     stopRunPolling();
   }
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("run-rendered");
+  }
 }
+
+const RUN_DETAIL_BRIDGE_TOOLS = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
+window.renderRun = renderRun;
+
+async function refreshCurrentRunView(runId = currentRunId, options = {}) {
+  const target = String(runId || "").trim();
+  if (!target) return null;
+  const run = await apiJson(`/api/web/runs/${target}`);
+  renderRun(run, options);
+  return run;
+}
+window.refreshCurrentRunView = refreshCurrentRunView;
+
+if (typeof RUN_DETAIL_BRIDGE_TOOLS.mergeLegacyActionBridge === "function") {
+  RUN_DETAIL_BRIDGE_TOOLS.mergeLegacyActionBridge("__ZAOMENG_RUN_DETAIL_ACTIONS__", {
+    refreshRunView: refreshCurrentRunView,
+    renderRunView: renderRun,
+  });
+} else {
+  window.__ZAOMENG_RUN_DETAIL_ACTIONS__ = {
+    ...(window.__ZAOMENG_RUN_DETAIL_ACTIONS__ || {}),
+    refreshRunView: refreshCurrentRunView,
+    renderRunView: renderRun,
+  };
+}
+window.__ZAOMENG_RUN_DETAIL_ACTIONS__ = {
+  ...(window.__ZAOMENG_RUN_DETAIL_ACTIONS__ || {}),
+  refreshRunView: refreshCurrentRunView,
+  renderRunView: renderRun,
+};
 
 function scheduleRunPolling() {
   stopRunPolling();
   if (!currentRunId) return;
   runPollTimer = window.setTimeout(async () => {
     try {
-      renderRun(await apiJson(`/api/web/runs/${currentRunId}`));
+      await refreshCurrentRunView(currentRunId);
     } catch (error) {
       console.warn("poll run failed", error);
     }
@@ -1719,30 +1190,7 @@ function scheduleRunPolling() {
 }
 
 function renderRedistillPlan(run) {
-  const redistill = run?.redistill || {};
-  const currentSource = getCurrentNovelSource(run);
-  const sourceName = String(redistill.source_name || currentSource?.source_name || "").trim();
-  const usingNewSource = Boolean(redistill.used_new_source);
-  const existing = Array.isArray(redistill.existing_characters) ? redistill.existing_characters : [];
-  const newcomers = Array.isArray(redistill.new_characters) ? redistill.new_characters : [];
-  const recentChanges = Array.isArray(redistill.recent_changes) ? redistill.recent_changes : [];
-
-  setText(
-    "redistill-plan-title",
-    usingNewSource ? "这轮会换入新的书段继续整理" : "这轮会沿用当前书段继续整理",
-    ""
-  );
-  setText(
-    "redistill-source-note",
-    usingNewSource
-      ? `当前已换入新的正文片段：${sourceName || "新的书页"}`
-      : `当前会沿用上一轮使用的正文片段${sourceName ? `：${sourceName}` : ""}。`,
-    ""
-  );
-
-  renderRedistillPlanGroup("redistill-existing-list", existing, "redistill-existing-empty");
-  renderRedistillPlanGroup("redistill-new-list", newcomers, "redistill-new-empty");
-  renderRedistillRecentChanges(recentChanges);
+  window.__ZAOMENG_RUN_DETAIL_SUPPORT_RENDER__?.renderRedistillPlan?.(run);
 }
 
 function renderRedistillPlanGroup(rootId, names, emptyId) {
@@ -1796,451 +1244,43 @@ function renderRedistillRecentChanges(items) {
 }
 
 function renderSourceHistory(run) {
-  const root = el("source-history-list");
-  const toggleButton = el("source-history-toggle");
-  if (!root) return;
-  const sources = Array.isArray(run?.novel_sources) ? [...run.novel_sources] : [];
-  const currentPath = String(run?.novel_path || "").trim();
-  root.innerHTML = "";
-
-  const sortedItems = sources
-    .slice()
-    .sort((a, b) => String(b?.timestamp || "").localeCompare(String(a?.timestamp || "")));
-  const visibleItems = sourceHistoryExpanded ? sortedItems : sortedItems.slice(0, 3);
-
-  visibleItems.forEach((source) => {
-    const card = document.createElement("article");
-    const sourcePath = String(source?.source_path || "").trim();
-    const current = Boolean(currentPath) && sourcePath === currentPath;
-    card.className = `source-history-item${current ? " current" : ""}`;
-
-    const title = document.createElement("div");
-    title.className = "source-history-title";
-    title.textContent = String(source?.source_name || "未命名书页").trim() || "未命名书页";
-    if (current) {
-      const badge = document.createElement("span");
-      badge.className = "source-history-badge";
-      badge.textContent = "当前使用中";
-      title.appendChild(badge);
-    }
-
-    const meta = document.createElement("div");
-    meta.className = "source-history-meta";
-    const kind = source?.kind === "incremental_update" ? "增量书段" : "初始正文";
-    const time = formatWeakTime(String(source?.timestamp || "").trim());
-    meta.textContent = [kind, formatSourceStats(source), time].filter(Boolean).join(" · ");
-
-    const detail = document.createElement("div");
-    detail.className = "source-history-detail";
-    detail.textContent = buildSourceDetailText(source, current);
-
-    card.appendChild(title);
-    card.appendChild(meta);
-    if (detail.textContent) {
-      card.appendChild(detail);
-    }
-    root.appendChild(card);
-  });
-
-  root.classList.toggle("hidden", root.childElementCount === 0);
-  toggle("source-history-empty", sortedItems.length <= 1);
-  if (toggleButton) {
-    const canExpand = sortedItems.length > 3;
-    toggleButton.classList.toggle("hidden", !canExpand);
-    toggleButton.textContent = sourceHistoryExpanded ? "收起部分" : "展开全部";
-  }
-  setText(
-    "source-history-note",
-    currentPath
-      ? `当前整理会基于最近一次换入的书页继续往下走。现在使用的是：${String(getCurrentNovelSource(run)?.source_name || PathNameFrom(currentPath) || "当前书页")}`
-      : "当前整理会基于最近一次换入的书页继续往下走。",
-    ""
-  );
+  window.__ZAOMENG_RUN_DETAIL_SUPPORT_RENDER__?.renderSourceHistory?.(run);
 }
 
 function getCurrentNovelSource(run) {
-  const sources = Array.isArray(run?.novel_sources) ? run.novel_sources : [];
-  const currentPath = String(run?.novel_path || "").trim();
-  return sources.find((item) => String(item?.source_path || "").trim() === currentPath) || sources[sources.length - 1] || null;
+  return typeof RUN_DETAIL_SUPPORT_STATE.getCurrentNovelSource === "function"
+    ? RUN_DETAIL_SUPPORT_STATE.getCurrentNovelSource(run)
+    : null;
 }
 
 function PathNameFrom(pathText) {
-  const parts = String(pathText || "").split(/[\\/]/);
-  return parts[parts.length - 1] || "";
+  return typeof RUN_DETAIL_SUPPORT_STATE.pathNameFrom === "function"
+    ? RUN_DETAIL_SUPPORT_STATE.pathNameFrom(pathText)
+    : "";
 }
 
 function formatSourceStats(source) {
-  const charCount = Number(source?.char_count || 0);
-  const byteSize = Number(source?.byte_size || 0);
-  if (charCount > 0) {
-    return `约 ${formatCompactNumber(charCount)} 字`;
-  }
-  if (byteSize > 0) {
-    return formatByteSize(byteSize);
-  }
-  return "";
+  return typeof RUN_DETAIL_SUPPORT_STATE.formatSourceStats === "function"
+    ? RUN_DETAIL_SUPPORT_STATE.formatSourceStats(source)
+    : "";
 }
 
 function buildSourceDetailText(source, current) {
-  const segments = [];
-  if (current) {
-    segments.push("本轮整理正在使用这份正文");
-  }
-  const byteSize = Number(source?.byte_size || 0);
-  if (byteSize > 0) {
-    segments.push(`文件体量 ${formatByteSize(byteSize)}`);
-  }
-  return segments.join("，");
+  return typeof RUN_DETAIL_SUPPORT_STATE.buildSourceDetailText === "function"
+    ? RUN_DETAIL_SUPPORT_STATE.buildSourceDetailText(source, current)
+    : "";
 }
 
 function formatCompactNumber(value) {
-  const amount = Number(value || 0);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return "";
-  }
-  if (amount >= 10000) {
-    return `${(amount / 10000).toFixed(amount >= 100000 ? 0 : 1).replace(/\.0$/, "")}万`;
-  }
-  return String(amount);
+  return typeof RUN_DETAIL_SUPPORT_STATE.formatCompactNumber === "function"
+    ? RUN_DETAIL_SUPPORT_STATE.formatCompactNumber(value)
+    : "";
 }
 
 function formatByteSize(value) {
-  const amount = Number(value || 0);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return "";
-  }
-  if (amount >= 1024 * 1024) {
-    return `${(amount / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
-  }
-  if (amount >= 1024) {
-    return `${(amount / 1024).toFixed(1).replace(/\.0$/, "")} KB`;
-  }
-  return `${amount} B`;
-}
-
-function fillPersonaReviewCharacterOptions(run) {
-  const select = el("persona-review-character");
-  if (!select) return;
-  const names = getRunCharacterNames(run);
-  const currentValue = select.value;
-  select.innerHTML = "";
-  names.forEach((name) => {
-    const option = document.createElement("option");
-    option.value = name;
-    option.textContent = name;
-    select.appendChild(option);
-  });
-  if (names.includes(currentValue)) {
-    select.value = currentValue;
-  } else if (names.length) {
-    select.value = names[0];
-  }
-  renderPersonaReviewCharacterOptions(names, select.value);
-}
-
-function renderPersonaReview(payload) {
-  currentPersonaReview = payload;
-  fillPersonaReviewFields(payload?.fields || {});
-  if (payload?.character && el("persona-review-character")) {
-    el("persona-review-character").value = payload.character;
-  }
-  renderPersonaReviewCharacterOptions(getRunCharacterNames(currentRun), valueOf("persona-review-character", ""));
-}
-
-function renderPersonaReviewCharacterOptions(names, currentValue) {
-  const root = el("persona-review-character-options");
-  const select = el("persona-review-character");
-  if (!root || !select) return;
-  root.innerHTML = "";
-  if (!(names || []).length) {
-    const hint = document.createElement("span");
-    hint.className = "pill hint-pill";
-    hint.textContent = "请先选择一卷已完成的人物";
-    root.appendChild(hint);
-    return;
-  }
-
-  names.forEach((name) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "pill persona-pill";
-    button.textContent = name;
-    if (name === currentValue) {
-      button.classList.add("active");
-    }
-    button.addEventListener("click", () => {
-      if (select.value === name) {
-        return;
-      }
-      select.value = name;
-      renderPersonaReviewCharacterOptions(names, name);
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    root.appendChild(button);
-  });
-}
-
-const PERSONA_REVIEW_FIELD_BINDINGS = [
-  ["core_identity", "persona-core-identity"],
-  ["story_role", "persona-story-role"],
-  ["identity_anchor", "persona-identity-anchor"],
-  ["temperament_type", "persona-temperament-type"],
-  ["soul_goal", "persona-soul-goal"],
-  ["hidden_desire", "persona-hidden-desire"],
-  ["inner_conflict", "persona-inner-conflict"],
-  ["self_cognition", "persona-self-cognition"],
-  ["private_self", "persona-private-self"],
-  ["core_traits", "persona-core-traits"],
-  ["speech_style", "persona-speech-style"],
-  ["cadence", "persona-cadence"],
-  ["typical_lines", "persona-typical-lines"],
-  ["signature_phrases", "persona-signature-phrases"],
-  ["sentence_openers", "persona-sentence-openers"],
-  ["sentence_endings", "persona-sentence-endings"],
-  ["social_mode", "persona-social-mode"],
-  ["thinking_style", "persona-thinking-style"],
-  ["decision_rules", "persona-decision-rules"],
-  ["reward_logic", "persona-reward-logic"],
-  ["worldview", "persona-worldview"],
-  ["belief_anchor", "persona-belief-anchor"],
-  ["moral_bottom_line", "persona-moral-bottom-line"],
-  ["restraint_threshold", "persona-restraint-threshold"],
-  ["key_bonds", "persona-key-bonds"],
-  ["forbidden_behaviors", "persona-forbidden-behaviors"],
-  ["stress_response", "persona-stress-response"],
-  ["emotion_model", "persona-emotion-model"],
-  ["anger_style", "persona-anger-style"],
-  ["joy_style", "persona-joy-style"],
-  ["grievance_style", "persona-grievance-style"],
-  ["others_impression", "persona-others-impression"],
-];
-
-const PERSONA_AUTOFILLABLE_FIELDS = new Set([
-  "core_identity",
-  "story_role",
-  "identity_anchor",
-  "temperament_type",
-  "soul_goal",
-  "hidden_desire",
-  "inner_conflict",
-  "self_cognition",
-  "private_self",
-  "core_traits",
-  "speech_style",
-  "social_mode",
-  "thinking_style",
-  "worldview",
-  "belief_anchor",
-  "moral_bottom_line",
-  "key_bonds",
-  "others_impression",
-]);
-
-const personaReviewAutofilledFields = new Set();
-
-function fillPersonaReviewFields(fields) {
-  personaReviewAutofilledFields.clear();
-  clearAllPersonaReviewFieldFeedback();
-  PERSONA_REVIEW_FIELD_BINDINGS.forEach(([field, id]) => {
-    setValue(id, fields?.[field] || "");
-  });
-  syncPersonaReviewFieldHighlights();
-  syncPersonaReviewAutofillButtons();
-}
-
-function renderPersonaAutofillReferences(payload) {
-  currentPersonaAutofill = payload || null;
-  const panel = el("persona-review-reference-panel");
-  const summary = el("persona-review-reference-summary");
-  const list = el("persona-review-reference-list");
-  if (!panel || !summary || !list) return;
-  const refs = Array.isArray(payload?.references) ? payload.references : [];
-  panel.classList.toggle("hidden", refs.length === 0);
-  panel.open = false;
-  list.innerHTML = "";
-  if (!refs.length) {
-    summary.textContent = "网页摘要参考";
-    return;
-  }
-  summary.textContent = `${refs.length} 条网页摘要参考`;
-  refs.forEach((item, index) => {
-    const card = document.createElement("article");
-    card.className = "persona-reference-card";
-    const title = escapeHtml(item?.title || `参考 ${index + 1}`);
-    const snippet = escapeHtml(item?.snippet || "");
-    const source = escapeHtml(item?.source || "");
-    const query = escapeHtml(item?.query || "");
-    card.innerHTML = `
-      <div class="persona-reference-head">
-        <strong>${title}</strong>
-        ${source ? `<span>${source}</span>` : ""}
-      </div>
-      ${query ? `<p class="persona-reference-query">检索词：${query}</p>` : ""}
-      ${snippet ? `<p class="persona-reference-snippet">${snippet}</p>` : ""}
-    `;
-    list.appendChild(card);
-  });
-}
-
-function personaReviewFieldId(field) {
-  const item = PERSONA_REVIEW_FIELD_BINDINGS.find(([key]) => key === field);
-  return item ? item[1] : "";
-}
-
-function personaReviewFieldValue(field) {
-  const id = personaReviewFieldId(field);
-  return id ? trimmedValue(id, "") : "";
-}
-
-function personaReviewFieldNeedsAutofill(field) {
-  const value = personaReviewFieldValue(field);
-  if (!value) return true;
-  const normalized = value.replace(/\s+/g, "");
-  return ["证据不足", "资料不足", "信息不足", "暂无资料", "暂缺", "待补充"].includes(normalized);
-}
-
-function setPersonaReviewFieldFeedback(field, kind = "", message = "") {
-  const id = personaReviewFieldId(field);
-  const input = id ? el(id) : null;
-  const card = input?.closest(".field-card");
-  if (!card) return;
-  let note = card.querySelector(".persona-field-feedback");
-  const text = String(message || "").trim();
-  if (!text) {
-    if (note) {
-      note.remove();
-    }
-    card.classList.remove("field-card-feedback-loading", "field-card-feedback-success", "field-card-feedback-error");
-    return;
-  }
-  if (!(note instanceof HTMLElement)) {
-    note = document.createElement("p");
-    note.className = "persona-field-feedback";
-    card.appendChild(note);
-  }
-  note.textContent = text;
-  card.classList.remove("field-card-feedback-loading", "field-card-feedback-success", "field-card-feedback-error");
-  if (kind) {
-    card.classList.add(`field-card-feedback-${kind}`);
-  }
-}
-
-function clearAllPersonaReviewFieldFeedback() {
-  PERSONA_REVIEW_FIELD_BINDINGS.forEach(([field]) => setPersonaReviewFieldFeedback(field, "", ""));
-}
-
-function markPersonaReviewFieldAutofilled(field) {
-  if (!field) return;
-  personaReviewAutofilledFields.add(field);
-  syncPersonaReviewFieldHighlights();
-}
-
-function clearPersonaReviewFieldAutofilled(field) {
-  if (!field) return;
-  personaReviewAutofilledFields.delete(field);
-  syncPersonaReviewFieldHighlights();
-}
-
-function clearAllPersonaReviewAutofilledFields() {
-  personaReviewAutofilledFields.clear();
-  syncPersonaReviewFieldHighlights();
-}
-
-function syncPersonaReviewFieldHighlights() {
-  PERSONA_REVIEW_FIELD_BINDINGS.forEach(([field, id]) => {
-    const input = el(id);
-    const card = input?.closest(".field-card");
-    if (!card) return;
-    card.classList.toggle("field-card-autofilled", personaReviewAutofilledFields.has(field));
-  });
-}
-
-function syncPersonaReviewAutofillButtons() {
-  document.querySelectorAll("[data-persona-autofill-field]").forEach((node) => {
-    const field = node.getAttribute("data-persona-autofill-field") || "";
-    if (!(node instanceof HTMLButtonElement)) return;
-    const shouldShow = PERSONA_AUTOFILLABLE_FIELDS.has(field) && personaReviewFieldNeedsAutofill(field);
-    node.classList.toggle("hidden", !shouldShow);
-    node.disabled = Boolean(node.dataset.loading === "true");
-  });
-}
-
-function renderRelationDetails(payload) {
-  currentRelationDetails = payload;
-  const root = el("relation-details-list");
-  if (!root) return;
-  root.innerHTML = "";
-  const conflictMap = new Map(
-    (payload?.conflicts || [])
-      .filter((item) => item?.pair_key)
-      .map((item) => [item.pair_key, item])
-  );
-  (payload?.items || []).forEach((item) => {
-    const card = document.createElement("article");
-    card.className = "relation-detail-card";
-    const conflict = conflictMap.get(item.pair_key);
-    const conflictLabel = conflict?.tags?.length ? ` · 冲突：${conflict.tags.join(", ")}` : "";
-    card.innerHTML = `
-      <div class="relation-detail-head">
-        <strong>${joinCharacters(item.characters || []) || item.pair_key || "未命名关系"}</strong>
-        <span class="relation-detail-type">${item.relationship_type || "牵连"}${conflictLabel}</span>
-      </div>
-      <div class="relation-detail-edit-grid">
-        <label>信 <input type="number" data-field="trust" min="0" max="10" value="${Number(item.trust || 0)}" /></label>
-        <label>情 <input type="number" data-field="affection" min="0" max="10" value="${Number(item.affection || 0)}" /></label>
-        <label>冲 <input type="number" data-field="hostility" min="0" max="10" value="${Number(item.hostility || 0)}" /></label>
-        <label>疑 <input type="number" data-field="ambiguity" min="0" max="10" value="${Number(item.ambiguity || 3)}" /></label>
-      </div>
-      <div class="relation-detail-copy relation-detail-edit-text">
-        <label>关系类型<input type="text" data-field="relationship_type" value="${escapeHtml(item.relationship_type || "牵连")}" /></label>
-        <label>互动摘要<textarea data-field="typical_interaction" rows="2">${escapeHtml(item.typical_interaction || "")}</textarea></label>
-        <label>冲突点<textarea data-field="conflict_point" rows="2">${escapeHtml(item.conflict_point || "")}</textarea></label>
-        <label>关系变化<textarea data-field="relation_change" rows="2">${escapeHtml(item.relation_change || "")}</textarea></label>
-      </div>
-      <div class="relation-detail-actions">
-        <button type="button" class="soft-button" data-action="save-relation" data-pair-key="${escapeHtml(item.pair_key || "")}">保存</button>
-      </div>
-      <div class="relation-detail-evidence">
-        <p>证据句</p>
-        <ul>${(item.evidence_lines || []).map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>
-      </div>
-    `;
-    const saveButton = card.querySelector('[data-action="save-relation"]');
-    if (saveButton instanceof HTMLButtonElement) {
-      saveButton.addEventListener("click", async () => {
-        if (!currentRunId) return;
-        const pairKey = saveButton.dataset.pairKey || "";
-        if (!pairKey) return;
-        const body = {};
-        card.querySelectorAll("[data-field]").forEach((node) => {
-          if (!(node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) return;
-          const field = node.dataset.field || "";
-          if (!field) return;
-          body[field] = node.value;
-        });
-        saveButton.disabled = true;
-        setStatus("relation-details-status", "正在保存关系修改...");
-        try {
-          const refreshed = await apiJson(
-            `/api/web/runs/${currentRunId}/relations/${encodeURIComponent(pairKey)}`,
-            {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            },
-            "关系保存失败。"
-          );
-          renderRelationDetails(refreshed);
-          setStatus("relation-details-status", "关系已保存。");
-        } catch (error) {
-          saveButton.disabled = false;
-          setStatus("relation-details-status", error.message || "关系保存失败。");
-        }
-      });
-    }
-    root.appendChild(card);
-  });
-  setStatus("relation-details-status", payload?.items?.length ? "" : "这张关系网暂时还没有明细。");
+  return typeof RUN_DETAIL_SUPPORT_STATE.formatByteSize === "function"
+    ? RUN_DETAIL_SUPPORT_STATE.formatByteSize(value)
+    : "";
 }
 
 function escapeHtml(value) {
@@ -2250,3 +1290,106 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
+
+window.WORK_OVERVIEW_STATE = WORK_OVERVIEW_STATE;
+window.CHARACTER_OVERVIEW_STATE = CHARACTER_OVERVIEW_STATE;
+window.RUN_DETAIL_SUPPORT_STATE = RUN_DETAIL_SUPPORT_STATE;
+window.CHARACTER_OVERVIEW_KEY_FIELDS = CHARACTER_OVERVIEW_KEY_FIELDS;
+window.CHARACTER_OVERVIEW_ADVANCED_GROUPS = CHARACTER_OVERVIEW_ADVANCED_GROUPS;
+window.CHARACTER_OVERVIEW_FIELD_LABELS = CHARACTER_OVERVIEW_FIELD_LABELS;
+window.characterOverviewExpandedGroups = characterOverviewExpandedGroups;
+window.characterOverviewAutofillHistory = characterOverviewAutofillHistory;
+
+window.getCurrentRunEvents = getCurrentRunEvents;
+window.setWorkOverviewLoading = setWorkOverviewLoading;
+window.renderRunSummary = renderRunSummary;
+window.buildWorkImportStatus = buildWorkImportStatus;
+window.buildWorkDistillStatus = buildWorkDistillStatus;
+window.renderWorkHeroMetrics = renderWorkHeroMetrics;
+window.renderWorkSummaryNarrative = renderWorkSummaryNarrative;
+window.buildWorkSummaryEvents = buildWorkSummaryEvents;
+window.buildWorkSummaryLine = buildWorkSummaryLine;
+window.buildWorkSummaryBottleneck = buildWorkSummaryBottleneck;
+window.renderWorkSummaryEvents = renderWorkSummaryEvents;
+window.buildWorkRecommendedAction = buildWorkRecommendedAction;
+window.renderWorkRecommendedAction = renderWorkRecommendedAction;
+window.buildQualitySnapshotState = buildQualitySnapshotState;
+window.buildWorkPriorityReviewViewState = buildWorkPriorityReviewViewState;
+window.buildWorkGraphSummaryState = buildWorkGraphSummaryState;
+window.buildWorkGraphLinks = buildWorkGraphLinks;
+window.buildWorkSessionPreviewState = buildWorkSessionPreviewState;
+window.buildWorkOverviewNextStep = buildWorkOverviewNextStep;
+window.buildWorkReviewStatus = buildWorkReviewStatus;
+window.buildWorkGraphStatus = buildWorkGraphStatus;
+window.countWeakCharacters = countWeakCharacters;
+window.buildCharacterReadinessItems = buildCharacterReadinessItems;
+window.buildCharacterReadinessViewState = buildCharacterReadinessViewState;
+window.renderCharacterReadiness = renderCharacterReadiness;
+window.buildWorkPriorityReviewItems = buildWorkPriorityReviewItems;
+window.buildWorkPriorityHeadline = buildWorkPriorityHeadline;
+window.buildWorkPriorityReason = buildWorkPriorityReason;
+window.renderWorkPriorityReview = renderWorkPriorityReview;
+window.renderWorkGraphSummary = renderWorkGraphSummary;
+window.renderWorkSessionPreview = renderWorkSessionPreview;
+window.getSessionPreviewSnippet = getSessionPreviewSnippet;
+window.findMatchedSessionCharacter = findMatchedSessionCharacter;
+window.openWorkSummaryExport = openWorkSummaryExport;
+window.openCharacterOverview = openCharacterOverview;
+window.renderCharacterOverview = renderCharacterOverview;
+window.buildCharacterOverviewChangeTimelineItems = buildCharacterOverviewChangeTimelineItems;
+window.renderCharacterOverviewChangeTimeline = renderCharacterOverviewChangeTimeline;
+window.buildCharacterOverviewHealthSnapshot = buildCharacterOverviewHealthSnapshot;
+window.renderCharacterOverviewHealthMetrics = renderCharacterOverviewHealthMetrics;
+window.buildCharacterOverviewEvidenceSnapshot = buildCharacterOverviewEvidenceSnapshot;
+window.renderCharacterOverviewEvidenceMetrics = renderCharacterOverviewEvidenceMetrics;
+window.characterOverviewHistoryKey = characterOverviewHistoryKey;
+window.getCharacterOverviewAutofillItems = getCharacterOverviewAutofillItems;
+window.rememberCharacterOverviewAutofill = rememberCharacterOverviewAutofill;
+window.buildCharacterOverviewTrustSignals = buildCharacterOverviewTrustSignals;
+window.renderCharacterOverviewTrustSignals = renderCharacterOverviewTrustSignals;
+window.findLatestRunEventForCharacter = findLatestRunEventForCharacter;
+window.buildCharacterOverviewReviewCopy = buildCharacterOverviewReviewCopy;
+window.openWorkTimeline = openWorkTimeline;
+window.buildCharacterOverviewRedistillSignal = buildCharacterOverviewRedistillSignal;
+window.formatCharacterOverviewAutofillSource = formatCharacterOverviewAutofillSource;
+window.buildCharacterOverviewFieldTags = buildCharacterOverviewFieldTags;
+window.renderCharacterOverviewKeyFields = renderCharacterOverviewKeyFields;
+window.syncCharacterOverviewFieldSaveButton = syncCharacterOverviewFieldSaveButton;
+window.handleCharacterOverviewFieldInput = handleCharacterOverviewFieldInput;
+window.buildCharacterOverviewSavePayload = buildCharacterOverviewSavePayload;
+window.isCharacterOverviewFieldWeak = isCharacterOverviewFieldWeak;
+window.buildCharacterOverviewFieldHint = buildCharacterOverviewFieldHint;
+window.renderCharacterOverviewVoiceSummary = renderCharacterOverviewVoiceSummary;
+window.renderCharacterOverviewRelationSummary = renderCharacterOverviewRelationSummary;
+window.renderCharacterOverviewAdvancedGroups = renderCharacterOverviewAdvancedGroups;
+window.handleCharacterOverviewAdvancedGroupToggle = handleCharacterOverviewAdvancedGroupToggle;
+window.handleCharacterOverviewFieldAutofill = handleCharacterOverviewFieldAutofill;
+window.handleCharacterOverviewFieldSave = handleCharacterOverviewFieldSave;
+window.openCharacterOverviewIncrementalDistill = openCharacterOverviewIncrementalDistill;
+window.openIncrementalDistillForCharacter = openIncrementalDistillForCharacter;
+window.openCharacterOverviewSessionMode = openCharacterOverviewSessionMode;
+window.openCurrentCharacterProfileFile = openCurrentCharacterProfileFile;
+window.renderQualitySnapshot = renderQualitySnapshot;
+window.renderRunEvents = renderRunEvents;
+window.renderRunGraphLinks = renderRunGraphLinks;
+window.syncRunArtifacts = syncRunArtifacts;
+window.renderRun = renderRun;
+window.refreshCurrentRunView = refreshCurrentRunView;
+window.scheduleRunPolling = scheduleRunPolling;
+window.renderRedistillPlan = renderRedistillPlan;
+window.renderRedistillPlanGroup = renderRedistillPlanGroup;
+window.renderRedistillRecentChanges = renderRedistillRecentChanges;
+window.renderSourceHistory = renderSourceHistory;
+window.getCurrentNovelSource = getCurrentNovelSource;
+window.PathNameFrom = PathNameFrom;
+window.formatSourceStats = formatSourceStats;
+window.buildSourceDetailText = buildSourceDetailText;
+window.formatCompactNumber = formatCompactNumber;
+window.formatByteSize = formatByteSize;
+window.escapeHtml = escapeHtml;
+
+window.__ZAOMENG_RUN_DETAIL_MODULE__ = {
+  initialized: true,
+  version: String(window.__ZAOMENG_WEB_UI_VERSION__ || ""),
+};
+})();

@@ -23,13 +23,12 @@ def process_distill_character(
     novel_id: str,
     parts: Any,
     config: Any,
-    manifest_seed: dict[str, Any],
     max_sentences: int,
     max_chars: int,
     on_distill: Callable[[str, dict[str, Any]], None],
     assert_run_not_stopped: Callable[..., None],
     write_json: Callable[[Path, dict[str, Any]], None],
-    load_manifest: Callable[[Path], dict[str, Any] | None],
+    update_manifest: Callable[[Path, Callable[[dict[str, Any]], dict[str, Any] | None]], dict[str, Any]],
     generate_character_profile_markdown: Callable[..., tuple[str, dict[str, Any]]],
     maybe_repair_generated_profile: Callable[..., str | None],
     finalize_generated_profile_source: Callable[..., None],
@@ -139,69 +138,74 @@ def process_distill_character(
     )
     aggregates["character_dirs"][materialized["character"]] = materialized["persona_dir"]
 
-    current = load_manifest(manifest_path) or manifest_seed
-    current.setdefault("artifacts", {}).setdefault("character_dirs", {}).update(aggregates["character_dirs"])
-    current.setdefault("artifacts", {}).setdefault("payloads", {})["distill_characters"] = aggregates["distill_payload_paths"]
     distill_total_chunks = sum(
         int(item.get("chunk_count", 1) or 1) for item in aggregates["distill_chunk_by_character"].values()
     )
     distill_any_chunked = any(bool(item.get("chunked", False)) for item in aggregates["distill_chunk_by_character"].values())
-    update_manifest_chunk_progress(
-        current,
-        capability="distill",
-        mode="chunked" if distill_any_chunked else "single",
-        chunk_count=distill_total_chunks,
-        current_chunk=distill_total_chunks if distill_any_chunked else 0,
-        current_label="人物蒸馏完成" if distill_any_chunked else "",
-        status="complete",
-        merge_required=distill_any_chunked,
-        merge_status="complete" if distill_any_chunked else "pending",
-        extras={"by_character": aggregates["distill_chunk_by_character"]},
-    )
-    current.setdefault("capabilities", {})["materialize"] = {
-        "status": "running",
-        "success": False,
-        "updated_at": utc_now(),
-        "message": f"{character} persona bundle materialized",
-    }
-    current["quality"] = build_quality_snapshot(
-        matched_characters=list(aggregates["quality_matched"]),
-        missing_characters=list(aggregates["quality_missing"]),
-        strategy="character_windows",
-        excerpt_stages={
-            "start": "yes" if "前段" in aggregates["quality_stage_presence"] else "",
-            "mid": "yes" if "中段" in aggregates["quality_stage_presence"] else "",
-            "end": "yes" if "后段" in aggregates["quality_stage_presence"] else "",
-        },
-        character_focus=aggregates["quality_focus"],
-        profile_repairs={
-            "count": len(aggregates["profile_repair_characters"]),
-            "characters": aggregates["profile_repair_characters"],
-        },
-        relation_repairs=relation_repairs_getter(current),
-    )
-    current["updated_at"] = utc_now()
-    if change_summary is not None:
-        change_summary["timestamp"] = current["updated_at"]
-        redistill_state = current.setdefault("redistill", {})
-        recent_changes = list(redistill_state.get("recent_changes", []) or [])
-        recent_changes = [
-            item for item in recent_changes if str(item.get("character", "")).strip() != materialized["character"]
+
+    def _update_distill_manifest(current: dict[str, Any]) -> dict[str, Any]:
+        current.setdefault("artifacts", {}).setdefault("character_dirs", {}).update(aggregates["character_dirs"])
+        current.setdefault("artifacts", {}).setdefault("payloads", {})["distill_characters"] = aggregates[
+            "distill_payload_paths"
         ]
-        recent_changes.insert(0, change_summary)
-        redistill_state["recent_changes"] = recent_changes[:6]
-        current.setdefault("events", []).append(
-            {
-                "stage": "redistill_character_updated",
-                "status": "running",
-                "message": str(change_summary.get("summary", "")).strip() or f"{materialized['character']} 已完成增量补稳",
-                "character": materialized["character"],
-                "capability": "distill",
-                "timestamp": current["updated_at"],
-                "changed_fields": list(change_summary.get("changed_fields", []) or []),
-            }
+        update_manifest_chunk_progress(
+            current,
+            capability="distill",
+            mode="chunked" if distill_any_chunked else "single",
+            chunk_count=distill_total_chunks,
+            current_chunk=distill_total_chunks if distill_any_chunked else 0,
+            current_label="人物蒸馏完成" if distill_any_chunked else "",
+            status="complete",
+            merge_required=distill_any_chunked,
+            merge_status="complete" if distill_any_chunked else "pending",
+            extras={"by_character": aggregates["distill_chunk_by_character"]},
         )
-    write_json(manifest_path, current)
+        current.setdefault("capabilities", {})["materialize"] = {
+            "status": "running",
+            "success": False,
+            "updated_at": utc_now(),
+            "message": f"{character} persona bundle materialized",
+        }
+        current["quality"] = build_quality_snapshot(
+            matched_characters=list(aggregates["quality_matched"]),
+            missing_characters=list(aggregates["quality_missing"]),
+            strategy="character_windows",
+            excerpt_stages={
+                "start": "yes" if "前段" in aggregates["quality_stage_presence"] else "",
+                "mid": "yes" if "中段" in aggregates["quality_stage_presence"] else "",
+                "end": "yes" if "后段" in aggregates["quality_stage_presence"] else "",
+            },
+            character_focus=aggregates["quality_focus"],
+            profile_repairs={
+                "count": len(aggregates["profile_repair_characters"]),
+                "characters": aggregates["profile_repair_characters"],
+            },
+            relation_repairs=relation_repairs_getter(current),
+        )
+        current["updated_at"] = utc_now()
+        if change_summary is not None:
+            change_summary["timestamp"] = current["updated_at"]
+            redistill_state = current.setdefault("redistill", {})
+            recent_changes = list(redistill_state.get("recent_changes", []) or [])
+            recent_changes = [
+                item for item in recent_changes if str(item.get("character", "")).strip() != materialized["character"]
+            ]
+            recent_changes.insert(0, change_summary)
+            redistill_state["recent_changes"] = recent_changes[:6]
+            current.setdefault("events", []).append(
+                {
+                    "stage": "redistill_character_updated",
+                    "status": "running",
+                    "message": str(change_summary.get("summary", "")).strip() or f"{materialized['character']} 已完成增量补稳",
+                    "character": materialized["character"],
+                    "capability": "distill",
+                    "timestamp": current["updated_at"],
+                    "changed_fields": list(change_summary.get("changed_fields", []) or []),
+                }
+            )
+        return current
+
+    update_manifest(manifest_path, _update_distill_manifest)
     on_distill("character_done", {"character": materialized["character"]})
 
 
@@ -212,7 +216,6 @@ def process_relation_graph(
     max_sentences: int,
     max_chars: int,
     manifest_path: Path,
-    manifest_seed: dict[str, Any],
     payload_dir: Path,
     novel_id: str,
     parts: Any,
@@ -220,7 +223,7 @@ def process_relation_graph(
     on_relation: Callable[[str, dict[str, Any]], None],
     assert_run_not_stopped: Callable[..., None],
     write_json: Callable[[Path, dict[str, Any]], None],
-    load_manifest: Callable[[Path], dict[str, Any] | None],
+    update_manifest: Callable[[Path, Callable[[dict[str, Any]], dict[str, Any] | None]], dict[str, Any]],
     build_quality_snapshot: Callable[..., dict[str, Any]],
     update_manifest_chunk_progress: Callable[..., None],
     generate_relation_markdown: Callable[..., tuple[str, dict[str, Any]]],
@@ -228,7 +231,7 @@ def process_relation_graph(
     load_relations_source: Callable[[Path], dict[str, Any]],
     export_relations_source: Callable[..., dict[str, Any]],
     utc_now: Callable[[], str],
-    relation_repairs_state: dict[str, Any],
+    relation_repairs_getter: Callable[[dict[str, Any]], dict[str, Any]],
     quality_matched: set[str],
     quality_missing: set[str],
     quality_focus: dict[str, Any],
@@ -243,30 +246,33 @@ def process_relation_graph(
     )
     relation_payload_path = payload_dir / "relation_payload.auto.json"
     write_json(relation_payload_path, relation_payload)
-    current = load_manifest(manifest_path) or manifest_seed
-    current.setdefault("artifacts", {}).setdefault("payloads", {})["relation"] = str(relation_payload_path.resolve())
-    update_manifest_chunk_progress(
-        current,
-        capability="relation",
-        mode=str(relation_payload.get("request", {}).get("chunk_mode", "single")).strip() or "single",
-        chunk_count=int(relation_payload.get("meta", {}).get("chunk_count", 0) or 0),
-        current_chunk=0,
-        current_label="",
-        status="pending",
-        merge_required=bool(relation_payload.get("meta", {}).get("merge_required", False)),
-        merge_status="pending",
-    )
-    current["quality"] = build_quality_snapshot(
-        matched_characters=list(quality_matched),
-        missing_characters=list(quality_missing),
-        strategy=str(relation_payload.get("request", {}).get("excerpt_focus", {}).get("strategy", "character_windows")),
-        excerpt_stages=relation_payload.get("request", {}).get("excerpt_stages", {}),
-        character_focus=quality_focus,
-        profile_repairs={"count": len(profile_repair_characters), "characters": profile_repair_characters},
-        relation_repairs=relation_repairs_state,
-    )
-    current["updated_at"] = utc_now()
-    write_json(manifest_path, current)
+
+    def _update_relation_prepare_manifest(current: dict[str, Any]) -> dict[str, Any]:
+        current.setdefault("artifacts", {}).setdefault("payloads", {})["relation"] = str(relation_payload_path.resolve())
+        update_manifest_chunk_progress(
+            current,
+            capability="relation",
+            mode=str(relation_payload.get("request", {}).get("chunk_mode", "single")).strip() or "single",
+            chunk_count=int(relation_payload.get("meta", {}).get("chunk_count", 0) or 0),
+            current_chunk=0,
+            current_label="",
+            status="pending",
+            merge_required=bool(relation_payload.get("meta", {}).get("merge_required", False)),
+            merge_status="pending",
+        )
+        current["quality"] = build_quality_snapshot(
+            matched_characters=list(quality_matched),
+            missing_characters=list(quality_missing),
+            strategy=str(relation_payload.get("request", {}).get("excerpt_focus", {}).get("strategy", "character_windows")),
+            excerpt_stages=relation_payload.get("request", {}).get("excerpt_stages", {}),
+            character_focus=quality_focus,
+            profile_repairs={"count": len(profile_repair_characters), "characters": profile_repair_characters},
+            relation_repairs=relation_repairs_getter(current),
+        )
+        current["updated_at"] = utc_now()
+        return current
+
+    update_manifest(manifest_path, _update_relation_prepare_manifest)
 
     assert_run_not_stopped(manifest_path, message="这次蒸馏已停止，关系图未继续生成。")
     on_relation("rendering_graph", {})
@@ -308,35 +314,38 @@ def process_relation_graph(
 
     assert_run_not_stopped(manifest_path, message="这次蒸馏已停止，关系图未继续落盘。")
     graph_payload = export_relations_source(relations_file, novel_id=novel_id, manifest_path=manifest_path)
-    current = load_manifest(manifest_path) or manifest_seed
-    current.setdefault("artifacts", {})["relation_graph"] = dict(graph_payload)
-    update_manifest_chunk_progress(
-        current,
-        capability="relation",
-        mode="chunked" if bool(relation_chunk_meta.get("chunked", False)) else "single",
-        chunk_count=int(relation_chunk_meta.get("chunk_count", 1) or 1),
-        current_chunk=int(relation_chunk_meta.get("chunk_count", 1) or 1)
-        if bool(relation_chunk_meta.get("chunked", False))
-        else 0,
-        current_label="关系图谱完成" if bool(relation_chunk_meta.get("chunked", False)) else "",
-        status="complete",
-        merge_required=bool(relation_chunk_meta.get("chunked", False)),
-        merge_status="complete" if bool(relation_chunk_meta.get("chunked", False)) else "pending",
-    )
-    current["quality"] = build_quality_snapshot(
-        matched_characters=list(quality_matched),
-        missing_characters=list(quality_missing),
-        strategy=str(relation_payload.get("request", {}).get("excerpt_focus", {}).get("strategy", "character_windows")),
-        excerpt_stages=relation_payload.get("request", {}).get("excerpt_stages", {}),
-        character_focus=quality_focus,
-        profile_repairs={"count": len(profile_repair_characters), "characters": profile_repair_characters},
-        relation_repairs={
-            "count": 1 if repaired_relations is not None else 0,
-            "pairs": relation_repair_pairs,
-            "chunked": bool(relation_chunk_meta.get("chunked", False)),
-            "chunk_count": int(relation_chunk_meta.get("chunk_count", 1) or 1),
-        },
-    )
-    current["updated_at"] = utc_now()
-    write_json(manifest_path, current)
+
+    def _update_relation_complete_manifest(current: dict[str, Any]) -> dict[str, Any]:
+        current.setdefault("artifacts", {})["relation_graph"] = dict(graph_payload)
+        update_manifest_chunk_progress(
+            current,
+            capability="relation",
+            mode="chunked" if bool(relation_chunk_meta.get("chunked", False)) else "single",
+            chunk_count=int(relation_chunk_meta.get("chunk_count", 1) or 1),
+            current_chunk=int(relation_chunk_meta.get("chunk_count", 1) or 1)
+            if bool(relation_chunk_meta.get("chunked", False))
+            else 0,
+            current_label="关系图谱完成" if bool(relation_chunk_meta.get("chunked", False)) else "",
+            status="complete",
+            merge_required=bool(relation_chunk_meta.get("chunked", False)),
+            merge_status="complete" if bool(relation_chunk_meta.get("chunked", False)) else "pending",
+        )
+        current["quality"] = build_quality_snapshot(
+            matched_characters=list(quality_matched),
+            missing_characters=list(quality_missing),
+            strategy=str(relation_payload.get("request", {}).get("excerpt_focus", {}).get("strategy", "character_windows")),
+            excerpt_stages=relation_payload.get("request", {}).get("excerpt_stages", {}),
+            character_focus=quality_focus,
+            profile_repairs={"count": len(profile_repair_characters), "characters": profile_repair_characters},
+            relation_repairs={
+                "count": 1 if repaired_relations is not None else 0,
+                "pairs": relation_repair_pairs,
+                "chunked": bool(relation_chunk_meta.get("chunked", False)),
+                "chunk_count": int(relation_chunk_meta.get("chunk_count", 1) or 1),
+            },
+        )
+        current["updated_at"] = utc_now()
+        return current
+
+    update_manifest(manifest_path, _update_relation_complete_manifest)
     on_relation("graph_done", {})

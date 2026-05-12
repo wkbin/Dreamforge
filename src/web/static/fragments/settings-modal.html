@@ -2,68 +2,70 @@
   <div class="modal-backdrop" data-close-modal="true"></div>
   <div class="modal-card">
     <div class="modal-scroll">
-      <form id="model-settings-form" class="stack-form">
-        <section id="connection-details" class="connection-details">
-          <label class="field-card">
-            <span>故事声源</span>
-            <select id="model-provider" class="native-hidden">
-              <option value="openai-compatible">通用接口</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="ollama">Ollama</option>
-            </select>
-            <div id="model-provider-options" class="choice-deck provider-deck modal-choice-deck">
-              <button type="button" class="choice-card compact-choice-card" data-value="openai-compatible">
-                <strong>通用接口</strong>
-                <span>适合大多数兼容 OpenAI 的声源</span>
-              </button>
-              <button type="button" class="choice-card compact-choice-card" data-value="openai">
-                <strong>OpenAI</strong>
-                <span>直接连到 OpenAI 官方接口</span>
-              </button>
-              <button type="button" class="choice-card compact-choice-card" data-value="anthropic">
-                <strong>Anthropic</strong>
-                <span>用 Claude 系列声源继续故事</span>
-              </button>
-              <button type="button" class="choice-card compact-choice-card" data-value="ollama">
-                <strong>Ollama</strong>
-                <span>连接本地已运行的模型服务</span>
-              </button>
+      <div id="model-settings-vue-root" class="model-settings-vue-root hidden"></div>
+      <div id="model-settings-legacy">
+        <form id="model-settings-form" class="stack-form">
+          <section id="connection-details" class="connection-details">
+            <label class="field-card">
+              <span>故事声源</span>
+              <select id="model-provider" class="native-hidden">
+                <option value="openai-compatible">通用接口</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="ollama">Ollama</option>
+              </select>
+              <div id="model-provider-options" class="choice-deck provider-deck modal-choice-deck">
+                <button type="button" class="choice-card compact-choice-card" data-value="openai-compatible">
+                  <strong>通用接口</strong>
+                  <span>适合大多数兼容 OpenAI 的声源</span>
+                </button>
+                <button type="button" class="choice-card compact-choice-card" data-value="openai">
+                  <strong>OpenAI</strong>
+                  <span>直接连到 OpenAI 官方接口</span>
+                </button>
+                <button type="button" class="choice-card compact-choice-card" data-value="anthropic">
+                  <strong>Anthropic</strong>
+                  <span>用 Claude 系列声源继续故事</span>
+                </button>
+                <button type="button" class="choice-card compact-choice-card" data-value="ollama">
+                  <strong>Ollama</strong>
+                  <span>连接本地已运行的模型服务</span>
+                </button>
+              </div>
+            </label>
+
+            <div class="mini-grid">
+              <label class="field-card">
+                <span>声源名</span>
+                <input id="model-name" type="text" placeholder="例如：deepseek-chat / gpt-4.1 / qwen2.5:14b" />
+              </label>
+              <label class="field-card">
+                <span>入口地址</span>
+                <input id="model-base-url" type="text" placeholder="例如：https://api.openai.com/v1" />
+              </label>
             </div>
-          </label>
 
-          <div class="mini-grid">
-            <label class="field-card">
-              <span>声源名</span>
-              <input id="model-name" type="text" placeholder="例如：deepseek-chat / gpt-4.1 / qwen2.5:14b" />
-            </label>
-            <label class="field-card">
-              <span>入口地址</span>
-              <input id="model-base-url" type="text" placeholder="例如：https://api.openai.com/v1" />
-            </label>
+            <div class="mini-grid">
+              <label class="field-card">
+                <span>通信密钥</span>
+                <input id="model-api-key" type="password" placeholder="把密钥放在这里，故事才会真正开口" />
+                <small id="model-api-key-hint">留空时会沿用已经保存的密钥。</small>
+              </label>
+              <label class="field-card">
+                <span>单次输出上限</span>
+                <input id="model-max-tokens" type="number" min="0" max="16000" step="100" placeholder="留空或填 0，则沿用推荐值" />
+                <small id="model-max-tokens-hint">未另设时会沿用当前默认值。</small>
+              </label>
+            </div>
+          </section>
+
+          <div class="card-actions">
+            <button id="close-settings-button" type="button" class="soft-button">稍后再说</button>
+            <button id="save-model-settings-button" type="submit" class="primary-button">保存</button>
           </div>
-
-          <div class="mini-grid">
-            <label class="field-card">
-              <span>通信密钥</span>
-              <input id="model-api-key" type="password" placeholder="把密钥放在这里，故事才会真正开口" />
-              <small id="model-api-key-hint">留空时会沿用已经保存的密钥。</small>
-            </label>
-            <label class="field-card">
-              <span>单次输出上限</span>
-              <input id="model-max-tokens" type="number" min="0" max="16000" step="100" placeholder="留空或填 0，则沿用推荐值" />
-              <small id="model-max-tokens-hint">未另设时会沿用当前默认值。</small>
-            </label>
-          </div>
-        </section>
-
-        <div class="card-actions">
-          <button id="close-settings-button" type="button" class="soft-button">稍后再说</button>
-          <button id="save-model-settings-button" type="submit" class="primary-button">保存</button>
-        </div>
-      </form>
-
-      <p id="model-settings-status" class="card-note"></p>
+        </form>
+        <p id="model-settings-status" class="card-note"></p>
+      </div>
     </div>
   </div>
 </div>
@@ -80,6 +82,7 @@
       <button id="close-persona-review-button" type="button" class="soft-button">先放一放</button>
     </div>
     <div class="modal-scroll">
+      <div id="persona-review-vue-root" class="persona-review-vue-root hidden"></div>
       <form id="persona-review-form" class="stack-form">
         <label class="field-card">
           <span>当前人物</span>
@@ -347,6 +350,7 @@
       <button id="close-self-card-button" type="button" class="soft-button">先放一放</button>
     </div>
     <div class="modal-scroll">
+      <div id="self-card-vue-root" class="self-card-vue-root hidden"></div>
       <form id="self-card-form" class="stack-form">
         <input id="self-card-id" type="hidden" value="" />
 
@@ -573,6 +577,7 @@
       <button id="close-relation-details-button" type="button" class="soft-button">稍后再看</button>
     </div>
     <div class="modal-scroll">
+      <div id="relation-details-vue-root" class="relation-details-vue-root hidden"></div>
       <div id="relation-details-list" class="relation-details-list"></div>
       <p id="relation-details-status" class="card-note"></p>
     </div>

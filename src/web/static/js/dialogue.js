@@ -1,3 +1,8 @@
+(() => {
+const existingDialogueModule = window.__ZAOMENG_DIALOGUE_MODULE__;
+if (existingDialogueModule?.initialized) {
+  return;
+}
 function scrollTranscriptToBottom() {
   const root = el("dialogue-transcript");
   if (!root) return;
@@ -334,6 +339,61 @@ function renderSessionBooting(mode, participants) {
   renderTranscript(items);
 }
 
+function runDetailActionsForDialogue() {
+  const tools = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
+  if (typeof tools.readLegacyActionBridge === "function") {
+    return tools.readLegacyActionBridge("__ZAOMENG_RUN_DETAIL_ACTIONS__");
+  }
+  return window.__ZAOMENG_RUN_DETAIL_ACTIONS__ || {};
+}
+
+function renderRunFallbackForDialogue(run) {
+  if (!run || typeof run !== "object") {
+    return null;
+  }
+  currentRunId = String(run.run_id || currentRunId || "").trim();
+  currentRun = run;
+  newRunFlowOpen = false;
+  characterOverviewOpen = false;
+  currentCharacterOverview = null;
+  redistillPanelOpen = false;
+  sourceHistoryExpanded = false;
+  characterReadinessExpanded = false;
+  workSessionPreviewExpanded = false;
+  runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
+  if (typeof renderBookshelfDetail === "function") {
+    renderBookshelfDetail(run);
+  }
+  if (typeof syncBookshelfSelection === "function") {
+    syncBookshelfSelection();
+  }
+  if (typeof updateWorkflowState === "function") {
+    updateWorkflowState();
+  }
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("dialogue-run-rendered-fallback");
+  }
+  return run;
+}
+
+function ensureRunReadyForDialogue(run, options = {}) {
+  if (typeof window.__ZAOMENG_APPLY_RUN_VIEW__ === "function") {
+    window.__ZAOMENG_APPLY_RUN_VIEW__(run, options);
+    return true;
+  }
+  const actions = runDetailActionsForDialogue();
+  if (typeof actions.renderRunView === "function") {
+    actions.renderRunView(run, options);
+    return true;
+  }
+  if (typeof window.renderRun === "function") {
+    window.renderRun(run, options);
+    return true;
+  }
+  renderRunFallbackForDialogue(run);
+  return false;
+}
+
 function buildOptimisticTranscript(session, message, messageKind = "dialogue") {
   const transcript = Array.isArray(session?.transcript) ? [...session.transcript] : [];
   const mode = session?.mode || session?.session_card?.mode || "observe";
@@ -385,6 +445,9 @@ async function renderDialogueSession(session) {
   renderDialogueTranscript(session);
   await loadRecentSessions();
   updateWorkflowState();
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("dialogue-session-rendered");
+  }
   scrollTranscriptToBottom();
   el("dialogue-message")?.focus();
 }
@@ -497,6 +560,10 @@ async function loadRecentSessions() {
       button.appendChild(mode);
       button.appendChild(meta);
       button.addEventListener("click", async () => {
+        const previousRunId = currentRunId;
+        const previousRun = currentRun;
+        const previousSessionId = currentDialogueSessionId;
+        const previousSession = currentDialogueSession;
         currentRunId = item.run_id || currentRunId;
         currentDialogueSessionId = item.session_id || "";
         currentDialogueSession = null;
@@ -505,12 +572,32 @@ async function loadRecentSessions() {
         setSessionBadge("入场中");
         renderSessionBooting(item.mode, item.participants || []);
         updateWorkflowState();
-        const [run, session] = await Promise.all([
-          apiJson(`/api/web/runs/${item.run_id}`),
-          apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
-        ]);
-        renderRun(run, { preserveDialogue: true, suppressWorkflowUpdate: true });
-        await renderDialogueSession(session);
+        try {
+          const [run, session] = await Promise.all([
+            apiJson(`/api/web/runs/${item.run_id}`),
+            apiJson(`/api/web/runs/${item.run_id}/dialogue/sessions/${item.session_id}`),
+          ]);
+          ensureRunReadyForDialogue(run, { preserveDialogue: true, suppressWorkflowUpdate: true });
+          await renderDialogueSession(session);
+        } catch (error) {
+          currentRunId = previousRunId;
+          currentRun = previousRun;
+          currentDialogueSessionId = previousSessionId;
+          currentDialogueSession = previousSession;
+          sessionBooting = false;
+          if (previousSession) {
+            renderDialogueMemory(previousSession);
+            renderDialogueTranscript(previousSession);
+            setComposerEnabled(true);
+            setSessionBadge("对话中");
+          } else if (typeof resetDialogueView === "function") {
+            resetDialogueView();
+          }
+          if (typeof updateWorkflowState === "function") {
+            updateWorkflowState();
+          }
+          setStatus("dialogue-session-status", error.message || "这段会话暂时没有载入成功。");
+        }
       });
 
       const removeButton = document.createElement("button");
@@ -587,4 +674,31 @@ async function loadLatestRun() {
   if (!preferred?.run_id) return null;
   return apiJson(`/api/web/runs/${preferred.run_id}`);
 }
+window.scrollTranscriptToBottom = scrollTranscriptToBottom;
+window.applySessionListViewportLock = applySessionListViewportLock;
+window.appendStyledMessageContent = appendStyledMessageContent;
+window.createMessageBubble = createMessageBubble;
+window.buildSessionMetaMessage = buildSessionMetaMessage;
+window.renderDialogueTranscript = renderDialogueTranscript;
+window.trimInlineMessage = trimInlineMessage;
+window.buildDialogueMemorySnapshot = buildDialogueMemorySnapshot;
+window.renderDialogueMemory = renderDialogueMemory;
+window.buildDialogueMemoryClipboardText = buildDialogueMemoryClipboardText;
+window.copyDialogueMemorySummary = copyDialogueMemorySummary;
+window.toggleDialogueMemory = toggleDialogueMemory;
+window.renderTranscript = renderTranscript;
+window.renderSessionBooting = renderSessionBooting;
+window.runDetailActionsForDialogue = runDetailActionsForDialogue;
+window.renderRunFallbackForDialogue = renderRunFallbackForDialogue;
+window.ensureRunReadyForDialogue = ensureRunReadyForDialogue;
+window.buildOptimisticTranscript = buildOptimisticTranscript;
+window.latestSessionSnippetFromTranscript = latestSessionSnippetFromTranscript;
+window.renderDialogueSession = renderDialogueSession;
+window.loadRecentSessions = loadRecentSessions;
+window.loadLatestRun = loadLatestRun;
+window.__ZAOMENG_DIALOGUE_MODULE__ = {
+  initialized: true,
+  version: String(window.__ZAOMENG_WEB_UI_VERSION__ || ""),
+};
+})();
 

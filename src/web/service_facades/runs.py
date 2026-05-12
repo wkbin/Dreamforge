@@ -74,24 +74,22 @@ class RunServiceMixin:
 
     def refresh_run(self, run_id: str) -> dict[str, Any]:
         manifest_path = self._manifest_path(run_id)
-        manifest = self._load_manifest(manifest_path)
-        if not manifest:
-            raise FileNotFoundError(run_id)
-        refreshed = refresh_run_manifest(
-            manifest,
-            discover_artifacts=self._discover_artifacts,
-            utc_now=_utc_now,
+        refreshed = self._update_manifest(
+            manifest_path,
+            lambda current: refresh_run_manifest(
+                current,
+                discover_artifacts=self._discover_artifacts,
+                utc_now=_utc_now,
+            ),
         )
-        self._write_json(manifest_path, refreshed)
         return self._serialize_manifest(refreshed)
 
     def stop_run(self, run_id: str) -> dict[str, Any]:
         manifest_path = self._manifest_path(run_id)
-        manifest = self._load_manifest(manifest_path)
-        if not manifest:
-            raise FileNotFoundError(run_id)
-        manifest = stop_run_manifest(manifest, utc_now=_utc_now)
-        self._write_json(manifest_path, manifest)
+        manifest = self._update_manifest(
+            manifest_path,
+            lambda current: stop_run_manifest(current, utc_now=_utc_now),
+        )
         return self._serialize_manifest(manifest)
 
     def delete_run_group(self, run_id: str) -> dict[str, Any]:

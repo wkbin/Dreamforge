@@ -278,6 +278,20 @@
   background: rgba(255, 252, 248, 0.88);
 }
 
+.composer-vue-root {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.composer-vue-shell {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.composer-vue-shell .quick-reply-row {
+  padding: 2px 10px 4px;
+}
+
 .quick-reply-row {
   display: flex;
   flex-wrap: wrap;
@@ -426,6 +440,11 @@
 .send-button:hover {
   transform: translateY(-1px);
   background: linear-gradient(180deg, #ce9a86 0%, #ba7962 100%);
+}
+
+#turn-stage.has-vue-island > .composer-card > #observe-quick-replies,
+#turn-stage.has-vue-island > .composer-card > .composer-main {
+  display: none !important;
 }
 
 .composer-icon-button:disabled,

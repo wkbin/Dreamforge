@@ -25,6 +25,110 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _apply_distill_progress_update(
+    current: dict[str, Any],
+    *,
+    stage: str,
+    payload: dict[str, Any],
+    utc_now,
+) -> dict[str, Any]:
+    apply_distill_progress(
+        current,
+        stage=stage,
+        payload=payload,
+        utc_now=utc_now,
+        update_manifest_chunk_progress=update_manifest_chunk_progress,
+    )
+    return current
+
+
+def _apply_relation_progress_update(
+    current: dict[str, Any],
+    *,
+    stage: str,
+    payload: dict[str, Any],
+    utc_now,
+) -> dict[str, Any]:
+    apply_relation_progress(
+        current,
+        stage=stage,
+        payload=payload,
+        utc_now=utc_now,
+        update_manifest_chunk_progress=update_manifest_chunk_progress,
+    )
+    return current
+
+
+def _apply_finalize_success_update(
+    current: dict[str, Any],
+    *,
+    utc_now,
+    finalize_manifest_timing,
+    discover_artifacts,
+) -> dict[str, Any]:
+    refreshed = discover_artifacts(current)
+    finalize_workflow_success(
+        refreshed,
+        utc_now=utc_now,
+        finalize_manifest_timing=finalize_manifest_timing,
+    )
+    return refreshed
+
+
+def _apply_finalize_success_without_graph_update(
+    current: dict[str, Any],
+    *,
+    graph_error: str,
+    utc_now,
+    finalize_manifest_timing,
+    discover_artifacts,
+) -> dict[str, Any]:
+    refreshed = discover_artifacts(current)
+    finalize_workflow_success_without_graph(
+        refreshed,
+        graph_error=graph_error,
+        utc_now=utc_now,
+        finalize_manifest_timing=finalize_manifest_timing,
+    )
+    return refreshed
+
+
+def _apply_finalize_stopped_update(
+    current: dict[str, Any],
+    *,
+    message: str,
+    utc_now,
+    finalize_manifest_timing,
+    discover_artifacts,
+) -> dict[str, Any]:
+    stopped = discover_artifacts(current)
+    finalize_workflow_stopped(
+        stopped,
+        message=message,
+        utc_now=utc_now,
+        finalize_manifest_timing=finalize_manifest_timing,
+    )
+    return stopped
+
+
+def _apply_finalize_failed_update(
+    current: dict[str, Any],
+    *,
+    message: str,
+    utc_now,
+    finalize_manifest_timing,
+    discover_artifacts,
+) -> dict[str, Any]:
+    failed = discover_artifacts(current)
+    finalize_workflow_failed(
+        failed,
+        message=message,
+        utc_now=utc_now,
+        finalize_manifest_timing=finalize_manifest_timing,
+    )
+    return failed
+
+
 class AutomaticPipelineMixin:
     def _run_automatic_pipeline(
         self,
@@ -47,26 +151,26 @@ class AutomaticPipelineMixin:
         stopped_error_type = self.STOPPED_ERROR_TYPE
 
         def on_distill(stage: str, payload: dict[str, Any]) -> None:
-            current = self._load_manifest(manifest_path) or manifest
-            apply_distill_progress(
-                current,
-                stage=stage,
-                payload=payload,
-                utc_now=_utc_now,
-                update_manifest_chunk_progress=update_manifest_chunk_progress,
+            self._update_manifest(
+                manifest_path,
+                lambda current: _apply_distill_progress_update(
+                    current,
+                    stage=stage,
+                    payload=payload,
+                    utc_now=_utc_now,
+                ),
             )
-            self._write_json(manifest_path, current)
 
         def on_relation(stage: str, payload: dict[str, Any]) -> None:
-            current = self._load_manifest(manifest_path) or manifest
-            apply_relation_progress(
-                current,
-                stage=stage,
-                payload=payload,
-                utc_now=_utc_now,
-                update_manifest_chunk_progress=update_manifest_chunk_progress,
+            self._update_manifest(
+                manifest_path,
+                lambda current: _apply_relation_progress_update(
+                    current,
+                    stage=stage,
+                    payload=payload,
+                    utc_now=_utc_now,
+                ),
             )
-            self._write_json(manifest_path, current)
 
         try:
             if not hasattr(parts.llm, "chat_completion"):
@@ -104,13 +208,12 @@ class AutomaticPipelineMixin:
                     novel_id=novel_id,
                     parts=parts,
                     config=config,
-                    manifest_seed=manifest,
                     max_sentences=max_sentences,
                     max_chars=max_chars,
                     on_distill=on_distill,
                     assert_run_not_stopped=self._assert_run_not_stopped,
                     write_json=self._write_json,
-                    load_manifest=self._load_manifest,
+                    update_manifest=self._update_manifest,
                     generate_character_profile_markdown=self._generate_character_profile_markdown,
                     maybe_repair_generated_profile=self._maybe_repair_generated_profile,
                     finalize_generated_profile_source=self._finalize_generated_profile_source,
@@ -131,8 +234,6 @@ class AutomaticPipelineMixin:
                         "profile_repair_characters": profile_repair_characters,
                     },
                 )
-
-            refreshed = self._discover_artifacts(self._load_manifest(manifest_path) or manifest)
             try:
                 process_relation_graph(
                     novel_path=novel_path,
@@ -140,7 +241,6 @@ class AutomaticPipelineMixin:
                     max_sentences=max_sentences,
                     max_chars=max_chars,
                     manifest_path=manifest_path,
-                    manifest_seed=manifest,
                     payload_dir=payload_dir,
                     novel_id=novel_id,
                     parts=parts,
@@ -148,7 +248,7 @@ class AutomaticPipelineMixin:
                     on_relation=on_relation,
                     assert_run_not_stopped=self._assert_run_not_stopped,
                     write_json=self._write_json,
-                    load_manifest=self._load_manifest,
+                    update_manifest=self._update_manifest,
                     build_quality_snapshot=self._build_quality_snapshot,
                     update_manifest_chunk_progress=update_manifest_chunk_progress,
                     generate_relation_markdown=self._generate_relation_markdown,
@@ -156,47 +256,68 @@ class AutomaticPipelineMixin:
                     load_relations_source=load_relations_source,
                     export_relations_source=export_relations_source,
                     utc_now=_utc_now,
-                    relation_repairs_state=(manifest.get("quality", {}) or {}).get("relation_repairs", {}),
+                    relation_repairs_getter=lambda current: (current.get("quality", {}) or {}).get("relation_repairs", {}),
                     quality_matched=quality_matched,
                     quality_missing=quality_missing,
                     quality_focus=quality_focus,
                     profile_repair_characters=profile_repair_characters,
                 )
-                refreshed = self._discover_artifacts(self._load_manifest(manifest_path) or manifest)
-                finalize_workflow_success(
-                    refreshed,
-                    utc_now=_utc_now,
-                    finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(target, outcome=outcome),
+                refreshed = self._update_manifest(
+                    manifest_path,
+                    lambda current: _apply_finalize_success_update(
+                        current,
+                        utc_now=_utc_now,
+                        discover_artifacts=self._discover_artifacts,
+                        finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(
+                            target,
+                            outcome=outcome,
+                        ),
+                    ),
                 )
             except stopped_error_type:
                 raise
             except Exception as relation_exc:
-                refreshed = self._discover_artifacts(self._load_manifest(manifest_path) or manifest)
-                finalize_workflow_success_without_graph(
-                    refreshed,
-                    graph_error=str(relation_exc),
-                    utc_now=_utc_now,
-                    finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(target, outcome=outcome),
+                refreshed = self._update_manifest(
+                    manifest_path,
+                    lambda current: _apply_finalize_success_without_graph_update(
+                        current,
+                        graph_error=str(relation_exc),
+                        utc_now=_utc_now,
+                        discover_artifacts=self._discover_artifacts,
+                        finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(
+                            target,
+                            outcome=outcome,
+                        ),
+                    ),
                 )
-            self._write_json(manifest_path, refreshed)
             return self._serialize_manifest(refreshed)
         except stopped_error_type as exc:
-            stopped = self._load_manifest(manifest_path) or manifest
-            finalize_workflow_stopped(
-                stopped,
-                message=str(exc),
-                utc_now=_utc_now,
-                finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(target, outcome=outcome),
+            stopped = self._update_manifest(
+                manifest_path,
+                lambda current: _apply_finalize_stopped_update(
+                    current,
+                    message=str(exc),
+                    utc_now=_utc_now,
+                    discover_artifacts=self._discover_artifacts,
+                    finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(
+                        target,
+                        outcome=outcome,
+                    ),
+                ),
             )
-            self._write_json(manifest_path, stopped)
             return self._serialize_manifest(stopped)
         except Exception as exc:
-            failed = self._load_manifest(manifest_path) or manifest
-            finalize_workflow_failed(
-                failed,
-                message=str(exc),
-                utc_now=_utc_now,
-                finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(target, outcome=outcome),
+            self._update_manifest(
+                manifest_path,
+                lambda current: _apply_finalize_failed_update(
+                    current,
+                    message=str(exc),
+                    utc_now=_utc_now,
+                    discover_artifacts=self._discover_artifacts,
+                    finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(
+                        target,
+                        outcome=outcome,
+                    ),
+                ),
             )
-            self._write_json(manifest_path, failed)
             raise

@@ -58,9 +58,12 @@ function applyModelSettingsView() {
   toggle("model-summary", modelSettings.configured);
   syncChoiceGroup("model-provider-options", "model-provider");
   syncTopbar();
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("model-settings-view");
+  }
 }
 
-function updateWorkflowState() {
+function buildWorkflowVisibilityState() {
   const configured = Boolean(modelSettings.configured);
   const hasRun = Boolean(currentRunId && currentRun);
   const hasCharacters = Boolean(currentRun?.artifact_index?.characters?.length);
@@ -73,18 +76,41 @@ function updateWorkflowState() {
   const showCharacterOverview = configured && hasRun && characterOverviewOpen && !hasSession && !sessionBooting;
   const showProgress = configured && hasRun && !chatModePickerOpen && !showCharacterOverview && !hasSession && !sessionBooting;
   const showChatSetup = configured && hasCharacters && chatModePickerOpen && !hasSession && !sessionBooting;
+  return {
+    configured,
+    hasRun,
+    hasCharacters,
+    hasSession,
+    failed,
+    workflowBootPending: Boolean(workflowBootPending),
+    showModel,
+    showBookshelf,
+    showDistill,
+    showCharacterOverview,
+    showProgress,
+    showChatSetup,
+    sessionBooting: Boolean(sessionBooting),
+    newRunFlowOpen: Boolean(newRunFlowOpen),
+    chatModePickerOpen: Boolean(chatModePickerOpen),
+    characterOverviewOpen: Boolean(characterOverviewOpen),
+    redistillPanelOpen: Boolean(redistillPanelOpen),
+  };
+}
 
-  toggle("step-model", showModel);
-  toggle("bookshelf-section", showBookshelf);
-  toggle("step-distill", showDistill);
-  toggle("step-progress", showProgress);
-  toggle("step-character-overview", showCharacterOverview);
-  toggle("redistill-panel", showProgress && redistillPanelOpen);
-  toggle("step-chat-setup", showChatSetup);
-  toggle("turn-stage", configured && hasSession && !sessionBooting);
-  toggle("dialogue-empty", !hasSession);
-  toggle("dialogue-detail", hasSession);
-  toggle("workflow-strip", !(hasSession || sessionBooting));
+function updateWorkflowState() {
+  const state = buildWorkflowVisibilityState();
+
+  toggle("step-model", state.showModel);
+  toggle("bookshelf-section", state.showBookshelf);
+  toggle("step-distill", state.showDistill);
+  toggle("step-progress", state.showProgress);
+  toggle("step-character-overview", state.showCharacterOverview);
+  toggle("redistill-panel", state.showProgress && state.redistillPanelOpen);
+  toggle("step-chat-setup", state.showChatSetup);
+  toggle("turn-stage", state.configured && state.hasSession && !state.sessionBooting);
+  toggle("dialogue-empty", !state.hasSession);
+  toggle("dialogue-detail", state.hasSession);
+  toggle("workflow-strip", !state.workflowBootPending && !(state.hasSession || state.sessionBooting));
 
   const workflowStrip = el("workflow-strip");
   if (workflowStrip) {
@@ -93,15 +119,68 @@ function updateWorkflowState() {
     ).length;
     const showSingleStage = visibleCount <= 1;
     workflowStrip.classList.toggle("single-stage", showSingleStage);
+    state.visibleStageCount = visibleCount;
+    state.showSingleStage = showSingleStage;
   }
 
   const experienceShell = el("experience-shell");
   if (experienceShell) {
-    experienceShell.classList.toggle("dialogue-layout", hasSession || sessionBooting);
+    experienceShell.classList.toggle("dialogue-layout", state.hasSession || state.sessionBooting);
   }
 
+  window.__ZAOMENG_WORKFLOW_STATE__ = state;
   syncTopbar();
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("workflow-update", { workflow: state });
+  }
 }
+
+function applyRunViewFallback(run, options = {}) {
+  if (!run || typeof run !== "object") {
+    return null;
+  }
+  currentRunId = String(run.run_id || currentRunId || "").trim();
+  currentRun = run;
+  newRunFlowOpen = false;
+  chatModePickerOpen = false;
+  characterOverviewOpen = false;
+  currentCharacterOverview = null;
+  redistillPanelOpen = false;
+  sourceHistoryExpanded = false;
+  characterReadinessExpanded = false;
+  workSessionPreviewExpanded = false;
+  runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
+  if (!options.preserveDialogue) {
+    resetDialogueView();
+  }
+  if (typeof renderBookshelfDetail === "function") {
+    renderBookshelfDetail(run);
+  }
+  if (typeof syncBookshelfSelection === "function") {
+    syncBookshelfSelection();
+  }
+  updateWorkflowState();
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("run-rendered-workflow-fallback");
+  }
+  return run;
+}
+
+function applyRunView(run, options = {}) {
+  const actions = window.__ZAOMENG_RUN_DETAIL_ACTIONS__ || {};
+  if (typeof actions.renderRunView === "function") {
+    actions.renderRunView(run, options);
+    return true;
+  }
+  if (typeof window.renderRun === "function") {
+    window.renderRun(run, options);
+    return true;
+  }
+  applyRunViewFallback(run, options);
+  return false;
+}
+
+window.__ZAOMENG_APPLY_RUN_VIEW__ = applyRunView;
 
 async function openNewDialogueSession() {
   let run = currentRun;
@@ -111,7 +190,7 @@ async function openNewDialogueSession() {
       return null;
     });
     if (run?.run_id) {
-      renderRun(run);
+      applyRunView(run);
     }
   }
   if (!run?.run_id) {
@@ -120,7 +199,7 @@ async function openNewDialogueSession() {
     return;
   }
   if (!run?.artifact_index?.characters?.length) {
-    renderRun(run);
+    applyRunView(run);
     setStatus("redistill-status", "这一卷还没有可入场的人物，等人物先整理出来。");
     return;
   }
@@ -130,6 +209,9 @@ async function openNewDialogueSession() {
   characterOverviewOpen = false;
   maybePrefillChatSetup(run);
   updateWorkflowState();
+  if (typeof publishChatSetupState === "function") {
+    publishChatSetupState("chat-setup-opened");
+  }
   el("dialogue-participants")?.focus();
 }
 
@@ -139,6 +221,9 @@ async function loadModelSettings() {
   updateWorkflowState();
   if (!modelSettings.configured) {
     openSettingsModal();
+  }
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("model-settings-loaded");
   }
 }
 
@@ -161,5 +246,8 @@ function resetDialogueView() {
   if (typeof renderObserveQuickReplies === "function") renderObserveQuickReplies(null);
   resizeComposer();
   setComposerEnabled(false);
+  if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("dialogue-reset");
+  }
 }
 

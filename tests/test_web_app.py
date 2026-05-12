@@ -2,12 +2,15 @@ import base64
 import json
 import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock, patch
 
 from src.core.exceptions import LLMRequestError
 from src.web.chat.helpers import parse_dialogue_suggestion
+from src.web.pipeline import process_relation_graph, update_manifest_chunk_progress
 from src.web.review.persona_completion import collect_persona_web_references
 from src.web.workflow import WebRunService
 
@@ -624,6 +627,19 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertTrue(finished["reload_required"])
             self.assertFalse(finished["update_available"])
 
+    def test_get_app_update_status_ignores_non_utf8_launcher_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            fake_launcher = Path(tmp) / "zaomeng-binary"
+            fake_launcher.write_bytes(b"\x00\xff\x00\xff")
+            service._launcher_path_hint = str(fake_launcher)
+
+            status = service.get_app_update_status(force_check=True)
+
+            self.assertEqual(status["status"], "unsupported")
+            self.assertFalse(status["supported"])
+            self.assertEqual(status["launcher_path"], "")
+
     def test_create_run_builds_manifest_and_payloads(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
@@ -1102,6 +1118,548 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(payload["summary"]["status_text"], "stopped")
             self.assertEqual(payload["progress"]["stage"], "stopped")
             self.assertIn("魏无羡", payload["progress"]["message"])
+
+    def test_write_json_preserves_stop_requested_from_existing_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            run_id = "run-preserve-stop"
+            run_dir = Path(tmp) / "runs" / run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = run_dir / "run_manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "status": "running",
+                        "control": {
+                            "stop_requested": True,
+                            "stop_requested_at": "2026-05-11T10:00:00Z",
+                            "stop_acknowledged_at": "",
+                        },
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            stale_payload = {
+                "run_id": run_id,
+                "status": "running",
+                "control": {
+                    "stop_requested": False,
+                    "stop_requested_at": "",
+                    "stop_acknowledged_at": "",
+                },
+            }
+            service._write_json(manifest_path, stale_payload)
+            merged = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+            self.assertTrue(merged["control"]["stop_requested"])
+            self.assertEqual(merged["control"]["stop_requested_at"], "2026-05-11T10:00:00Z")
+
+    def test_stop_run_updates_latest_manifest_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            with patch.object(service, "_start_background_run"):
+                run = service.create_run(
+                    novel_name="hongloumeng.txt",
+                    novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                    characters=["林黛玉"],
+                    auto_run=True,
+                )
+
+            manifest_path = Path(tmp) / "runs" / run["run_id"] / "run_manifest.json"
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            payload.setdefault("progress", {})["current_character"] = "林黛玉"
+            payload["updated_at"] = "2026-05-11T12:00:00Z"
+            manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            stale_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            stale_manifest["progress"]["current_character"] = ""
+            stale_manifest["updated_at"] = "2000-01-01T00:00:00Z"
+            stale_manifest.pop("events", None)
+
+            with patch("src.web.service_facades.runs.stop_run_manifest", side_effect=lambda _manifest, *, utc_now: _manifest):
+                with patch.object(service, "_load_manifest", return_value=stale_manifest):
+                    stopped = service.stop_run(run["run_id"])
+
+            self.assertEqual(stopped["progress"]["current_character"], "林黛玉")
+            self.assertEqual(stopped["updated_at"], "2026-05-11T12:00:00Z")
+
+    def test_update_manifest_uses_latest_file_snapshot_under_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            run_id = "run-atomic-update"
+            manifest_path = Path(tmp) / "runs" / run_id / "run_manifest.json"
+            manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "status": "running",
+                        "progress": {"current_character": "林黛玉"},
+                        "updated_at": "2026-05-11T12:00:00Z",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            done = threading.Event()
+            result_holder: dict[str, Any] = {}
+
+            def writer() -> None:
+                def updater(current: dict[str, Any]) -> dict[str, Any]:
+                    current.setdefault("control", {})["stop_requested"] = True
+                    return current
+
+                result_holder["payload"] = service._update_manifest(manifest_path, updater)
+                done.set()
+
+            fresh_payload = {
+                "run_id": run_id,
+                "status": "running",
+                "progress": {"current_character": "薛宝钗"},
+                "updated_at": "2026-05-11T12:01:00Z",
+            }
+            with service._manifest_lock_context(manifest_path):
+                worker = threading.Thread(target=writer)
+                worker.start()
+                manifest_path.write_text(json.dumps(fresh_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            done.wait(timeout=3)
+            worker.join(timeout=3)
+            self.assertFalse(worker.is_alive())
+
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(persisted["progress"]["current_character"], "薛宝钗")
+            self.assertEqual(persisted["updated_at"], "2026-05-11T12:01:00Z")
+            self.assertTrue(bool(persisted.get("control", {}).get("stop_requested", False)))
+            self.assertEqual(result_holder["payload"]["progress"]["current_character"], "薛宝钗")
+
+    def test_start_background_run_uses_latest_manifest_snapshot_under_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            run_id = "run-background-atomic"
+            run_dir = Path(tmp) / "runs" / run_id
+            manifest_path = run_dir / "run_manifest.json"
+            novel_path = run_dir / "input" / "novel.txt"
+            novel_path.parent.mkdir(parents=True, exist_ok=True)
+            novel_path.write_text("Alpha meets Beta.", encoding="utf-8")
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "status": "running",
+                        "progress": {"stage": "characters_locked", "message": "ready"},
+                        "summary": {"status_text": "ready"},
+                        "updated_at": "2026-05-11T12:00:00Z",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            finished = threading.Event()
+
+            def worker() -> None:
+                with patch("src.web.service_facades.runtime_support.start_background_thread"):
+                    service._start_background_run(
+                        manifest_path=manifest_path,
+                        novel_path=novel_path,
+                        locked_characters=["Alpha"],
+                        max_sentences=120,
+                        max_chars=50000,
+                    )
+                finished.set()
+
+            with service._manifest_lock_context(manifest_path):
+                thread = threading.Thread(target=worker)
+                thread.start()
+                manifest_path.write_text(
+                    json.dumps(
+                        {
+                            "run_id": run_id,
+                            "status": "running",
+                            "progress": {"stage": "characters_locked", "message": "fresh"},
+                            "summary": {"status_text": "fresh"},
+                            "latest_marker": "keep-me",
+                            "updated_at": "2026-05-11T12:01:00Z",
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+            finished.wait(timeout=3)
+            thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(persisted["latest_marker"], "keep-me")
+            self.assertEqual(persisted["progress"]["stage"], "queued")
+            self.assertEqual(persisted["summary"]["status_text"], "waiting_for_payloads")
+
+    def test_process_relation_graph_preserves_latest_relation_repairs_during_prepare(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            run_id = "run-relation-prepare"
+            run_dir = Path(tmp) / "runs" / run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = run_dir / "run_manifest.json"
+            payload_dir = run_dir / "payloads"
+            payload_dir.mkdir(parents=True, exist_ok=True)
+            novel_path = run_dir / "input" / "novel.txt"
+            novel_path.parent.mkdir(parents=True, exist_ok=True)
+            novel_path.write_text("Alpha meets Beta. Alpha distrusts Gamma.", encoding="utf-8")
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "novel_id": "novel",
+                        "quality": {
+                            "excerpt_focus": {"matched_characters": [], "missing_characters": [], "strategy": ""},
+                            "stage_presence": [],
+                            "character_focus": {},
+                            "profile_repairs": {"count": 0, "characters": []},
+                            "relation_repairs": {"count": 2, "pairs": ["Alpha_Beta", "Alpha_Gamma"]},
+                        },
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            def write_json(path: Path, payload: dict[str, object]) -> None:
+                path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            def update_manifest(path: Path, updater):
+                current = json.loads(path.read_text(encoding="utf-8"))
+                updated = updater(dict(current))
+                next_payload = current if updated is None else updated
+                write_json(path, next_payload)
+                return next_payload
+
+            with self.assertRaisesRegex(RuntimeError, "stop after prepare"):
+                process_relation_graph(
+                    novel_path=novel_path,
+                    graph_cast=["Alpha", "Beta"],
+                    max_sentences=120,
+                    max_chars=50000,
+                    manifest_path=manifest_path,
+                    payload_dir=payload_dir,
+                    novel_id="novel",
+                    parts=Mock(),
+                    config=Mock(),
+                    on_relation=lambda stage, payload: None,
+                    assert_run_not_stopped=lambda *args, **kwargs: None,
+                    write_json=write_json,
+                    update_manifest=update_manifest,
+                    build_quality_snapshot=service._build_quality_snapshot,
+                    update_manifest_chunk_progress=update_manifest_chunk_progress,
+                    generate_relation_markdown=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("stop after prepare")),
+                    maybe_repair_generated_relations=lambda **kwargs: None,
+                    load_relations_source=lambda path: {},
+                    export_relations_source=lambda **kwargs: {},
+                    utc_now=lambda: "2026-05-12T00:00:00Z",
+                    relation_repairs_getter=lambda current: (current.get("quality", {}) or {}).get("relation_repairs", {}),
+                    quality_matched=set(),
+                    quality_missing=set(),
+                    quality_focus={},
+                    profile_repair_characters=[],
+                )
+
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(persisted["quality"]["relation_repairs"]["count"], 2)
+            self.assertEqual(
+                persisted["quality"]["relation_repairs"]["pairs"],
+                ["Alpha_Beta", "Alpha_Gamma"],
+            )
+
+    def test_ingest_character_result_uses_latest_manifest_snapshot_atomic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            run_id = payload["run_id"]
+            manifest_path = Path(tmp) / "runs" / run_id / "run_manifest.json"
+            latest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            latest["ingest_external_marker"] = "keep-character"
+            manifest_path.write_text(json.dumps(latest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            profile_text = "\n".join(
+                [
+                    "- name: 林黛玉",
+                    "- novel_id: hongloumeng",
+                    "- core_identity: 贾府外来才女",
+                    "- speech_style: 清冷带刺",
+                ]
+            )
+            refreshed = service.ingest_character_result(
+                run_id,
+                character="林黛玉",
+                content_base64=base64.b64encode(profile_text.encode("utf-8")).decode("ascii"),
+            )
+
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(refreshed.get("ingest_external_marker"), "keep-character")
+            self.assertEqual(persisted.get("ingest_external_marker"), "keep-character")
+
+    def test_ingest_relation_result_uses_latest_manifest_snapshot_atomic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = payload["run_id"]
+            manifest_path = Path(tmp) / "runs" / run_id / "run_manifest.json"
+            latest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            latest["ingest_external_marker"] = "keep-relation"
+            manifest_path.write_text(json.dumps(latest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            relations_text = "\n".join(
+                [
+                    "- novel_id: hongloumeng",
+                    "## 林黛玉_贾宝玉",
+                    "- trust: 9",
+                    "- affection: 10",
+                    "- hostility: 1",
+                    "- relation_change: 升温",
+                    "- typical_interaction: 常以试探与关心交错",
+                ]
+            )
+            refreshed = service.ingest_relation_result(
+                run_id,
+                content_base64=base64.b64encode(relations_text.encode("utf-8")).decode("ascii"),
+                filename="hongloumeng_relations.md",
+            )
+
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(refreshed.get("ingest_external_marker"), "keep-relation")
+            self.assertEqual(persisted.get("ingest_external_marker"), "keep-relation")
+
+    def test_refresh_run_uses_latest_manifest_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉"],
+            )
+            run_id = payload["run_id"]
+            manifest_path = Path(tmp) / "runs" / run_id / "run_manifest.json"
+
+            latest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            latest["status"] = "running"
+            latest["summary"] = {"status_text": "running"}
+            latest["updated_at"] = "2026-05-12T08:00:00Z"
+            manifest_path.write_text(json.dumps(latest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            stale_payload = dict(latest)
+            stale_payload["updated_at"] = "2000-01-01T00:00:00Z"
+            stale_payload["summary"] = {"status_text": "stale"}
+
+            with patch.object(service, "_load_manifest", return_value=stale_payload):
+                refreshed = service.refresh_run(run_id)
+
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertNotEqual(persisted["summary"]["status_text"], "stale")
+            self.assertNotEqual(persisted["updated_at"], "2000-01-01T00:00:00Z")
+            self.assertEqual(persisted["updated_at"], refreshed["updated_at"])
+
+    def test_automatic_pipeline_finalize_uses_latest_manifest_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="novel.txt",
+                novel_content_base64=base64.b64encode("Alpha meets Beta.".encode("utf-8")).decode("ascii"),
+                characters=["Alpha"],
+            )
+            run_dir = Path(tmp) / "runs" / payload["run_id"]
+            manifest_path = run_dir / "run_manifest.json"
+            novel_path = run_dir / "input" / "novel.txt"
+
+            class _FakePathProvider:
+                def __init__(self, base_dir: Path) -> None:
+                    self.base_dir = base_dir
+
+                def characters_root(self, novel_id: str) -> Path:
+                    path = self.base_dir / "artifacts" / "characters" / novel_id
+                    path.mkdir(parents=True, exist_ok=True)
+                    return path
+
+                def relations_file(self, novel_id: str) -> Path:
+                    path = self.base_dir / "artifacts" / "relations" / f"{novel_id}_relations.md"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    return path
+
+            fake_parts = Mock()
+            fake_parts.path_provider = _FakePathProvider(run_dir)
+            fake_parts.llm.chat_completion = Mock(
+                side_effect=[
+                    {
+                        "content": "# PROFILE\n- name: Alpha\n- novel_id: novel\n- core_identity: 核心人物\n- soul_goal: 守住答案\n- speech_style: 先压低语气再落结论\n- cadence: 慢半拍后落点\n- signature_phrases: 先看清；别急着站位\n- typical_lines: 先看清再说；别急着站位\n- sentence_openers: 先；别急\n- sentence_endings: 再说；也罢\n- worldview: 先把局势看清，再决定站位。\n- belief_anchor: 关键时刻不能自乱阵脚。\n- moral_bottom_line: 不把同伴当代价随手抛掉。\n- restraint_threshold: 平时克制，底线被逼穿时才会失控。\n- stress_response: 压力越大越会先收声，再集中判断。\n"
+                    },
+                    {
+                        "content": "# RELATION_GRAPH\n\n## Alpha_Beta\n- trust: 7\n- affection: 3\n- power_gap: 0\n- conflict_point: 立场试探\n- typical_interaction: 观察与回应\n- hidden_attitude: \n- relation_change: 固化\n- appellation_to_target: Beta\n- confidence: 7\n"
+                    },
+                ]
+            )
+
+            real_update_manifest = service._update_manifest
+            injected_before_finalize = {"value": False}
+
+            def wrapped_update_manifest(path: Path, updater, create_if_missing: bool = False):
+                if Path(path) == manifest_path and hasattr(updater, "__code__"):
+                    names = set(getattr(updater.__code__, "co_names", ()))
+                    if {
+                        "_apply_finalize_success_update",
+                        "_apply_finalize_success_without_graph_update",
+                    } & names:
+                        latest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                        latest["external_marker"] = "keep-me"
+                        manifest_path.write_text(json.dumps(latest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                        injected_before_finalize["value"] = True
+                return real_update_manifest(path, updater, create_if_missing=create_if_missing)
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts):
+                with patch.object(service, "_maybe_repair_generated_profile", return_value=None):
+                    with patch.object(service, "_maybe_repair_generated_relations", return_value=None):
+                        with patch.object(service, "_update_manifest", side_effect=wrapped_update_manifest):
+                            result = service._run_automatic_pipeline(
+                                manifest_path=manifest_path,
+                                novel_path=novel_path,
+                                locked_characters=["Alpha"],
+                                max_sentences=120,
+                                max_chars=50000,
+                            )
+
+            self.assertTrue(result["success"])
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertTrue(injected_before_finalize["value"])
+            self.assertEqual(persisted.get("external_marker"), "keep-me")
+
+    def test_automatic_pipeline_steps_use_latest_manifest_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="novel.txt",
+                novel_content_base64=base64.b64encode("Alpha meets Beta.".encode("utf-8")).decode("ascii"),
+                characters=["Alpha"],
+            )
+            run_dir = Path(tmp) / "runs" / payload["run_id"]
+            manifest_path = run_dir / "run_manifest.json"
+            novel_path = run_dir / "input" / "novel.txt"
+
+            class _FakePathProvider:
+                def __init__(self, base_dir: Path) -> None:
+                    self.base_dir = base_dir
+
+                def characters_root(self, novel_id: str) -> Path:
+                    path = self.base_dir / "artifacts" / "characters" / novel_id
+                    path.mkdir(parents=True, exist_ok=True)
+                    return path
+
+                def relations_file(self, novel_id: str) -> Path:
+                    path = self.base_dir / "artifacts" / "relations" / f"{novel_id}_relations.md"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    return path
+
+            fake_parts = Mock()
+            fake_parts.path_provider = _FakePathProvider(run_dir)
+            fake_parts.llm.chat_completion = Mock(
+                side_effect=[
+                    {
+                        "content": "# PROFILE\n- name: Alpha\n- novel_id: novel\n- core_identity: 核心人物\n- soul_goal: 守住答案\n- speech_style: 先压低语气再落结论\n- cadence: 慢半拍后落点\n- signature_phrases: 先看清；别急着站位\n- typical_lines: 先看清再说；别急着站位\n- sentence_openers: 先；别急\n- sentence_endings: 再说；也罢\n- worldview: 先把局势看清，再决定站位。\n- belief_anchor: 关键时刻不能自乱阵脚。\n- moral_bottom_line: 不把同伴当代价随手抛掉。\n- restraint_threshold: 平时克制，底线被逼穿时才会失控。\n- stress_response: 压力越大越会先收声，再集中判断。\n"
+                    },
+                    {
+                        "content": "# RELATION_GRAPH\n\n## Alpha_Beta\n- trust: 7\n- affection: 3\n- power_gap: 0\n- conflict_point: 立场试探\n- typical_interaction: 观察与回应\n- hidden_attitude: \n- relation_change: 固化\n- appellation_to_target: Beta\n- confidence: 7\n"
+                    },
+                ]
+            )
+
+            real_update_manifest = service._update_manifest
+            injected_before_step_update = {"value": False}
+            update_call_count = {"value": 0}
+
+            def wrapped_update_manifest(path: Path, updater, create_if_missing: bool = False):
+                if Path(path) == manifest_path:
+                    update_call_count["value"] += 1
+                    if update_call_count["value"] == 4 and not injected_before_step_update["value"]:
+                        latest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                        latest["step_external_marker"] = "keep-step"
+                        manifest_path.write_text(json.dumps(latest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                        injected_before_step_update["value"] = True
+                return real_update_manifest(path, updater, create_if_missing=create_if_missing)
+
+            with patch("src.web.workflow.build_runtime_parts", return_value=fake_parts):
+                with patch.object(service, "_maybe_repair_generated_profile", return_value=None):
+                    with patch.object(service, "_maybe_repair_generated_relations", return_value=None):
+                        with patch.object(service, "_update_manifest", side_effect=wrapped_update_manifest):
+                            result = service._run_automatic_pipeline(
+                                manifest_path=manifest_path,
+                                novel_path=novel_path,
+                                locked_characters=["Alpha"],
+                                max_sentences=120,
+                                max_chars=50000,
+                            )
+
+            self.assertTrue(result["success"])
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertTrue(injected_before_step_update["value"])
+            self.assertGreaterEqual(update_call_count["value"], 4)
+            self.assertEqual(persisted.get("step_external_marker"), "keep-step")
 
     def test_automatic_pipeline_uses_union_cast_for_graph_on_redistill(self):
         with tempfile.TemporaryDirectory() as tmp:

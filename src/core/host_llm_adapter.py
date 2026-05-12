@@ -176,7 +176,7 @@ class HostProvidedLLM:
                 if isinstance(text, str) and text.strip():
                     return text.strip()
                 if isinstance(text, list):
-                    nested = _HostLLMAdapter._extract_text_content(text)
+                    nested = HostProvidedLLM._extract_text_content(text)
                     if nested:
                         return nested
             for key in ("reasoning_content", "reasoning"):

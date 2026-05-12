@@ -196,6 +196,8 @@ class WebRunService(
             memory_store_resolver=self._dialogue_memory_store_for_run,
         )
         self._active_run_threads: dict[str, threading.Thread] = {}
+        self._run_manifest_locks_guard = threading.Lock()
+        self._run_manifest_locks: dict[str, threading.RLock] = {}
         self._app_update_lock = threading.Lock()
         self._app_update_thread: threading.Thread | None = None
         self._app_update_state: dict[str, object] = {

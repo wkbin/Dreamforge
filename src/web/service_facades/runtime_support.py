@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
+from copy import deepcopy
 import logging
+import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, ContextManager
 
 from src.core.config import Config
-from src.web.manifest import write_json_file
+from src.web.manifest import load_json_file, write_json_file
 from src.web.pipeline import (
     build_background_run_kwargs,
     prepare_background_manifest,
@@ -34,8 +37,11 @@ class RuntimeSupportMixin:
         max_sentences: int,
         max_chars: int,
     ) -> None:
-        manifest = prepare_background_manifest(self._load_manifest(manifest_path) or {}, utc_now=_utc_now)
-        self._write_json(manifest_path, manifest)
+        manifest = self._update_manifest(
+            manifest_path,
+            lambda current: prepare_background_manifest(current, utc_now=_utc_now),
+            create_if_missing=True,
+        )
 
         run_id = str(manifest.get("run_id", "")).strip() or manifest_path.parent.name
         start_background_thread(
@@ -68,9 +74,86 @@ class RuntimeSupportMixin:
             model_payload=self._load_model_settings_payload(),
         )
 
+    def _manifest_lock_context(self, path: Path) -> ContextManager[object]:
+        run_id = self._manifest_run_id(path)
+        if not run_id:
+            return nullcontext()
+        return self._manifest_lock_for_run(run_id)
+
+    def _manifest_lock_for_run(self, run_id: str) -> threading.RLock:
+        with self._run_manifest_locks_guard:
+            lock = self._run_manifest_locks.get(run_id)
+            if lock is None:
+                lock = threading.RLock()
+                self._run_manifest_locks[run_id] = lock
+            return lock
+
+    def _manifest_run_id(self, path: Path) -> str:
+        target = Path(path)
+        if target.name != "run_manifest.json":
+            return ""
+        try:
+            relative = target.resolve(strict=False).relative_to(self.runs_root.resolve(strict=False))
+        except ValueError:
+            return ""
+        parts = relative.parts
+        if len(parts) != 2 or parts[1] != "run_manifest.json":
+            return ""
+        return str(parts[0]).strip()
+
     @staticmethod
-    def _write_json(path: Path, payload: dict[str, Any]) -> None:
-        write_json_file(path, payload)
+    def _merge_manifest_control(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+        existing_control = dict(existing.get("control", {}) or {})
+        if not existing_control:
+            return incoming
+        merged = dict(incoming)
+        incoming_control = dict(merged.get("control", {}) or {})
+        if bool(existing_control.get("stop_requested", False)):
+            incoming_control["stop_requested"] = True
+        for key in ("stop_requested_at", "stop_acknowledged_at"):
+            existing_value = str(existing_control.get(key, "")).strip()
+            incoming_value = str(incoming_control.get(key, "")).strip()
+            if existing_value and not incoming_value:
+                incoming_control[key] = existing_value
+        merged["control"] = incoming_control
+        return merged
+
+    def _update_manifest(
+        self,
+        path: Path,
+        updater: Callable[[dict[str, Any]], dict[str, Any] | None],
+        *,
+        create_if_missing: bool = False,
+    ) -> dict[str, Any]:
+        target = Path(path)
+        with self._manifest_lock_context(target):
+            existing = load_json_file(target)
+            if not isinstance(existing, dict):
+                if not create_if_missing:
+                    raise FileNotFoundError(self._manifest_run_id(target) or target.parent.name)
+                existing = {}
+
+            current = deepcopy(existing)
+            updated = updater(current)
+            next_payload = current if updated is None else updated
+            if not isinstance(next_payload, dict):
+                raise ValueError("Manifest updater must return a dict payload.")
+
+            payload_to_write = next_payload
+            if target.name == "run_manifest.json":
+                payload_to_write = self._merge_manifest_control(existing, next_payload)
+            write_json_file(target, payload_to_write)
+            return payload_to_write
+
+    def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
+        target = Path(path)
+        with self._manifest_lock_context(target):
+            merged_payload = payload
+            if target.name == "run_manifest.json":
+                existing = load_json_file(target)
+                if isinstance(existing, dict):
+                    merged_payload = self._merge_manifest_control(existing, payload)
+            write_json_file(target, merged_payload)
 
     @staticmethod
     def _normalize_characters(characters: list[str]) -> list[str]:

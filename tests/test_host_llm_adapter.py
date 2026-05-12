@@ -22,6 +22,21 @@ class _HostGenerateOnly:
         return {"content": "宿主改写后的回复", "model": "host-model"}
 
 
+class _HostChatStructuredContent:
+    def chat_completion(self, messages, *, model=None, temperature=None, max_tokens=None, stream=False):
+        del messages, model, temperature, max_tokens, stream
+        return {
+            "message": {
+                "content": [
+                    {"type": "text", "text": "第一句"},
+                    {"type": "text", "text": "第二句"},
+                ]
+            },
+            "model": "host-structured",
+            "usage": {"prompt_tokens": 12, "completion_tokens": 8},
+        }
+
+
 class _HostContext:
     def __init__(self, host):
         self.host = host
@@ -86,6 +101,17 @@ class HostLLMAdapterTests(unittest.TestCase):
 
         with self.assertRaises(ZaomengError):
             cli._require_generation_llm(cli.parts, "chat")
+
+    def test_host_chat_completion_parses_structured_message_content(self):
+        host = _HostChatStructuredContent()
+        adapter = HostProvidedLLM(host, provider_name="openclaw-host", model_name="host-default")
+
+        result = adapter.chat_completion([{"role": "user", "content": "请继续"}])
+
+        self.assertEqual(result["content"], "第一句\n第二句")
+        self.assertEqual(result["model"], "host-structured")
+        self.assertEqual(result["prompt_tokens"], 12)
+        self.assertEqual(result["completion_tokens"], 8)
 
 
 if __name__ == "__main__":
