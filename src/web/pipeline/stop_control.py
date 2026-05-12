@@ -9,20 +9,22 @@ def assert_run_not_stopped(
     *,
     message: str,
     current_character: str,
-    load_manifest: Callable[[Path], dict[str, Any] | None],
-    write_json: Callable[[Path, dict[str, Any]], None],
+    update_manifest: Callable[[Path, Callable[[dict[str, Any]], dict[str, Any] | None]], dict[str, Any]],
     utc_now: Callable[[], str],
     is_stop_requested: Callable[[Path], bool],
     stopped_error_type: type[BaseException],
 ) -> None:
     if not is_stop_requested(manifest_path):
         return
-    manifest = load_manifest(manifest_path) or {}
-    control = manifest.setdefault("control", {})
-    if not str(control.get("stop_acknowledged_at", "")).strip():
-        control["stop_acknowledged_at"] = utc_now()
-        manifest["updated_at"] = utc_now()
-        write_json(manifest_path, manifest)
+
+    def _ack_stop_requested(current: dict[str, Any]) -> dict[str, Any]:
+        control = current.setdefault("control", {})
+        if not str(control.get("stop_acknowledged_at", "")).strip():
+            control["stop_acknowledged_at"] = utc_now()
+            current["updated_at"] = utc_now()
+        return current
+
+    update_manifest(manifest_path, _ack_stop_requested)
     if current_character:
         raise stopped_error_type(f"已停止蒸馏，停在 {current_character}。")
     raise stopped_error_type(message)

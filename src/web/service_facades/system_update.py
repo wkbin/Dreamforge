@@ -195,7 +195,10 @@ class UpdateServiceMixin:
             if not key or key in seen or not candidate.exists():
                 continue
             seen.add(key)
-            text = candidate.read_text(encoding="utf-8")
+            try:
+                text = candidate.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
             install_root_text = self._extract_launcher_value(text, "INSTALL_ROOT")
             if not install_root_text:
                 continue

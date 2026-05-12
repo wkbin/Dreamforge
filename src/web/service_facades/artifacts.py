@@ -53,21 +53,20 @@ class ArtifactServiceMixin:
         filename: str = "PROFILE.generated.md",
     ) -> dict[str, Any]:
         manifest_path = self._manifest_path(run_id)
-        manifest = self._load_manifest(manifest_path)
-        if not manifest:
-            raise FileNotFoundError(run_id)
-        refreshed = apply_character_ingest(
-            run_id=run_id,
-            runs_root=self.runs_root,
-            manifest=manifest,
-            character=character,
-            content_base64=content_base64,
-            filename=filename,
-            materialize_profile_source=materialize_profile_source,
-            discover_artifacts=self._discover_artifacts,
-            utc_now=_utc_now,
+        refreshed = self._update_manifest(
+            manifest_path,
+            lambda current: apply_character_ingest(
+                run_id=run_id,
+                runs_root=self.runs_root,
+                manifest=current,
+                character=character,
+                content_base64=content_base64,
+                filename=filename,
+                materialize_profile_source=materialize_profile_source,
+                discover_artifacts=self._discover_artifacts,
+                utc_now=_utc_now,
+            ),
         )
-        self._write_json(manifest_path, refreshed)
         return self._serialize_manifest(refreshed)
 
     def ingest_relation_result(
@@ -78,25 +77,24 @@ class ArtifactServiceMixin:
         filename: str = "relations.md",
     ) -> dict[str, Any]:
         manifest_path = self._manifest_path(run_id)
-        manifest = self._load_manifest(manifest_path)
-        if not manifest:
-            raise FileNotFoundError(run_id)
-        refreshed = apply_relation_ingest(
-            run_id=run_id,
-            runs_root=self.runs_root,
-            manifest_path=manifest_path,
-            manifest=manifest,
-            content_base64=content_base64,
-            filename=filename,
-            export_relations_source=lambda relation_source: export_relations_source(
-                relation_source,
-                novel_id=str(manifest.get("novel_id", "")).strip() or run_id,
+        refreshed = self._update_manifest(
+            manifest_path,
+            lambda current: apply_relation_ingest(
+                run_id=run_id,
+                runs_root=self.runs_root,
                 manifest_path=manifest_path,
+                manifest=current,
+                content_base64=content_base64,
+                filename=filename,
+                export_relations_source=lambda relation_source: export_relations_source(
+                    relation_source,
+                    novel_id=str(current.get("novel_id", "")).strip() or run_id,
+                    manifest_path=manifest_path,
+                ),
+                discover_artifacts=self._discover_artifacts,
+                utc_now=_utc_now,
             ),
-            discover_artifacts=self._discover_artifacts,
-            utc_now=_utc_now,
         )
-        self._write_json(manifest_path, refreshed)
         return self._serialize_manifest(refreshed)
 
     def get_persona_review(self, run_id: str, character: str) -> dict[str, Any]:
