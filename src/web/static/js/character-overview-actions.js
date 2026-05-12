@@ -80,7 +80,9 @@
   }
 
   function publishCharacterOverviewState(source = "character-overview") {
-    if (typeof publishLegacyUiState === "function") {
+    if (typeof bridgeTools.syncLegacyUiState === "function") {
+      bridgeTools.syncLegacyUiState(source, { currentCharacterOverview });
+    } else if (typeof publishLegacyUiState === "function") {
       publishLegacyUiState(source, { currentCharacterOverview });
     }
   }

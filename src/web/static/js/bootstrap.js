@@ -33,7 +33,7 @@
     ["model-settings-vue-root", "model-settings-vue-root", { kind: "vue-island", trial: "model-settings" }],
     ["modal-root", "modal-root", { kind: "root" }],
   ];
-  const scripts = [
+  const coreScripts = [
     `/web/vendor/vue.global.prod.js?v=${version}`,
     `/web/js/legacy-bridge.js?v=${version}`,
     `/web/js/core.js?v=${version}`,
@@ -45,7 +45,6 @@
     `/web/js/editor-vue-components.js?v=${version}`,
     `/web/js/bookshelf.js?v=${version}`,
     `/web/js/bookshelf-legacy-render.js?v=${version}`,
-    `/web/js/bookshelf-vue-island.js?v=${version}`,
     `/web/js/workflow.js?v=${version}`,
     `/web/js/run-detail.js?v=${version}`,
     `/web/js/persona-review-legacy.js?v=${version}`,
@@ -53,6 +52,9 @@
     `/web/js/dialogue.js?v=${version}`,
     `/web/js/main.js?v=${version}`,
     `/web/js/webui-api.js?v=${version}`,
+  ];
+  const optionalScripts = [
+    `/web/js/bookshelf-vue-island.js?v=${version}`,
     `/web/js/work-overview-vue-shared.js?v=${version}`,
     `/web/js/work-overview-actions.js?v=${version}`,
     `/web/js/work-overview-legacy-render.js?v=${version}`,
@@ -90,6 +92,24 @@
     );
   }
 
+  function renderBootFailure(error) {
+    const detail = error instanceof Error ? error.message : String(error || "未知错误");
+    const host = document.getElementById("workspace-root") || document.body;
+    if (!host) {
+      return;
+    }
+    host.innerHTML = `
+      <section class="app-shell">
+        <div class="panel-card" style="max-width: 760px; margin: 48px auto; padding: 28px;">
+          <p class="eyebrow">Web UI 初始化失败</p>
+          <h2 style="margin-top: 0;">这一页暂时没有铺开</h2>
+          <p class="card-copy">页面资源没有完整加载成功。你可以先刷新一次；如果问题仍然存在，再查看控制台里的报错详情。</p>
+          <pre style="white-space: pre-wrap; word-break: break-word; margin: 16px 0 0; padding: 12px 14px; border-radius: 16px; background: rgba(15, 23, 42, 0.08); color: #334155;">${detail}</pre>
+        </div>
+      </section>
+    `;
+  }
+
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
@@ -100,27 +120,45 @@
     });
   }
 
-  async function boot() {
-    await loadFragmentBatch(rootFragments);
-    await loadFragmentBatch(nestedFragments);
-    for (const src of scripts) {
-      await loadScript(src);
-      if (src.includes("/web/js/legacy-bridge.js")) {
-        const bridge = window.__ZAOMENG_LEGACY_BRIDGE__;
-        if (bridge && typeof bridge.registerHost === "function") {
-          bridgeHosts.forEach(([name, elementId, meta]) => {
-            bridge.registerHost(name, elementId, meta);
-          });
+  async function loadScriptBatch(sources, { continueOnError = false } = {}) {
+    for (const src of sources) {
+      try {
+        await loadScript(src);
+        if (src.includes("/web/js/legacy-bridge.js")) {
+          const bridge = window.__ZAOMENG_LEGACY_BRIDGE__;
+          if (bridge && typeof bridge.registerHost === "function") {
+            bridgeHosts.forEach(([name, elementId, meta]) => {
+              bridge.registerHost(name, elementId, meta);
+            });
+          }
         }
+      } catch (error) {
+        if (!continueOnError) {
+          throw error;
+        }
+        console.warn(error);
       }
     }
   }
 
+  async function boot() {
+    await loadFragmentBatch(rootFragments);
+    await loadFragmentBatch(nestedFragments);
+    await loadScriptBatch(coreScripts);
+    await loadScriptBatch(optionalScripts, { continueOnError: true });
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
-      boot().catch((error) => console.error(error));
+      boot().catch((error) => {
+        console.error(error);
+        renderBootFailure(error);
+      });
     }, { once: true });
   } else {
-    boot().catch((error) => console.error(error));
+    boot().catch((error) => {
+      console.error(error);
+      renderBootFailure(error);
+    });
   }
 })();

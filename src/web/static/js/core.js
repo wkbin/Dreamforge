@@ -129,10 +129,72 @@ function publishLegacyStateSlice(source, key, value) {
   publishLegacyUiState(source, { [name]: value });
 }
 
+function syncLegacyUiState(source = "legacy", overrides = {}) {
+  const nextState = overrides && typeof overrides === "object" ? overrides : {};
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentRunId")) {
+    currentRunId = String(nextState.currentRunId || "");
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentRun")) {
+    currentRun = nextState.currentRun || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "allRuns")) {
+    allRuns = Array.isArray(nextState.allRuns) ? nextState.allRuns : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentDialogueSessionId")) {
+    currentDialogueSessionId = String(nextState.currentDialogueSessionId || "");
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentDialogueSession")) {
+    currentDialogueSession = nextState.currentDialogueSession || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "modelSettings")) {
+    modelSettings = nextState.modelSettings || { configured: false, provider: "", model: "", base_url: "", max_tokens: 0, api_key_configured: false };
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentCharacterOverview")) {
+    currentCharacterOverview = nextState.currentCharacterOverview || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentPersonaReview")) {
+    currentPersonaReview = nextState.currentPersonaReview || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentPersonaAutofill")) {
+    currentPersonaAutofill = nextState.currentPersonaAutofill || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentRelationDetails")) {
+    currentRelationDetails = nextState.currentRelationDetails || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentSelfCardEditor")) {
+    currentSelfCardEditor = nextState.currentSelfCardEditor || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "selfCards")) {
+    selfCards = Array.isArray(nextState.selfCards) ? nextState.selfCards : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "currentSelfCard")) {
+    currentSelfCard = nextState.currentSelfCard || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "selectedSelfCardId")) {
+    selectedSelfCardId = String(nextState.selectedSelfCardId || "");
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "redistillSuggestionState")) {
+    redistillSuggestionState = nextState.redistillSuggestionState || {
+      runId: "",
+      character: "",
+      sourceName: "",
+      weakFieldLabels: [],
+      items: [],
+      selectedSegmentId: "",
+      loading: false,
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(nextState, "workflow")) {
+    window.__ZAOMENG_WORKFLOW_STATE__ = nextState.workflow || {};
+  }
+  publishLegacyUiState(source, nextState);
+}
+
 window.__ZAOMENG_UI_BRIDGE_TOOLS__ = {
   readLegacyActionBridge,
   mergeLegacyActionBridge,
   publishLegacyStateSlice,
+  syncLegacyUiState,
 };
 
 function el(id) {
@@ -424,7 +486,14 @@ function updateRedistillFileView() {
     syncRedistillPreview();
   }
   syncRedistillRecommendationState();
-  publishLegacyUiState("redistill-file-view-updated");
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("redistill-file-view-updated", {
+      redistillSuggestionState,
+      redistillDraft: buildRedistillDraftState(),
+    });
+  } else {
+    publishLegacyUiState("redistill-file-view-updated");
+  }
 }
 
 async function applySamplingHint(file) {
@@ -752,7 +821,14 @@ function updateRedistillPillState() {
   updatePillState("#redistill-character-pills", charactersOf("redistill-characters"));
   syncRedistillPreview();
   syncRedistillRecommendationState();
-  publishLegacyUiState("redistill-pill-state-updated");
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("redistill-pill-state-updated", {
+      redistillSuggestionState,
+      redistillDraft: buildRedistillDraftState(),
+    });
+  } else {
+    publishLegacyUiState("redistill-pill-state-updated");
+  }
 }
 
 function syncRedistillPreview() {
@@ -798,7 +874,14 @@ function selectRedistillSuggestedSegment(segmentId) {
   }
   updateRedistillFileView();
   renderRedistillRecommendationState(target);
-  publishLegacyUiState("redistill-segment-selected");
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("redistill-segment-selected", {
+      redistillSuggestionState,
+      redistillDraft: buildRedistillDraftState(),
+    });
+  } else {
+    publishLegacyUiState("redistill-segment-selected");
+  }
 }
 
 function getRedistillRecommendationTarget() {
@@ -923,7 +1006,14 @@ function renderRedistillRecommendationState(targetCharacter = "") {
     card.appendChild(actions);
     root.appendChild(card);
   });
-  publishLegacyUiState("redistill-recommendation-rendered");
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("redistill-recommendation-rendered", {
+      redistillSuggestionState,
+      redistillDraft: buildRedistillDraftState(),
+    });
+  } else {
+    publishLegacyUiState("redistill-recommendation-rendered");
+  }
 }
 
 mergeLegacyActionBridge("__ZAOMENG_REDISTILL_ACTIONS__", {
@@ -1097,7 +1187,11 @@ function openSelfCardModal() {
   currentSelfCardEditor = typeof window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__ === "function"
     ? window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__()
     : currentSelfCardEditor;
-  publishLegacyUiState("self-card-modal-opened", { currentSelfCardEditor });
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("self-card-modal-opened", { currentSelfCardEditor });
+  } else {
+    publishLegacyUiState("self-card-modal-opened", { currentSelfCardEditor });
+  }
 }
 
 function closeSelfCardModal() {
@@ -1106,7 +1200,11 @@ function closeSelfCardModal() {
   currentSelfCardEditor = typeof window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__ === "function"
     ? window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__()
     : currentSelfCardEditor;
-  publishLegacyUiState("self-card-modal-closed", { currentSelfCardEditor });
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("self-card-modal-closed", { currentSelfCardEditor });
+  } else {
+    publishLegacyUiState("self-card-modal-closed", { currentSelfCardEditor });
+  }
 }
 
 async function apiJson(url, options = {}, fallbackMessage = "请求失败。") {

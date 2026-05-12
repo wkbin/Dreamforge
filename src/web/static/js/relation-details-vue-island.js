@@ -2,6 +2,7 @@
   const bridge = window.__ZAOMENG_LEGACY_BRIDGE__;
   const webuiApi = window.__ZAOMENG_WEBUI_API__;
   const vue = window.Vue;
+  const bridgeTools = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
   const host = document.getElementById("relation-details-vue-root");
   const modal = document.getElementById("relation-details-modal");
   if (!bridge || !webuiApi || !vue || !host || !modal) {
@@ -12,6 +13,14 @@
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function syncRelationBridgeState(source, overrides) {
+    if (typeof bridgeTools.syncLegacyUiState === "function") {
+      bridgeTools.syncLegacyUiState(source, overrides);
+    } else if (typeof publishLegacyUiState === "function") {
+      publishLegacyUiState(source, overrides);
+    }
   }
 
   createApp({
@@ -97,11 +106,8 @@
             relation_change: item.relation_change,
           };
           const refreshed = await webuiApi.saveRelationDetail(runId, pairKey, body);
-          if (typeof renderRelationDetails === "function") {
-            renderRelationDetails(refreshed);
-          } else {
-            syncFromPayload(refreshed);
-          }
+          syncFromPayload(refreshed);
+          syncRelationBridgeState("relation-details-vue-saved", { currentRelationDetails: refreshed });
           state.status = "关系已保存。";
         } catch (error) {
           state.status = error.message || "关系保存失败。";

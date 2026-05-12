@@ -35,6 +35,14 @@
     return window.__ZAOMENG_RUN_DETAIL_ACTIONS__ || {};
   }
 
+  function syncPersonaBridgeState(source, overrides) {
+    if (typeof bridgeTools.syncLegacyUiState === "function") {
+      bridgeTools.syncLegacyUiState(source, overrides);
+    } else if (typeof publishLegacyUiState === "function") {
+      publishLegacyUiState(source, overrides);
+    }
+  }
+
   createApp({
     components: {
       SchemaFieldCard: editorComponents.SchemaFieldCard,
@@ -90,9 +98,10 @@
           const payload = await webuiApi.getPersonaReview(runId, character);
           applyReviewPayload(payload);
           setStatus("");
-          if (typeof publishLegacyUiState === "function") {
-            publishLegacyUiState("persona-review-vue-loaded", { currentPersonaReview: payload });
-          }
+          syncPersonaBridgeState("persona-review-vue-loaded", {
+            currentPersonaReview: payload,
+            currentPersonaAutofill: null,
+          });
         } catch (error) {
           setStatus(error.message || "人物档案暂时没有载入。");
         } finally {
@@ -110,6 +119,10 @@
           const saved = await webuiApi.savePersonaReview(runId, character, clone(state.fields));
           applyReviewPayload(saved);
           applyAutofillReferences(null);
+          syncPersonaBridgeState("persona-review-vue-saved", {
+            currentPersonaReview: saved,
+            currentPersonaAutofill: null,
+          });
           setStatus("人物校对已经写回这一卷。");
           const actions = runDetailActions();
           if (typeof actions.refreshRunView === "function") {
@@ -142,6 +155,10 @@
         try {
           const payload = await webuiApi.suggestPersonaField(runId, character, fieldName);
           applyAutofillReferences(payload);
+          syncPersonaBridgeState("persona-review-vue-autofill", {
+            currentPersonaReview,
+            currentPersonaAutofill: payload || null,
+          });
           if (payload?.status === "filled" && payload?.value) {
             state.fields[fieldName] = payload.value;
             state.feedback[fieldName] = { kind: "success", message: "已生成补全内容，记得保存。" };
@@ -152,6 +169,10 @@
           }
         } catch (error) {
           applyAutofillReferences(null);
+          syncPersonaBridgeState("persona-review-vue-autofill-cleared", {
+            currentPersonaReview,
+            currentPersonaAutofill: null,
+          });
           state.feedback[fieldName] = { kind: "error", message: error.message || "人物信息补全无法生成。" };
           setStatus(error.message || "人物信息补全无法生成。");
         } finally {

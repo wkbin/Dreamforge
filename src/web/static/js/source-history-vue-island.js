@@ -7,7 +7,16 @@
   const legacy = document.getElementById("source-history-legacy");
   const toggleButton = document.getElementById("source-history-toggle");
   const shared = window.__ZAOMENG_WORK_OVERVIEW_VUE__;
-  if (!bridge || !stateApi || !vue || !host || !panel || !legacy || !toggleButton || !shared) {
+  if (!bridge || !vue || !host || !panel || !legacy || !toggleButton || !shared) {
+    console.warn("[zaomeng] source-history vue island skipped: host dependencies are not ready.");
+    return;
+  }
+  if (typeof stateApi.buildSourceHistoryViewState !== "function") {
+    console.warn("[zaomeng] source-history vue island skipped: state builder is not ready.");
+    return;
+  }
+  if (typeof shared.useRunOverviewIsland !== "function") {
+    console.warn("[zaomeng] source-history vue island skipped: shared overview helpers are not ready.");
     return;
   }
 

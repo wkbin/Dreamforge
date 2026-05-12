@@ -2,12 +2,14 @@
   const shared = window.__ZAOMENG_WORK_OVERVIEW_VUE__;
   const vue = window.Vue;
   const host = document.getElementById("work-top-vue-root");
-  if (!shared || !vue || !host) {
+  if (!shared || typeof shared.useRunOverviewIsland !== "function" || typeof shared.getRunOverviewActions !== "function" || !vue || !host) {
+    console.warn("[zaomeng] work-top vue island skipped: shared overview helpers are not ready.");
     return;
   }
 
   const builder = window.__ZAOMENG_BUILD_WORK_TOP_OVERVIEW_STATE__;
   if (typeof builder !== "function") {
+    console.warn("[zaomeng] work-top vue island skipped: state builder is not ready.");
     return;
   }
 

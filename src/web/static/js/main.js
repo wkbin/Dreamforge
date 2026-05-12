@@ -113,7 +113,9 @@ function buildChatSetupState() {
 window.__ZAOMENG_BUILD_CHAT_SETUP_STATE__ = buildChatSetupState;
 
 function publishChatSetupState(source = "chat-setup") {
-  if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState(source, { chatSetup: buildChatSetupState() });
+  } else if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
     UI_BRIDGE_TOOLS.publishLegacyStateSlice(source, "chatSetup", buildChatSetupState());
   } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState(source, { chatSetup: buildChatSetupState() });
@@ -480,7 +482,9 @@ window.__ZAOMENG_BUILD_SELF_CARD_EDITOR_STATE__ = buildSelfCardEditorState;
 
 function publishSelfCardEditorState(source = "self-card-editor") {
   currentSelfCardEditor = buildSelfCardEditorState();
-  if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState(source, { currentSelfCardEditor });
+  } else if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
     UI_BRIDGE_TOOLS.publishLegacyStateSlice(source, "currentSelfCardEditor", currentSelfCardEditor);
   } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState(source, { currentSelfCardEditor });
@@ -576,7 +580,9 @@ async function loadSelfCards() {
   const payload = await apiJson("/api/web/self-cards", {}, "角色卡列表载入失败。");
   selfCards = Array.isArray(payload?.items) ? payload.items : [];
   renderSelfCardOptions(selfCards);
-  if (typeof publishLegacyUiState === "function") {
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("self-cards-loaded", { selfCards });
+  } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState("self-cards-loaded");
   }
   return selfCards;
@@ -595,7 +601,12 @@ function syncSelectedSelfCardFromSelect() {
     if (el("dialogue-self-style")) setValue("dialogue-self-style", currentSelfCard.fields.interaction_style || "");
   }
   renderSelectedSelfCardPreview(false);
-  if (typeof publishLegacyUiState === "function") {
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("self-card-selection-changed", {
+      selectedSelfCardId,
+      currentSelfCard,
+    });
+  } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState("self-card-selection-changed");
   }
   publishChatSetupState("chat-setup-self-card-selection-changed");
@@ -940,7 +951,9 @@ async function openRelationDetails() {
   if (!currentRunId) return;
   openRelationDetailsModal();
   currentRelationDetails = null;
-  if (typeof publishLegacyUiState === "function") {
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("relation-details-loading", { currentRelationDetails: null });
+  } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState("relation-details-loading", { currentRelationDetails: null });
   }
   setStatus("relation-details-status", "正在整理关系明细...");
@@ -1103,7 +1116,9 @@ function buildComposerUiState() {
 window.__ZAOMENG_BUILD_COMPOSER_STATE__ = buildComposerUiState;
 
 function publishComposerUiState(source = "composer") {
-  if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState(source, { composer: buildComposerUiState() });
+  } else if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
     UI_BRIDGE_TOOLS.publishLegacyStateSlice(source, "composer", buildComposerUiState());
   } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState(source, { composer: buildComposerUiState() });
@@ -1277,6 +1292,17 @@ async function handleSendTurn(messageOverride = "", messageKindOverride = "") {
       transcript: buildOptimisticTranscript(currentDialogueSession, message, messageKind),
     };
     renderDialogueTranscript(currentDialogueSession);
+    if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
+      UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-optimistic", {
+        currentDialogueSessionId,
+        currentDialogueSession,
+      });
+    } else if (typeof publishLegacyUiState === "function") {
+      publishLegacyUiState("dialogue-session-optimistic", {
+        currentDialogueSessionId,
+        currentDialogueSession,
+      });
+    }
   }
 
   try {
@@ -1296,8 +1322,26 @@ async function handleSendTurn(messageOverride = "", messageKindOverride = "") {
   } catch (error) {
     window.clearTimeout(retryFeedbackTimer);
     if (sessionSnapshot) {
-      currentDialogueSession = sessionSnapshot;
+      if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
+        UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-restore-local", {
+          currentDialogueSessionId,
+          currentDialogueSession: sessionSnapshot,
+        });
+      } else {
+        currentDialogueSession = sessionSnapshot;
+      }
       renderDialogueTranscript(sessionSnapshot);
+      if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
+        UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-restore", {
+          currentDialogueSessionId,
+          currentDialogueSession: sessionSnapshot,
+        });
+      } else if (typeof publishLegacyUiState === "function") {
+        publishLegacyUiState("dialogue-session-restore", {
+          currentDialogueSessionId,
+          currentDialogueSession: sessionSnapshot,
+        });
+      }
     }
     setComposerWaiting(false, error.message || "这句话暂时没有送达。");
   }
@@ -1326,6 +1370,7 @@ async function handleSuggestTurn(event) {
   const retryFeedbackTimer = window.setTimeout(() => {
     area.value = DIALOGUE_SUGGEST_RETRY_MESSAGE;
     resizeComposer();
+    publishComposerUiState("composer-suggest-retrying");
   }, DIALOGUE_RETRY_FEEDBACK_DELAY_MS);
 
   try {

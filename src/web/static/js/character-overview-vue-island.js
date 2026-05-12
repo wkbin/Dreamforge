@@ -13,7 +13,12 @@
   const legacy = document.getElementById("character-overview-legacy");
   const stateApi = window.__ZAOMENG_CHARACTER_OVERVIEW_STATE__ || {};
   const actionApi = window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__ || {};
-  if (!bridge || !vue || !host || !panel || !legacy || !stateApi || !actionApi) {
+  if (!bridge || !vue || !host || !panel || !legacy) {
+    console.warn("[zaomeng] character-overview vue island skipped: host dependencies are not ready.");
+    return;
+  }
+  if (!Array.isArray(stateApi.KEY_FIELDS) || typeof actionApi.saveField !== "function" || typeof actionApi.autofillField !== "function") {
+    console.warn("[zaomeng] character-overview vue island skipped: state or action helpers are not ready.");
     return;
   }
 

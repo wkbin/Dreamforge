@@ -58,7 +58,9 @@ function applyModelSettingsView() {
   toggle("model-summary", modelSettings.configured);
   syncChoiceGroup("model-provider-options", "model-provider");
   syncTopbar();
-  if (typeof publishLegacyUiState === "function") {
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("model-settings-view", { modelSettings });
+  } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState("model-settings-view");
   }
 }
@@ -130,7 +132,9 @@ function updateWorkflowState() {
 
   window.__ZAOMENG_WORKFLOW_STATE__ = state;
   syncTopbar();
-  if (typeof publishLegacyUiState === "function") {
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("workflow-update", { workflow: state });
+  } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState("workflow-update", { workflow: state });
   }
 }
@@ -160,7 +164,14 @@ function applyRunViewFallback(run, options = {}) {
     syncBookshelfSelection();
   }
   updateWorkflowState();
-  if (typeof publishLegacyUiState === "function") {
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("run-rendered-workflow-fallback", {
+      currentRunId,
+      currentRun: run,
+      currentCharacterOverview: null,
+      workflow: window.__ZAOMENG_WORKFLOW_STATE__ || {},
+    });
+  } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState("run-rendered-workflow-fallback");
   }
   return run;
@@ -222,7 +233,9 @@ async function loadModelSettings() {
   if (!modelSettings.configured) {
     openSettingsModal();
   }
-  if (typeof publishLegacyUiState === "function") {
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("model-settings-loaded", { modelSettings });
+  } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState("model-settings-loaded");
   }
 }
@@ -246,7 +259,18 @@ function resetDialogueView() {
   if (typeof renderObserveQuickReplies === "function") renderObserveQuickReplies(null);
   resizeComposer();
   setComposerEnabled(false);
-  if (typeof publishLegacyUiState === "function") {
+  const workflowState = typeof buildWorkflowVisibilityState === "function"
+    ? buildWorkflowVisibilityState()
+    : (window.__ZAOMENG_WORKFLOW_STATE__ || {});
+  window.__ZAOMENG_WORKFLOW_STATE__ = workflowState;
+  if (typeof window.__ZAOMENG_UI_BRIDGE_TOOLS__?.syncLegacyUiState === "function") {
+    window.__ZAOMENG_UI_BRIDGE_TOOLS__.syncLegacyUiState("dialogue-reset", {
+      currentDialogueSessionId: "",
+      currentDialogueSession: null,
+      currentCharacterOverview: null,
+      workflow: workflowState,
+    });
+  } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState("dialogue-reset");
   }
 }

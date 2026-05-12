@@ -5,7 +5,12 @@
   const host = document.getElementById("run-timeline-vue-root");
   const panel = document.getElementById("step-progress");
   const legacy = document.getElementById("run-timeline-legacy");
-  if (!bridge || !stateApi || !vue || !host || !panel || !legacy) {
+  if (!bridge || !vue || !host || !panel || !legacy) {
+    console.warn("[zaomeng] run-timeline vue island skipped: host dependencies are not ready.");
+    return;
+  }
+  if (typeof stateApi.buildRunEventsViewState !== "function") {
+    console.warn("[zaomeng] run-timeline vue island skipped: state builder is not ready.");
     return;
   }
 

@@ -1,7 +1,8 @@
 (() => {
   const bridge = window.__ZAOMENG_LEGACY_BRIDGE__;
   const vue = window.Vue;
-  if (!bridge || !vue) {
+  if (!bridge || typeof bridge.getSnapshot !== "function" || typeof bridge.subscribe !== "function" || !vue) {
+    console.warn("[zaomeng] work-overview vue shared skipped: bridge or Vue runtime is not ready.");
     return;
   }
 

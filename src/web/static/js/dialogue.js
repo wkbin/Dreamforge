@@ -3,6 +3,8 @@ const existingDialogueModule = window.__ZAOMENG_DIALOGUE_MODULE__;
 if (existingDialogueModule?.initialized) {
   return;
 }
+const UI_BRIDGE_TOOLS = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
+
 function scrollTranscriptToBottom() {
   const root = el("dialogue-transcript");
   if (!root) return;
@@ -426,8 +428,15 @@ function latestSessionSnippetFromTranscript(items) {
 }
 
 async function renderDialogueSession(session) {
-  currentDialogueSessionId = session.session_id || "";
-  currentDialogueSession = session;
+  if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-local", {
+      currentDialogueSessionId: session.session_id || "",
+      currentDialogueSession: session,
+    });
+  } else {
+    currentDialogueSessionId = session.session_id || "";
+    currentDialogueSession = session;
+  }
   const latestSnippet = latestSessionSnippetFromTranscript(session?.transcript);
   if (latestSnippet) {
     rememberRecentSessionSnippet(currentRunId, currentDialogueSessionId, latestSnippet);
@@ -445,8 +454,16 @@ async function renderDialogueSession(session) {
   renderDialogueTranscript(session);
   await loadRecentSessions();
   updateWorkflowState();
-  if (typeof publishLegacyUiState === "function") {
-    publishLegacyUiState("dialogue-session-rendered");
+  if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-rendered", {
+      currentDialogueSessionId,
+      currentDialogueSession: session,
+    });
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("dialogue-session-rendered", {
+      currentDialogueSessionId,
+      currentDialogueSession: session,
+    });
   }
   scrollTranscriptToBottom();
   el("dialogue-message")?.focus();
@@ -565,13 +582,34 @@ async function loadRecentSessions() {
         const previousSessionId = currentDialogueSessionId;
         const previousSession = currentDialogueSession;
         currentRunId = item.run_id || currentRunId;
-        currentDialogueSessionId = item.session_id || "";
-        currentDialogueSession = null;
+        if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
+          UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-selecting", {
+            currentRunId,
+            currentDialogueSessionId: item.session_id || "",
+            currentDialogueSession: null,
+          });
+        } else {
+          currentDialogueSessionId = item.session_id || "";
+          currentDialogueSession = null;
+        }
         sessionBooting = true;
         setComposerEnabled(false);
         setSessionBadge("入场中");
         renderSessionBooting(item.mode, item.participants || []);
         updateWorkflowState();
+        if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
+          UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-booting", {
+            currentRunId,
+            currentDialogueSessionId,
+            currentDialogueSession: null,
+          });
+        } else if (typeof publishLegacyUiState === "function") {
+          publishLegacyUiState("dialogue-session-booting", {
+            currentRunId,
+            currentDialogueSessionId,
+            currentDialogueSession: null,
+          });
+        }
         try {
           const [run, session] = await Promise.all([
             apiJson(`/api/web/runs/${item.run_id}`),
@@ -582,8 +620,16 @@ async function loadRecentSessions() {
         } catch (error) {
           currentRunId = previousRunId;
           currentRun = previousRun;
-          currentDialogueSessionId = previousSessionId;
-          currentDialogueSession = previousSession;
+          if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
+            UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-restore-local", {
+              currentRunId,
+              currentDialogueSessionId: previousSessionId,
+              currentDialogueSession: previousSession,
+            });
+          } else {
+            currentDialogueSessionId = previousSessionId;
+            currentDialogueSession = previousSession;
+          }
           sessionBooting = false;
           if (previousSession) {
             renderDialogueMemory(previousSession);
@@ -595,6 +641,19 @@ async function loadRecentSessions() {
           }
           if (typeof updateWorkflowState === "function") {
             updateWorkflowState();
+          }
+          if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
+            UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-restore", {
+              currentRunId,
+              currentDialogueSessionId,
+              currentDialogueSession: previousSession,
+            });
+          } else if (typeof publishLegacyUiState === "function") {
+            publishLegacyUiState("dialogue-session-restore", {
+              currentRunId,
+              currentDialogueSessionId,
+              currentDialogueSession: previousSession,
+            });
           }
           setStatus("dialogue-session-status", error.message || "这段会话暂时没有载入成功。");
         }
