@@ -122,7 +122,14 @@ The current Web UI already supports:
 
 - a guided linear workflow, without requiring the user to understand the skill ecosystem first
 - saving model settings and launching distillation directly from the UI
+- volume-aware excerpt suggestions, including estimated chunk count, model calls, rough token cost, and time range
 - tracking character distillation progress and graph artifacts in one place
+- a bookshelf-style workbench where you can return to a run and keep distilling, review personas, inspect relations, or jump into chat
+- persona review pages with key-field completion, evidence-gap checks, and secondary-field tuning
+- creating, editing, selecting, and reusing scene cards, self cards, and opening presets
+- automatic next-scene recommendation during chat, with in-session scene switching
+- session restore, recent-session resume, group chat continuation, and direct workbench entry into a scene
+- dialogue context compression that trims persona / relation context around active participants and injects session memory summaries
 - viewing transcripts, continuing group chat, and deleting recent sessions in the same interface
 - incremental distillation and re-distillation entrypoints
 
@@ -181,6 +188,14 @@ In `insert`, the first session creates a lightweight scene card for you, usually
 - whether you want natural, immersive, or probing interaction
 - how much your presence should affect the scene
 
+The chat entry is also no longer just “pick characters and start talking.”  
+You can now layer these helpers before or during a session:
+
+- scene cards: define location, atmosphere, dramatic drive, and opening situation for a scene
+- self cards: prepare your identity, tone, motive, and in-scene role for `insert`
+- opening presets: bundle mode, participants, scene card, and self card into a reusable starting setup
+- automatic scene recommendation: while a session is running, the system can suggest a more suitable next scene card
+
 ## Usage 🛠️
 
 The recommended order is simple:
@@ -221,6 +236,13 @@ The current version is **LLM-first**:
 - `zaomeng-skill` prefers reusing the model capability already provided by the host
 
 The emphasis is no longer “hardcode a pile of rules and glue lines together.” The emphasis is giving the model clearer persona, relationship, and scene constraints so the output sounds more like the source character.
+
+At the same time, the Web UI dialogue pipeline is now more serious about surviving long sessions:
+
+- sessions maintain summarized memory instead of endlessly stuffing raw history into context
+- persona context is trimmed toward currently active participants instead of expanding every character every turn
+- relationship excerpts are cut down to what the current scene and participants actually need
+- reply suggestions, observer-mode nudges, and scene-switch prompts all reuse this compressed context
 
 ## Incremental Distillation ♻️
 
