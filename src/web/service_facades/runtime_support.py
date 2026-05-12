@@ -37,8 +37,11 @@ class RuntimeSupportMixin:
         max_sentences: int,
         max_chars: int,
     ) -> None:
-        manifest = prepare_background_manifest(self._load_manifest(manifest_path) or {}, utc_now=_utc_now)
-        self._write_json(manifest_path, manifest)
+        manifest = self._update_manifest(
+            manifest_path,
+            lambda current: prepare_background_manifest(current, utc_now=_utc_now),
+            create_if_missing=True,
+        )
 
         run_id = str(manifest.get("run_id", "")).strip() or manifest_path.parent.name
         start_background_thread(

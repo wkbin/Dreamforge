@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 from src.core.exceptions import LLMRequestError
 from src.web.chat.helpers import parse_dialogue_suggestion
+from src.web.pipeline import process_relation_graph, update_manifest_chunk_progress
 from src.web.review.persona_completion import collect_persona_web_references
 from src.web.workflow import WebRunService
 
@@ -1244,6 +1245,151 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(persisted["updated_at"], "2026-05-11T12:01:00Z")
             self.assertTrue(bool(persisted.get("control", {}).get("stop_requested", False)))
             self.assertEqual(result_holder["payload"]["progress"]["current_character"], "薛宝钗")
+
+    def test_start_background_run_uses_latest_manifest_snapshot_under_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            run_id = "run-background-atomic"
+            run_dir = Path(tmp) / "runs" / run_id
+            manifest_path = run_dir / "run_manifest.json"
+            novel_path = run_dir / "input" / "novel.txt"
+            novel_path.parent.mkdir(parents=True, exist_ok=True)
+            novel_path.write_text("Alpha meets Beta.", encoding="utf-8")
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "status": "running",
+                        "progress": {"stage": "characters_locked", "message": "ready"},
+                        "summary": {"status_text": "ready"},
+                        "updated_at": "2026-05-11T12:00:00Z",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            finished = threading.Event()
+
+            def worker() -> None:
+                with patch("src.web.service_facades.runtime_support.start_background_thread"):
+                    service._start_background_run(
+                        manifest_path=manifest_path,
+                        novel_path=novel_path,
+                        locked_characters=["Alpha"],
+                        max_sentences=120,
+                        max_chars=50000,
+                    )
+                finished.set()
+
+            with service._manifest_lock_context(manifest_path):
+                thread = threading.Thread(target=worker)
+                thread.start()
+                manifest_path.write_text(
+                    json.dumps(
+                        {
+                            "run_id": run_id,
+                            "status": "running",
+                            "progress": {"stage": "characters_locked", "message": "fresh"},
+                            "summary": {"status_text": "fresh"},
+                            "latest_marker": "keep-me",
+                            "updated_at": "2026-05-11T12:01:00Z",
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+            finished.wait(timeout=3)
+            thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(persisted["latest_marker"], "keep-me")
+            self.assertEqual(persisted["progress"]["stage"], "queued")
+            self.assertEqual(persisted["summary"]["status_text"], "waiting_for_payloads")
+
+    def test_process_relation_graph_preserves_latest_relation_repairs_during_prepare(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            run_id = "run-relation-prepare"
+            run_dir = Path(tmp) / "runs" / run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = run_dir / "run_manifest.json"
+            payload_dir = run_dir / "payloads"
+            payload_dir.mkdir(parents=True, exist_ok=True)
+            novel_path = run_dir / "input" / "novel.txt"
+            novel_path.parent.mkdir(parents=True, exist_ok=True)
+            novel_path.write_text("Alpha meets Beta. Alpha distrusts Gamma.", encoding="utf-8")
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "novel_id": "novel",
+                        "quality": {
+                            "excerpt_focus": {"matched_characters": [], "missing_characters": [], "strategy": ""},
+                            "stage_presence": [],
+                            "character_focus": {},
+                            "profile_repairs": {"count": 0, "characters": []},
+                            "relation_repairs": {"count": 2, "pairs": ["Alpha_Beta", "Alpha_Gamma"]},
+                        },
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            def write_json(path: Path, payload: dict[str, object]) -> None:
+                path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            def update_manifest(path: Path, updater):
+                current = json.loads(path.read_text(encoding="utf-8"))
+                updated = updater(dict(current))
+                next_payload = current if updated is None else updated
+                write_json(path, next_payload)
+                return next_payload
+
+            with self.assertRaisesRegex(RuntimeError, "stop after prepare"):
+                process_relation_graph(
+                    novel_path=novel_path,
+                    graph_cast=["Alpha", "Beta"],
+                    max_sentences=120,
+                    max_chars=50000,
+                    manifest_path=manifest_path,
+                    payload_dir=payload_dir,
+                    novel_id="novel",
+                    parts=Mock(),
+                    config=Mock(),
+                    on_relation=lambda stage, payload: None,
+                    assert_run_not_stopped=lambda *args, **kwargs: None,
+                    write_json=write_json,
+                    update_manifest=update_manifest,
+                    build_quality_snapshot=service._build_quality_snapshot,
+                    update_manifest_chunk_progress=update_manifest_chunk_progress,
+                    generate_relation_markdown=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("stop after prepare")),
+                    maybe_repair_generated_relations=lambda **kwargs: None,
+                    load_relations_source=lambda path: {},
+                    export_relations_source=lambda **kwargs: {},
+                    utc_now=lambda: "2026-05-12T00:00:00Z",
+                    relation_repairs_getter=lambda current: (current.get("quality", {}) or {}).get("relation_repairs", {}),
+                    quality_matched=set(),
+                    quality_missing=set(),
+                    quality_focus={},
+                    profile_repair_characters=[],
+                )
+
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(persisted["quality"]["relation_repairs"]["count"], 2)
+            self.assertEqual(
+                persisted["quality"]["relation_repairs"]["pairs"],
+                ["Alpha_Beta", "Alpha_Gamma"],
+            )
 
     def test_ingest_character_result_uses_latest_manifest_snapshot_atomic(self):
         with tempfile.TemporaryDirectory() as tmp:

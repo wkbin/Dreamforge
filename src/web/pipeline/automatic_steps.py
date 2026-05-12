@@ -231,7 +231,7 @@ def process_relation_graph(
     load_relations_source: Callable[[Path], dict[str, Any]],
     export_relations_source: Callable[..., dict[str, Any]],
     utc_now: Callable[[], str],
-    relation_repairs_state: dict[str, Any],
+    relation_repairs_getter: Callable[[dict[str, Any]], dict[str, Any]],
     quality_matched: set[str],
     quality_missing: set[str],
     quality_focus: dict[str, Any],
@@ -267,7 +267,7 @@ def process_relation_graph(
             excerpt_stages=relation_payload.get("request", {}).get("excerpt_stages", {}),
             character_focus=quality_focus,
             profile_repairs={"count": len(profile_repair_characters), "characters": profile_repair_characters},
-            relation_repairs=relation_repairs_state,
+            relation_repairs=relation_repairs_getter(current),
         )
         current["updated_at"] = utc_now()
         return current

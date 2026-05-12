@@ -64,8 +64,9 @@ def _apply_finalize_success_update(
     *,
     utc_now,
     finalize_manifest_timing,
+    discover_artifacts,
 ) -> dict[str, Any]:
-    refreshed = current
+    refreshed = discover_artifacts(current)
     finalize_workflow_success(
         refreshed,
         utc_now=utc_now,
@@ -80,8 +81,9 @@ def _apply_finalize_success_without_graph_update(
     graph_error: str,
     utc_now,
     finalize_manifest_timing,
+    discover_artifacts,
 ) -> dict[str, Any]:
-    refreshed = current
+    refreshed = discover_artifacts(current)
     finalize_workflow_success_without_graph(
         refreshed,
         graph_error=graph_error,
@@ -97,8 +99,9 @@ def _apply_finalize_stopped_update(
     message: str,
     utc_now,
     finalize_manifest_timing,
+    discover_artifacts,
 ) -> dict[str, Any]:
-    stopped = current
+    stopped = discover_artifacts(current)
     finalize_workflow_stopped(
         stopped,
         message=message,
@@ -114,8 +117,9 @@ def _apply_finalize_failed_update(
     message: str,
     utc_now,
     finalize_manifest_timing,
+    discover_artifacts,
 ) -> dict[str, Any]:
-    failed = current
+    failed = discover_artifacts(current)
     finalize_workflow_failed(
         failed,
         message=message,
@@ -230,8 +234,6 @@ class AutomaticPipelineMixin:
                         "profile_repair_characters": profile_repair_characters,
                     },
                 )
-
-            refreshed = self._discover_artifacts(self._load_manifest(manifest_path) or manifest)
             try:
                 process_relation_graph(
                     novel_path=novel_path,
@@ -254,18 +256,18 @@ class AutomaticPipelineMixin:
                     load_relations_source=load_relations_source,
                     export_relations_source=export_relations_source,
                     utc_now=_utc_now,
-                    relation_repairs_state=(manifest.get("quality", {}) or {}).get("relation_repairs", {}),
+                    relation_repairs_getter=lambda current: (current.get("quality", {}) or {}).get("relation_repairs", {}),
                     quality_matched=quality_matched,
                     quality_missing=quality_missing,
                     quality_focus=quality_focus,
                     profile_repair_characters=profile_repair_characters,
                 )
-                refreshed = self._discover_artifacts(self._load_manifest(manifest_path) or manifest)
                 refreshed = self._update_manifest(
                     manifest_path,
                     lambda current: _apply_finalize_success_update(
                         current,
                         utc_now=_utc_now,
+                        discover_artifacts=self._discover_artifacts,
                         finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(
                             target,
                             outcome=outcome,
@@ -275,13 +277,13 @@ class AutomaticPipelineMixin:
             except stopped_error_type:
                 raise
             except Exception as relation_exc:
-                refreshed = self._discover_artifacts(self._load_manifest(manifest_path) or manifest)
                 refreshed = self._update_manifest(
                     manifest_path,
                     lambda current: _apply_finalize_success_without_graph_update(
                         current,
                         graph_error=str(relation_exc),
                         utc_now=_utc_now,
+                        discover_artifacts=self._discover_artifacts,
                         finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(
                             target,
                             outcome=outcome,
@@ -296,6 +298,7 @@ class AutomaticPipelineMixin:
                     current,
                     message=str(exc),
                     utc_now=_utc_now,
+                    discover_artifacts=self._discover_artifacts,
                     finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(
                         target,
                         outcome=outcome,
@@ -310,6 +313,7 @@ class AutomaticPipelineMixin:
                     current,
                     message=str(exc),
                     utc_now=_utc_now,
+                    discover_artifacts=self._discover_artifacts,
                     finalize_manifest_timing=lambda target, outcome: self._finalize_manifest_timing(
                         target,
                         outcome=outcome,
