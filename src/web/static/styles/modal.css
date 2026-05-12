@@ -323,6 +323,16 @@
   gap: 1rem;
 }
 
+.scene-card-vue-root {
+  display: grid;
+  gap: 1rem;
+}
+
+.scene-card-vue-form {
+  display: grid;
+  gap: 1rem;
+}
+
 .self-card-vue-form {
   display: grid;
   gap: 1rem;
@@ -446,14 +456,18 @@
 
 #settings-modal .panel-head,
 #persona-review-modal .panel-head,
+#scene-card-modal .panel-head,
 #self-card-modal .panel-head,
+#opening-preset-modal .panel-head,
 #relation-details-modal .panel-head {
   gap: 0.7rem;
 }
 
 #settings-modal .panel-copy,
 #persona-review-modal .panel-copy,
+#scene-card-modal .panel-copy,
 #self-card-modal .panel-copy,
+#opening-preset-modal .panel-copy,
 #relation-details-modal .panel-copy,
 #app-update-modal .panel-copy {
   font-size: 0.76rem;
@@ -462,20 +476,26 @@
 
 #settings-modal .field-card,
 #persona-review-modal .field-card,
-#self-card-modal .field-card {
+#scene-card-modal .field-card,
+#self-card-modal .field-card,
+#opening-preset-modal .field-card {
   gap: 0.5rem;
   padding: 0.82rem 0.88rem 0.8rem;
 }
 
 #settings-modal .field-card span,
 #persona-review-modal .field-card span,
-#self-card-modal .field-card span {
+#scene-card-modal .field-card span,
+#self-card-modal .field-card span,
+#opening-preset-modal .field-card span {
   font-size: 11px;
 }
 
 #settings-modal .field-card small,
 #persona-review-modal .field-card small,
-#self-card-modal .field-card small {
+#scene-card-modal .field-card small,
+#self-card-modal .field-card small,
+#opening-preset-modal .field-card small {
   font-size: 0.66rem;
   line-height: 1.45;
 }
@@ -484,6 +504,8 @@
   font-size: 0.78rem;
 }
 
+#scene-card-modal .review-group-head strong,
+#scene-card-modal .review-group-head p,
 #persona-review-modal .review-group-head p,
 #self-card-modal .review-group-head strong,
 #self-card-modal .review-group-head p {
@@ -494,14 +516,19 @@
 #settings-modal textarea,
 #persona-review-modal input,
 #persona-review-modal textarea,
+#scene-card-modal input,
+#scene-card-modal textarea,
 #self-card-modal input,
-#self-card-modal textarea {
+#self-card-modal textarea,
+#opening-preset-modal input,
+#opening-preset-modal textarea {
   font-size: 0.84rem;
   line-height: 1.55;
 }
 
 #settings-modal .mini-grid,
 #persona-review-modal .mini-grid,
+#scene-card-modal .mini-grid,
 #self-card-modal .mini-grid {
   gap: 0.72rem;
 }
@@ -509,7 +536,9 @@
 #settings-modal .modal-actions,
 #settings-modal .card-actions,
 #persona-review-modal .card-actions,
-#self-card-modal .card-actions {
+#scene-card-modal .card-actions,
+#self-card-modal .card-actions,
+#opening-preset-modal .card-actions {
   gap: 0.55rem;
 }
 
@@ -517,8 +546,12 @@
 #settings-modal .primary-button,
 #persona-review-modal .soft-button,
 #persona-review-modal .primary-button,
+#scene-card-modal .soft-button,
+#scene-card-modal .primary-button,
 #self-card-modal .soft-button,
 #self-card-modal .primary-button,
+#opening-preset-modal .soft-button,
+#opening-preset-modal .primary-button,
 #relation-details-modal .soft-button {
   min-height: 2rem;
   padding: 0 0.78rem;
@@ -527,7 +560,9 @@
 
 #settings-modal .card-note,
 #persona-review-modal .card-note,
+#scene-card-modal .card-note,
 #self-card-modal .card-note,
+#opening-preset-modal .card-note,
 #relation-details-modal .card-note,
 #app-update-modal .card-note {
   font-size: 0.74rem;
@@ -619,6 +654,8 @@
   display: none !important;
 }
 
+#scene-card-modal.has-vue-island #scene-card-form,
+#scene-card-modal.has-vue-island #scene-card-status,
 #self-card-modal.has-vue-island #self-card-form,
 #self-card-modal.has-vue-island #self-card-status {
   display: none !important;

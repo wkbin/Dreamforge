@@ -90,23 +90,43 @@ function openWorkTimelineFallback() {
 
 function buildChatSetupState() {
   const mode = valueOf("dialogue-mode", "observe");
+  const isActMode = mode === "act";
+  const isInsertMode = mode === "insert";
   return {
     mode,
     participants: String(valueOf("dialogue-participants", "")),
     participantList: charactersOf("dialogue-participants"),
     availableCharacters: getRunCharacterNames(currentRun),
-    controlledCharacter: trimmedValue("dialogue-controlled", ""),
-    selfCardId: selectedSelfCardId,
-    selfCards: Array.isArray(selfCards) ? selfCards.map((item) => ({
+    openingPresetId: selectedOpeningPresetId,
+    openingPresets: Array.isArray(openingPresets) ? openingPresets.map((item) => ({
       card_id: item.card_id || "",
       preview: item.preview || {},
       fields: item.fields || {},
     })) : [],
-    selfName: trimmedValue("dialogue-self-name", ""),
-    selfIdentity: trimmedValue("dialogue-self-identity", ""),
-    selfStyle: trimmedValue("dialogue-self-style", ""),
+    currentOpeningPreset,
+    sceneCardId: selectedSceneCardId,
+    currentSceneCard,
+    sceneCards: Array.isArray(sceneCards) ? sceneCards.map((item) => ({
+      card_id: item.card_id || "",
+      preview: item.preview || {},
+      fields: item.fields || {},
+    })) : [],
+    sceneCardRecommendation: currentSceneCardRecommendation,
+    controlledCharacter: isActMode ? trimmedValue("dialogue-controlled", "") : "",
+    canEditCurrentSceneCard: Boolean(currentSceneCard),
+    selfCardId: isInsertMode ? selectedSelfCardId : "",
+    currentSelfCard: isInsertMode ? currentSelfCard : null,
+    selfCards: isInsertMode ? (Array.isArray(selfCards) ? selfCards.map((item) => ({
+      card_id: item.card_id || "",
+      preview: item.preview || {},
+      fields: item.fields || {},
+    })) : []) : [],
+    selfName: isInsertMode ? trimmedValue("dialogue-self-name", "") : "",
+    selfIdentity: isInsertMode ? trimmedValue("dialogue-self-identity", "") : "",
+    selfStyle: isInsertMode ? trimmedValue("dialogue-self-style", "") : "",
     status: String(el("dialogue-session-status")?.textContent || "").trim(),
-    canEditCurrentCard: Boolean(currentSelfCard),
+    canEditCurrentCard: isInsertMode && Boolean(currentSelfCard),
+    canEditCurrentOpeningPreset: Boolean(currentOpeningPreset),
   };
 }
 
@@ -122,9 +142,54 @@ function publishChatSetupState(source = "chat-setup") {
   }
 }
 
+function humanizeChatMode(mode) {
+  const value = String(mode || "observe").trim() || "observe";
+  if (value === "act") return "化身书中人";
+  if (value === "insert") return "以自己入场";
+  return "旁观此局";
+}
+
+function buildCardSnapshot(card, fallbackCardId = "") {
+  if (!card) {
+    return {
+      card_id: String(fallbackCardId || "").trim(),
+      fields: {},
+      preview: {},
+    };
+  }
+  return {
+    card_id: String(card.card_id || fallbackCardId || "").trim(),
+    fields: { ...(card.fields || {}) },
+    preview: { ...(card.preview || {}) },
+  };
+}
+
+function collectOpeningPresetPayload(meta = {}) {
+  const mode = valueOf("dialogue-mode", "observe");
+  const sceneSnapshot = buildCardSnapshot(currentSceneCard, selectedSceneCardId);
+  const selfSnapshot = buildCardSnapshot(currentSelfCard, selectedSelfCardId);
+  return {
+    title: String(meta.title || "").trim(),
+    note: String(meta.note || "").trim(),
+    mode,
+    participants: charactersOf("dialogue-participants"),
+    controlled_character: trimmedValue("dialogue-controlled", ""),
+    scene_card_id: selectedSceneCardId,
+    scene_card: sceneSnapshot,
+    self_card_id: mode === "insert" ? selectedSelfCardId : "",
+    self_card: mode === "insert" ? selfSnapshot : {},
+    self_name: mode === "insert" ? trimmedValue("dialogue-self-name", "") : "",
+    self_identity: mode === "insert" ? trimmedValue("dialogue-self-identity", "") : "",
+    self_style: mode === "insert" ? trimmedValue("dialogue-self-style", "") : "",
+  };
+}
+
 function syncModeFields() {
   const mode = valueOf("dialogue-mode", "observe");
   syncChoiceGroup("dialogue-mode-options", "dialogue-mode");
+  if (mode !== "insert") {
+    clearChatSetupSelfCardSelection();
+  }
   if (el("dialogue-controlled")) el("dialogue-controlled").disabled = mode !== "act";
   if (el("dialogue-self-card")) el("dialogue-self-card").disabled = mode !== "insert";
   if (el("dialogue-self-name")) el("dialogue-self-name").disabled = mode !== "insert";
@@ -134,9 +199,31 @@ function syncModeFields() {
   toggle("self-card-field", mode === "insert");
   toggle("insert-self-fields", mode === "insert");
   toggle("self-card-preview-shell", mode === "insert");
+  syncCustomSelect("dialogue-scene-card");
   syncCustomSelect("dialogue-self-card");
+  renderSelectedSceneCardPreview(false);
   renderSelectedSelfCardPreview(false);
   publishChatSetupState("chat-setup-mode-updated");
+}
+
+function clearChatSetupSelfCardSelection() {
+  selectedSelfCardId = "";
+  currentSelfCard = null;
+  const select = el("dialogue-self-card");
+  if (select instanceof HTMLSelectElement) {
+    select.value = "";
+    syncCustomSelect("dialogue-self-card");
+  }
+  setValue("dialogue-self-name", "");
+  setValue("dialogue-self-identity", "");
+  setValue("dialogue-self-style", "");
+  renderSelectedSelfCardPreview(false);
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("self-card-selection-cleared", {
+      selectedSelfCardId,
+      currentSelfCard,
+    });
+  }
 }
 
 async function handleModelSettingsSubmit(event) {
@@ -414,6 +501,8 @@ async function handleDialogueSessionSubmit(event) {
             mode,
             participants,
             controlled_character: controlledCharacter,
+            scene_card_id: selectedSceneCardId,
+            scene_profile: currentSceneCard?.fields || {},
             self_card_id: mode === "insert" ? selectedSelfCardId : "",
             self_profile:
               mode === "insert"
@@ -441,10 +530,603 @@ async function handleDialogueSessionSubmit(event) {
 }
 
 const EDITOR_SCHEMAS = window.__ZAOMENG_EDITOR_SCHEMAS__ || {};
+const SCENE_CARD_FIELD_DEFINITIONS = Array.isArray(EDITOR_SCHEMAS.SCENE_CARD_FIELDS) ? EDITOR_SCHEMAS.SCENE_CARD_FIELDS : [];
+const SCENE_CARD_FIELD_MAP = EDITOR_SCHEMAS.SCENE_CARD_FIELD_MAP instanceof Map ? EDITOR_SCHEMAS.SCENE_CARD_FIELD_MAP : new Map();
+const SCENE_CARD_FIELD_BINDINGS = SCENE_CARD_FIELD_DEFINITIONS.map((item) => [item.field, `scene-card-${item.field.replaceAll("_", "-")}`]);
+const SCENE_CARD_REQUIRED_FIELDS = Array.isArray(EDITOR_SCHEMAS.SCENE_CARD_REQUIRED_FIELDS) ? EDITOR_SCHEMAS.SCENE_CARD_REQUIRED_FIELDS : [];
 const SELF_CARD_FIELD_DEFINITIONS = Array.isArray(EDITOR_SCHEMAS.SELF_CARD_ALL_FIELDS) ? EDITOR_SCHEMAS.SELF_CARD_ALL_FIELDS : [];
 const SELF_CARD_FIELD_MAP = EDITOR_SCHEMAS.SELF_CARD_FIELD_MAP instanceof Map ? EDITOR_SCHEMAS.SELF_CARD_FIELD_MAP : new Map();
 const SELF_CARD_FIELD_BINDINGS = SELF_CARD_FIELD_DEFINITIONS.map((item) => [item.field, `self-card-${item.field.replaceAll("_", "-")}`]);
 const SELF_CARD_REQUIRED_FIELDS = Array.isArray(EDITOR_SCHEMAS.SELF_CARD_REQUIRED_FIELDS) ? EDITOR_SCHEMAS.SELF_CARD_REQUIRED_FIELDS : [];
+
+function sceneCardFieldId(field) {
+  const item = SCENE_CARD_FIELD_BINDINGS.find(([key]) => key === field);
+  return item ? item[1] : "";
+}
+
+function collectSceneCardPayload() {
+  return Object.fromEntries(SCENE_CARD_FIELD_BINDINGS.map(([field, id]) => [field, trimmedValue(id, "")]));
+}
+
+function validateSceneCardPayload(fields) {
+  const missing = SCENE_CARD_REQUIRED_FIELDS.filter((field) => !String(fields?.[field] || "").trim());
+  if (!missing.length) return "";
+  const labels = missing.map((field) => SCENE_CARD_FIELD_MAP.get(field)?.label || field);
+  return `请先补全这些必填项：${labels.join("、")}`;
+}
+
+function fillSceneCardFields(fields = {}) {
+  SCENE_CARD_FIELD_BINDINGS.forEach(([field, id]) => {
+    setValue(id, fields?.[field] || "");
+  });
+}
+
+function buildSceneCardEditorState() {
+  return {
+    cardId: trimmedValue("scene-card-id", ""),
+    status: String(el("scene-card-status")?.textContent || "").trim(),
+    deleteVisible: !el("delete-scene-card-button")?.classList.contains("hidden"),
+    modalOpen: !el("scene-card-modal")?.classList.contains("hidden"),
+    fields: collectSceneCardPayload(),
+  };
+}
+
+window.__ZAOMENG_BUILD_SCENE_CARD_EDITOR_STATE__ = buildSceneCardEditorState;
+
+function publishSceneCardEditorState(source = "scene-card-editor") {
+  currentSceneCardEditor = buildSceneCardEditorState();
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState(source, { currentSceneCardEditor });
+  } else if (typeof UI_BRIDGE_TOOLS.publishLegacyStateSlice === "function") {
+    UI_BRIDGE_TOOLS.publishLegacyStateSlice(source, "currentSceneCardEditor", currentSceneCardEditor);
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState(source, { currentSceneCardEditor });
+  }
+}
+
+function updateSceneCardDeleteButton(shouldPublish = true) {
+  const hasCard = Boolean(trimmedValue("scene-card-id", ""));
+  toggle("delete-scene-card-button", hasCard);
+  toggle("duplicate-scene-card-button", hasCard);
+  if (shouldPublish) {
+    publishSceneCardEditorState("scene-card-delete-visibility-updated");
+  }
+}
+
+function startSceneCardDraft(fields = {}) {
+  currentSceneCard = { card_id: "", fields: { ...fields } };
+  setValue("scene-card-id", "");
+  fillSceneCardFields(fields);
+  updateSceneCardDeleteButton();
+}
+
+function openNewSceneCard() {
+  startSceneCardDraft({
+    title: trimmedValue("scene-card-preview-title", "") || "",
+  });
+  setStatus("scene-card-status", "你可以手写，也可以让 AI 先随机搭一幕。");
+  openSceneCardModal();
+  publishSceneCardEditorState("scene-card-new-opened");
+}
+
+async function openExistingSceneCard(cardId) {
+  if (!cardId) {
+    openNewSceneCard();
+    return;
+  }
+  setStatus("scene-card-status", "正在载入场景卡...");
+  publishSceneCardEditorState("scene-card-loading");
+  try {
+    const payload = await apiJson(`/api/web/scene-cards/${encodeURIComponent(cardId)}`, {}, "场景卡载入失败。");
+    currentSceneCard = payload;
+    setValue("scene-card-id", payload.card_id || "");
+    fillSceneCardFields(payload.fields || {});
+    updateSceneCardDeleteButton();
+    setStatus("scene-card-status", "");
+    openSceneCardModal();
+    publishSceneCardEditorState("scene-card-loaded");
+  } catch (error) {
+    setStatus("dialogue-session-status", error.message || "场景卡载入失败。");
+    publishSceneCardEditorState("scene-card-load-failed");
+  }
+}
+
+function renderSceneCardOptions(items = sceneCards) {
+  const select = el("dialogue-scene-card");
+  if (!(select instanceof HTMLSelectElement)) return;
+  const trigger = el("dialogue-scene-card-trigger");
+  const hint = el("dialogue-scene-card-hint");
+  const previous = select.value || selectedSceneCardId || "";
+  select.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = items.length ? "先挑一张场景卡" : "还没有场景卡，先新建一张";
+  select.appendChild(blank);
+  (items || []).forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.card_id || "";
+    const title = item?.preview?.title || item?.fields?.title || item.card_id || "未命名场景卡";
+    const location = item?.preview?.location || item?.fields?.location || "";
+    option.textContent = location ? `${title} · ${location}` : title;
+    select.appendChild(option);
+  });
+  if ((items || []).some((item) => item.card_id === previous)) {
+    select.value = previous;
+  } else {
+    select.value = "";
+  }
+  if (trigger instanceof HTMLButtonElement) {
+    trigger.disabled = items.length === 0;
+  }
+  if (hint) {
+    hint.textContent = items.length
+      ? "不选也能直接开聊，但选卡后会把地点、气氛和推进方向一起带进这一幕。"
+      : "你还没有场景卡。先新建一张，后面就能直接把整幕氛围接进来。";
+  }
+  selectedSceneCardId = select.value;
+  syncCustomSelect("dialogue-scene-card");
+  syncSelectedSceneCardFromSelect();
+}
+
+async function loadSceneCards() {
+  const payload = await apiJson("/api/web/scene-cards", {}, "场景卡列表载入失败。");
+  sceneCards = Array.isArray(payload?.items) ? payload.items : [];
+  renderSceneCardOptions(sceneCards);
+  renderDialogueSceneSwitcher(currentDialogueSession);
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("scene-cards-loaded", { sceneCards });
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("scene-cards-loaded");
+  }
+  return sceneCards;
+}
+
+function syncSelectedSceneCardFromSelect() {
+  const select = el("dialogue-scene-card");
+  const nextId = select?.value || "";
+  selectedSceneCardId = nextId;
+  currentSceneCard = sceneCards.find((item) => item.card_id === nextId) || null;
+  if (currentSceneCardRecommendation && currentSceneCardRecommendation.recommended_card_id === nextId) {
+    currentSceneCardRecommendation = {
+      ...currentSceneCardRecommendation,
+      applied: true,
+    };
+  }
+  renderSelectedSceneCardPreview(false);
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("scene-card-selection-changed", {
+      selectedSceneCardId,
+      currentSceneCard,
+      currentSceneCardRecommendation,
+    });
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("scene-card-selection-changed");
+  }
+  publishChatSetupState("chat-setup-scene-card-selection-changed");
+}
+
+function renderSelectedSceneCardPreview(shouldPublish = true) {
+  const card = currentSceneCard;
+  const hasCards = sceneCards.length > 0;
+  const title = card?.preview?.title || card?.fields?.title || "";
+  const copy =
+    card?.preview?.opening_situation || card?.fields?.opening_situation || card?.preview?.scene_drive || "";
+  setText("scene-card-preview-title", title || (hasCards ? "还没有选中场景卡" : "你还没有场景卡"), "");
+  setText(
+    "scene-card-preview-copy",
+    card
+      ? copy || "这张卡已经接上，会把这一幕的起势和推进方向一起带进聊天。"
+      : hasCards
+        ? "选一张卡后，这一幕的地点、气氛和推进方向都会先定下来。"
+        : "先新建一张场景卡，后面就可以直接把整幕氛围带进场景。",
+    ""
+  );
+  const root = el("scene-card-preview-pills");
+  if (!root) return;
+  root.innerHTML = "";
+  const preview = card?.preview || {};
+  [preview.time_hint, preview.location, preview.atmosphere, preview.scene_drive, preview.expected_rhythm]
+    .filter(Boolean)
+    .slice(0, 5)
+    .forEach((value) => {
+      const chip = document.createElement("span");
+      chip.textContent = value;
+      root.appendChild(chip);
+    });
+  const recommendationNote = el("scene-card-preview-recommendation");
+  if (recommendationNote) {
+    const top = Array.isArray(currentSceneCardRecommendation?.items) ? currentSceneCardRecommendation.items[0] : null;
+    const topId = String(currentSceneCardRecommendation?.recommended_card_id || "").trim();
+    const reasons = Array.isArray(top?.recommendation?.reasons) ? top.recommendation.reasons.filter(Boolean).slice(0, 3) : [];
+    if (card && topId && card.card_id === topId && reasons.length) {
+      recommendationNote.textContent = `推荐理由：${reasons.join("，")}。`;
+      recommendationNote.classList.remove("hidden");
+    } else {
+      recommendationNote.textContent = "";
+      recommendationNote.classList.add("hidden");
+    }
+  }
+  const editButton = el("edit-scene-card-button");
+  if (editButton) {
+    editButton.disabled = !card;
+    editButton.classList.toggle("hidden", !card);
+  }
+  if (shouldPublish) {
+    publishChatSetupState("chat-setup-scene-card-preview-rendered");
+  }
+}
+
+async function handleSceneCardSelectionChange() {
+  syncSelectedSceneCardFromSelect();
+}
+
+async function handleOpenNewSceneCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  openNewSceneCard();
+}
+
+async function handleEditCurrentSceneCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (!selectedSceneCardId) {
+    openNewSceneCard();
+    return;
+  }
+  await openExistingSceneCard(selectedSceneCardId);
+}
+
+async function handleGenerateSceneCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  const button = el("generate-scene-card-button");
+  if (button) button.disabled = true;
+  setStatus("scene-card-status", "正在随机生成一张场景卡...");
+  publishSceneCardEditorState("scene-card-generating");
+  try {
+    const payload = await apiJson(
+      "/api/web/scene-cards/generate",
+      { method: "POST" },
+      "场景卡生成失败。"
+    );
+    fillSceneCardFields(payload.fields || {});
+    setStatus("scene-card-status", "AI 已经把这一幕先搭好了，你可以直接保存，也可以再手修。");
+    publishSceneCardEditorState("scene-card-generated");
+  } catch (error) {
+    setStatus("scene-card-status", error.message || "场景卡生成失败。");
+    publishSceneCardEditorState("scene-card-generate-failed");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function handleSceneCardSubmit(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  const fields = collectSceneCardPayload();
+  const validationMessage = validateSceneCardPayload(fields);
+  if (validationMessage) {
+    setStatus("scene-card-status", validationMessage);
+    publishSceneCardEditorState("scene-card-validation-failed");
+    return;
+  }
+  setStatus("scene-card-status", "正在保存场景卡...");
+  publishSceneCardEditorState("scene-card-saving");
+  try {
+    const cardId = trimmedValue("scene-card-id", "");
+    const payload = await apiJson(
+      cardId ? `/api/web/scene-cards/${encodeURIComponent(cardId)}` : "/api/web/scene-cards",
+      {
+        method: cardId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      },
+      "场景卡保存失败。"
+    );
+    setValue("scene-card-id", payload.card_id || "");
+    await loadSceneCards();
+    const select = el("dialogue-scene-card");
+    if (select) {
+      select.value = payload.card_id || "";
+      syncCustomSelect("dialogue-scene-card");
+    }
+    syncSelectedSceneCardFromSelect();
+    setStatus("scene-card-status", "场景卡已保存。");
+    publishSceneCardEditorState("scene-card-saved");
+    closeSceneCardModal();
+  } catch (error) {
+    setStatus("scene-card-status", error.message || "场景卡保存失败。");
+    publishSceneCardEditorState("scene-card-save-failed");
+  }
+}
+
+async function handleDeleteSceneCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  const cardId = trimmedValue("scene-card-id", "");
+  if (!cardId) return;
+  if (!window.confirm("确定删除这张场景卡吗？")) return;
+  setStatus("scene-card-status", "正在删除场景卡...");
+  publishSceneCardEditorState("scene-card-deleting");
+  try {
+    await apiJson(
+      `/api/web/scene-cards/${encodeURIComponent(cardId)}`,
+      { method: "DELETE" },
+      "场景卡删除失败。"
+    );
+    if (selectedSceneCardId === cardId) {
+      selectedSceneCardId = "";
+    }
+    await loadSceneCards();
+    currentSceneCard = null;
+    renderSelectedSceneCardPreview();
+    publishSceneCardEditorState("scene-card-deleted");
+    closeSceneCardModal();
+  } catch (error) {
+    setStatus("scene-card-status", error.message || "场景卡删除失败。");
+    publishSceneCardEditorState("scene-card-delete-failed");
+  }
+}
+
+function renderDialogueSceneSwitcher(session = currentDialogueSession) {
+  const shell = el("dialogue-scene-switcher");
+  const select = el("dialogue-live-scene-card");
+  const status = el("dialogue-live-scene-status");
+  const recommendButton = el("dialogue-live-scene-recommend");
+  if (!shell || !select) return;
+  const hasSession = Boolean(session?.session_id) && Boolean(currentRunId);
+  shell.classList.toggle("hidden", !hasSession);
+  if (!hasSession) {
+    select.innerHTML = "";
+    if (status) status.textContent = "";
+    if (recommendButton) recommendButton.disabled = true;
+    renderDialogueSceneChainSuggestions([], "");
+    return;
+  }
+  if (recommendButton) recommendButton.disabled = sceneCards.length < 2;
+  const currentSceneId = String(session?.session_card?.scene_card_id || "").trim();
+  const previous = select.value || currentSceneId;
+  select.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = sceneCards.length ? "先挑一张场景卡" : "还没有可用场景卡";
+  select.appendChild(blank);
+  (sceneCards || []).forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.card_id || "";
+    const title = item?.preview?.title || item?.fields?.title || item.card_id || "未命名场景卡";
+    const location = item?.preview?.location || item?.fields?.location || "";
+    option.textContent = location ? `${title} · ${location}` : title;
+    select.appendChild(option);
+  });
+  if ((sceneCards || []).some((item) => item.card_id === previous)) {
+    select.value = previous;
+  } else {
+    select.value = currentSceneId;
+  }
+  if (status && !String(status.textContent || "").trim()) {
+    status.textContent = currentSceneId ? "当前会话已经挂载场景卡，你可以随时切到另一幕。" : "当前会话还没挂场景卡，也可以直接在这里接入一张。";
+  }
+  renderDialogueSceneChainSuggestions(currentDialogueSceneChainSuggestions, session?.session_id || "");
+}
+
+async function handleApplyDialogueSceneCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (!currentRunId || !currentDialogueSessionId) return;
+  const select = el("dialogue-live-scene-card");
+  const transition = trimmedValue("dialogue-live-scene-transition", "");
+  const status = el("dialogue-live-scene-status");
+  const button = el("dialogue-live-scene-apply");
+  const sceneCardId = String(select?.value || "").trim();
+  if (!sceneCardId) {
+    if (status) status.textContent = "先挑一张要切进去的场景卡。";
+    return;
+  }
+  if (button) button.disabled = true;
+  if (status) status.textContent = "正在把这一幕转过去...";
+  try {
+    const payload = await window.__ZAOMENG_WEBUI_API__.switchDialogueSceneCard(currentRunId, currentDialogueSessionId, {
+      scene_card_id: sceneCardId,
+      scene_profile: currentSceneCard?.card_id === sceneCardId ? (currentSceneCard?.fields || {}) : {},
+      transition_message: transition,
+    });
+    if (el("dialogue-live-scene-transition")) {
+      setValue("dialogue-live-scene-transition", "");
+    }
+    if (status) status.textContent = "新的场景已经接上了。";
+    await renderDialogueSession(payload);
+  } catch (error) {
+    if (status) status.textContent = error.message || "切换场景失败。";
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function handleRecommendDialogueSceneCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (!currentRunId || !currentDialogueSessionId) return;
+  const select = el("dialogue-live-scene-card");
+  const status = el("dialogue-live-scene-status");
+  const button = el("dialogue-live-scene-recommend");
+  if (!sceneCards.length) {
+    if (status) status.textContent = "你还没有场景卡，先新建一张再来转场。";
+    return;
+  }
+  if (button) button.disabled = true;
+  if (status) status.textContent = "正在按当前局势替你挑下一幕...";
+  try {
+    const payload = await window.__ZAOMENG_WEBUI_API__.recommendDialogueSceneCard(currentRunId, currentDialogueSessionId);
+    const recommendedCardId = String(payload?.recommended_card_id || "").trim();
+    const recommendedTransition = String(payload?.recommended_transition_message || "").trim();
+    currentDialogueSceneChainSuggestions = Array.isArray(payload?.chain_suggestions) ? payload.chain_suggestions : [];
+    currentDialogueSceneChainSessionId = currentDialogueSessionId;
+    const topItem = Array.isArray(payload?.items) ? payload.items[0] : null;
+    const reasons = Array.isArray(topItem?.recommendation?.reasons) ? topItem.recommendation.reasons.filter(Boolean).slice(0, 3) : [];
+    if (!recommendedCardId) {
+      if (status) status.textContent = "这一拍暂时没挑出更合适的下一幕。";
+      return;
+    }
+    if (select) {
+      select.value = recommendedCardId;
+    }
+    if (recommendedTransition && el("dialogue-live-scene-transition")) {
+      setValue("dialogue-live-scene-transition", recommendedTransition);
+    }
+    if (status) {
+      status.textContent = reasons.length ? `已替你挑好下一幕：${reasons.join("，")}。` : "已替你挑好一张更接戏的场景卡。";
+    }
+    renderDialogueSceneChainSuggestions(currentDialogueSceneChainSuggestions, currentDialogueSessionId);
+  } catch (error) {
+    if (status) status.textContent = error.message || "下一幕推荐失败。";
+  } finally {
+    if (button) button.disabled = sceneCards.length < 2;
+  }
+}
+
+function renderDialogueSceneChainSuggestions(chains = [], sessionId = "") {
+  const root = el("dialogue-scene-chain-suggestions");
+  if (!root) return;
+  const activeSessionId = String(sessionId || currentDialogueSessionId || "").trim();
+  if (!activeSessionId || activeSessionId !== String(currentDialogueSceneChainSessionId || "").trim() || !Array.isArray(chains) || !chains.length) {
+    root.innerHTML = "";
+    root.classList.add("hidden");
+    return;
+  }
+  root.classList.remove("hidden");
+  root.innerHTML = "";
+  chains.slice(0, 3).forEach((chain) => {
+    const card = document.createElement("article");
+    card.className = "dialogue-scene-chain-card";
+    const title = document.createElement("strong");
+    const firstScene = Array.isArray(chain?.scenes) ? chain.scenes[0] : null;
+    const firstTitle = String(firstScene?.title || "").trim() || "下一幕";
+    title.textContent = `后续戏路：先接「${firstTitle}」`;
+    card.appendChild(title);
+    const copy = document.createElement("p");
+    copy.textContent = String(chain?.reason || "").trim() || "这条线可以顺着往下接。";
+    card.appendChild(copy);
+    const tags = document.createElement("div");
+    tags.className = "dialogue-scene-chain-tags";
+    (Array.isArray(chain?.scenes) ? chain.scenes : []).slice(0, 3).forEach((scene, index) => {
+      const chip = document.createElement("span");
+      const label = String(scene?.title || "").trim() || `第 ${index + 1} 幕`;
+      const location = String(scene?.location || "").trim();
+      chip.textContent = location ? `${label} · ${location}` : label;
+      tags.appendChild(chip);
+    });
+    card.appendChild(tags);
+    const actions = document.createElement("div");
+    actions.className = "dialogue-scene-chain-actions";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "soft-button";
+    button.textContent = "接这条线";
+    button.addEventListener("click", () => {
+      applyDialogueSceneChain(chain);
+    });
+    actions.appendChild(button);
+    card.appendChild(actions);
+    root.appendChild(card);
+  });
+}
+
+function applyDialogueSceneChain(chain = {}) {
+  const scenes = Array.isArray(chain?.scenes) ? chain.scenes : [];
+  const first = scenes[0] || {};
+  const sceneCardId = String(first?.card_id || "").trim();
+  const transition = String(first?.transition_message || "").trim();
+  const select = el("dialogue-live-scene-card");
+  const status = el("dialogue-live-scene-status");
+  if (!sceneCardId || !select) return false;
+  select.value = sceneCardId;
+  if (el("dialogue-live-scene-transition")) {
+    setValue("dialogue-live-scene-transition", transition);
+  }
+  if (status) {
+    const tailTitles = scenes.slice(1).map((item) => String(item?.title || "").trim()).filter(Boolean);
+    status.textContent = tailTitles.length
+      ? `已替你接上这条线，后面还可以顺势转到：${tailTitles.join("、")}。`
+      : "已替你接上这条线。";
+  }
+  return true;
+}
+
+function applyDialogueSceneTimelineEntry(entry = {}) {
+  const sceneCardId = String(entry?.scene_card_id || "").trim();
+  const transitionMessage = String(entry?.transition_message || "").trim();
+  const status = el("dialogue-live-scene-status");
+  const select = el("dialogue-live-scene-card");
+  if (!sceneCardId || !select) return false;
+  const matched = sceneCards.find((item) => String(item?.card_id || "").trim() === sceneCardId);
+  if (!matched) {
+    if (status) status.textContent = "这幕对应的场景卡已经不在卡册里了。";
+    return false;
+  }
+  select.value = sceneCardId;
+  if (el("dialogue-live-scene-transition")) {
+    setValue("dialogue-live-scene-transition", transitionMessage);
+  }
+  if (status) {
+    const title = matched?.preview?.title || matched?.fields?.title || "这幕";
+    status.textContent = transitionMessage ? `已回填「${title}」和当时那句转场提示。` : `已回填「${title}」，你可以再补一句转场提示。`;
+  }
+  return true;
+}
+
+async function branchDialogueSessionFromScene(sceneIndex) {
+  const index = Number(sceneIndex);
+  if (!currentRunId || !currentDialogueSessionId || !Number.isInteger(index) || index < 0) {
+    return;
+  }
+  setStatus("dialogue-live-scene-status", "正在从这一幕重新岔开一条新会话...");
+  try {
+    const payload = await window.__ZAOMENG_WEBUI_API__.branchDialogueSession(currentRunId, currentDialogueSessionId, index);
+    await renderDialogueSession(payload);
+    setStatus("dialogue-session-status", "已经从这幕重新开出一条新分支。");
+    setStatus("dialogue-live-scene-status", "新的分支会话已经接上。");
+  } catch (error) {
+    setStatus("dialogue-live-scene-status", error.message || "分支会话创建失败。");
+  }
+}
+
+async function handleRecommendSceneCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (!sceneCards.length) {
+    setStatus("dialogue-session-status", "你还没有场景卡，先新建一张再让我替你挑。");
+    return;
+  }
+  setStatus("dialogue-session-status", "正在按这场的角色和入场方式替你挑更合适的场景卡...");
+  try {
+    const payload = await window.__ZAOMENG_WEBUI_API__.recommendSceneCards({
+      mode: valueOf("dialogue-mode", "observe"),
+      participants: charactersOf("dialogue-participants"),
+    });
+    currentSceneCardRecommendation = payload;
+    const recommendedId = String(payload?.recommended_card_id || "").trim();
+    if (recommendedId) {
+      const select = el("dialogue-scene-card");
+      if (select) {
+        select.value = recommendedId;
+        syncCustomSelect("dialogue-scene-card");
+      }
+      syncSelectedSceneCardFromSelect();
+      const top = Array.isArray(payload?.items) ? payload.items[0] : null;
+      const reasons = Array.isArray(top?.recommendation?.reasons) ? top.recommendation.reasons.filter(Boolean).slice(0, 3) : [];
+      setStatus("dialogue-session-status", reasons.length ? `已替你挑好场景卡：${reasons.join("，")}。` : "已替你挑好一张更合适的场景卡。");
+    } else {
+      setStatus("dialogue-session-status", "这一轮没挑出更明确的推荐，你也可以手动选。");
+    }
+    if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+      UI_BRIDGE_TOOLS.syncLegacyUiState("scene-card-recommended", { currentSceneCardRecommendation });
+    }
+    publishChatSetupState("chat-setup-scene-card-recommended");
+  } catch (error) {
+    setStatus("dialogue-session-status", error.message || "场景卡推荐失败。");
+  }
+}
+
+async function handleDuplicateSceneCard(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  const fields = collectSceneCardPayload();
+  startSceneCardDraft(fields);
+  setStatus("scene-card-status", "已经按当前内容另起一张新卡。保存后会成为独立场景卡。");
+  publishSceneCardEditorState("scene-card-duplicated");
+}
 
 function selfCardFieldId(field) {
   const item = SELF_CARD_FIELD_BINDINGS.find(([key]) => key === field);
@@ -759,6 +1441,286 @@ async function handleDeleteSelfCard(event) {
     setStatus("self-card-status", error.message || "角色卡删除失败。");
     publishSelfCardEditorState("self-card-delete-failed");
   }
+}
+
+function fillOpeningPresetMetaForm(preset = null) {
+  const cardId = preset?.card_id || "";
+  setValue("opening-preset-id", cardId);
+  setValue("opening-preset-title", preset?.preview?.title || preset?.fields?.title || "");
+  setValue("opening-preset-note", preset?.preview?.note || preset?.fields?.note || "");
+  const deleteButton = el("delete-opening-preset-button");
+  if (deleteButton) {
+    deleteButton.disabled = !cardId;
+    deleteButton.classList.toggle("hidden", !cardId);
+  }
+}
+
+function renderOpeningPresetOptions(items = openingPresets) {
+  const select = el("dialogue-opening-preset");
+  if (!(select instanceof HTMLSelectElement)) return;
+  const previous = select.value || selectedOpeningPresetId || "";
+  select.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = items.length ? "先挑一套开局模板" : "还没有开局模板，先存一套";
+  select.appendChild(blank);
+  (items || []).forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.card_id || "";
+    const preview = item.preview || {};
+    const title = preview.title || item.fields?.title || item.card_id || "未命名模板";
+    const modeLabel = humanizeChatMode(preview.mode || item.fields?.mode || "observe");
+    option.textContent = `${title} · ${modeLabel}`;
+    select.appendChild(option);
+  });
+  select.value = (items || []).some((item) => item.card_id === previous) ? previous : "";
+  selectedOpeningPresetId = select.value;
+  currentOpeningPreset = (items || []).find((item) => item.card_id === selectedOpeningPresetId) || null;
+  renderOpeningPresetPreview(false);
+}
+
+function renderOpeningPresetPreview(shouldPublish = true) {
+  const preset = currentOpeningPreset;
+  const hasPresets = openingPresets.length > 0;
+  const preview = preset?.preview || {};
+  setText("opening-preset-preview-title", preview.title || preset?.fields?.title || (hasPresets ? "还没有选中开局模板" : "你还没有开局模板"), "");
+  const summaryBits = [
+    humanizeChatMode(preview.mode || preset?.fields?.mode || "observe"),
+    Array.isArray(preview.participants) && preview.participants.length ? `同席：${preview.participants.join("、")}` : "",
+    preview.scene_title ? `场景：${preview.scene_title}` : "",
+    preview.self_name ? `入场：${preview.self_name}` : "",
+  ].filter(Boolean);
+  setText(
+    "opening-preset-preview-copy",
+    preset
+      ? (preview.note || preset?.fields?.note || summaryBits.join(" · ") || "这套模板已经把入场方式、人物和场景打包好了。")
+      : (hasPresets ? "选中一套模板后，就能把整套开局方式一键套进来。" : "先把你喜欢的角色卡、场景卡和入场方式搭好，再存成模板。"),
+    ""
+  );
+  const root = el("opening-preset-preview-pills");
+  if (root) {
+    root.innerHTML = "";
+    summaryBits.slice(0, 4).forEach((value) => {
+      const chip = document.createElement("span");
+      chip.textContent = value;
+      root.appendChild(chip);
+    });
+  }
+  const editButton = el("edit-opening-preset-button");
+  const applyButton = el("apply-opening-preset-button");
+  const startButton = el("start-opening-preset-button");
+  if (editButton) {
+    editButton.disabled = !preset;
+    editButton.classList.toggle("hidden", !preset);
+  }
+  if (applyButton) {
+    applyButton.disabled = !preset;
+    applyButton.classList.toggle("hidden", !preset);
+  }
+  if (startButton) {
+    startButton.disabled = !preset;
+    startButton.classList.toggle("hidden", !preset);
+  }
+  if (shouldPublish) {
+    publishChatSetupState("chat-setup-opening-preset-preview-rendered");
+  }
+}
+
+function syncSelectedOpeningPresetFromSelect() {
+  const select = el("dialogue-opening-preset");
+  selectedOpeningPresetId = select?.value || "";
+  currentOpeningPreset = openingPresets.find((item) => item.card_id === selectedOpeningPresetId) || null;
+  renderOpeningPresetPreview(false);
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("opening-preset-selection-changed", {
+      openingPresets,
+      selectedOpeningPresetId,
+      currentOpeningPreset,
+    });
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("opening-preset-selection-changed");
+  }
+  publishChatSetupState("chat-setup-opening-preset-selection-changed");
+}
+
+async function loadOpeningPresets() {
+  const payload = await window.__ZAOMENG_WEBUI_API__.listOpeningPresets();
+  openingPresets = Array.isArray(payload?.items) ? payload.items : [];
+  renderOpeningPresetOptions(openingPresets);
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("opening-presets-loaded", { openingPresets, currentOpeningPreset, selectedOpeningPresetId });
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState("opening-presets-loaded");
+  }
+  return openingPresets;
+}
+
+function applyPresetSceneCard(presetFields = {}) {
+  const sceneId = String(presetFields.scene_card_id || "").trim();
+  const sceneSnapshot = buildCardSnapshot(presetFields.scene_card || {}, sceneId);
+  const matched = sceneId ? sceneCards.find((item) => item.card_id === sceneId) || null : null;
+  const select = el("dialogue-scene-card");
+  if (matched) {
+    selectedSceneCardId = matched.card_id || "";
+    currentSceneCard = matched;
+    if (select) select.value = selectedSceneCardId;
+    syncCustomSelect("dialogue-scene-card");
+    syncSelectedSceneCardFromSelect();
+    return;
+  }
+  selectedSceneCardId = "";
+  currentSceneCard = sceneSnapshot.fields && Object.keys(sceneSnapshot.fields).length ? sceneSnapshot : null;
+  if (select) {
+    select.value = "";
+    syncCustomSelect("dialogue-scene-card");
+  }
+  renderSelectedSceneCardPreview(false);
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState("scene-card-selection-changed", {
+      selectedSceneCardId,
+      currentSceneCard,
+      currentSceneCardRecommendation,
+    });
+  }
+}
+
+function applyPresetSelfCard(mode, presetFields = {}) {
+  const selfId = mode === "insert" ? String(presetFields.self_card_id || "").trim() : "";
+  const selfSnapshot = buildCardSnapshot(presetFields.self_card || {}, selfId);
+  const matched = selfId ? selfCards.find((item) => item.card_id === selfId) || null : null;
+  const select = el("dialogue-self-card");
+  if (matched) {
+    selectedSelfCardId = matched.card_id || "";
+    currentSelfCard = matched;
+    if (select) select.value = selectedSelfCardId;
+    syncCustomSelect("dialogue-self-card");
+    syncSelectedSelfCardFromSelect();
+  } else {
+    selectedSelfCardId = "";
+    currentSelfCard = mode === "insert" && selfSnapshot.fields && Object.keys(selfSnapshot.fields).length ? selfSnapshot : null;
+    if (select) {
+      select.value = "";
+      syncCustomSelect("dialogue-self-card");
+    }
+    renderSelectedSelfCardPreview(false);
+    if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+      UI_BRIDGE_TOOLS.syncLegacyUiState("self-card-selection-changed", {
+        selectedSelfCardId,
+        currentSelfCard,
+      });
+    }
+  }
+  if (mode === "insert") {
+    setValue("dialogue-self-name", presetFields.self_name || currentSelfCard?.fields?.display_name || "");
+    setValue("dialogue-self-identity", presetFields.self_identity || currentSelfCard?.fields?.scene_identity || currentSelfCard?.fields?.core_identity || "");
+    setValue("dialogue-self-style", presetFields.self_style || currentSelfCard?.fields?.interaction_style || "");
+  } else {
+    setValue("dialogue-self-name", "");
+    setValue("dialogue-self-identity", "");
+    setValue("dialogue-self-style", "");
+  }
+}
+
+function applyOpeningPresetToChatSetup(preset) {
+  const fields = preset?.fields || {};
+  const mode = String(fields.mode || "observe").trim() || "observe";
+  setValue("dialogue-mode", mode);
+  setValue("dialogue-participants", Array.isArray(fields.participants) ? fields.participants.join("、") : "");
+  setValue("dialogue-controlled", fields.controlled_character || "");
+  syncModeFields();
+  updateCharacterPillState();
+  applyPresetSceneCard(fields);
+  applyPresetSelfCard(mode, fields);
+  setStatus("dialogue-session-status", `已套用开局模板「${preset?.preview?.title || fields.title || "未命名模板"}」。`);
+  publishChatSetupState("chat-setup-opening-preset-applied");
+}
+
+async function handleOpeningPresetSelectionChange() {
+  syncSelectedOpeningPresetFromSelect();
+}
+
+function openNewOpeningPreset() {
+  fillOpeningPresetMetaForm({
+    preview: {
+      title: "",
+      note: "",
+    },
+  });
+  setStatus("opening-preset-status", "会把你当前这套模式、人物、角色卡和场景卡一起收成模板。");
+  openOpeningPresetModal();
+}
+
+function openExistingOpeningPreset() {
+  if (!currentOpeningPreset) {
+    openNewOpeningPreset();
+    return;
+  }
+  fillOpeningPresetMetaForm(currentOpeningPreset);
+  setStatus("opening-preset-status", "保存时会用你当前这套搭配覆盖模板内容。");
+  openOpeningPresetModal();
+}
+
+async function handleOpeningPresetSubmit(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  const title = trimmedValue("opening-preset-title", "");
+  const note = trimmedValue("opening-preset-note", "");
+  const cardId = trimmedValue("opening-preset-id", "");
+  setStatus("opening-preset-status", "正在保存开局模板...");
+  try {
+    const payload = await window.__ZAOMENG_WEBUI_API__.saveOpeningPreset(cardId, collectOpeningPresetPayload({ title, note }));
+    await loadOpeningPresets();
+    const select = el("dialogue-opening-preset");
+    if (select) {
+      select.value = payload.card_id || "";
+    }
+    syncSelectedOpeningPresetFromSelect();
+    setStatus("dialogue-session-status", "这套开局已经收成模板，下次可以一键套用。");
+    setStatus("opening-preset-status", "开局模板已保存。");
+    closeOpeningPresetModal();
+  } catch (error) {
+    setStatus("opening-preset-status", error.message || "开局模板保存失败。");
+  }
+}
+
+async function handleDeleteOpeningPreset(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  const cardId = trimmedValue("opening-preset-id", "");
+  if (!cardId) return;
+  if (!window.confirm("确定删除这套开局模板吗？")) return;
+  setStatus("opening-preset-status", "正在删除开局模板...");
+  try {
+    await window.__ZAOMENG_WEBUI_API__.deleteOpeningPreset(cardId);
+    if (selectedOpeningPresetId === cardId) {
+      selectedOpeningPresetId = "";
+      currentOpeningPreset = null;
+    }
+    await loadOpeningPresets();
+    renderOpeningPresetPreview();
+    setStatus("dialogue-session-status", "这套开局模板已经删掉了。");
+    setStatus("opening-preset-status", "开局模板已删除。");
+    closeOpeningPresetModal();
+  } catch (error) {
+    setStatus("opening-preset-status", error.message || "开局模板删除失败。");
+  }
+}
+
+async function handleApplyOpeningPreset(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (!currentOpeningPreset) {
+    setStatus("dialogue-session-status", "先挑一套开局模板。");
+    return;
+  }
+  applyOpeningPresetToChatSetup(currentOpeningPreset);
+}
+
+async function handleStartOpeningPreset(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (!currentOpeningPreset) {
+    setStatus("dialogue-session-status", "先挑一套开局模板。");
+    return;
+  }
+  applyOpeningPresetToChatSetup(currentOpeningPreset);
+  await handleDialogueSessionSubmit({ preventDefault() {} });
 }
 
 async function openPersonaReviewForCharacter(characterName = "") {
@@ -1407,7 +2369,9 @@ function bindEvents() {
   bind("close-settings-button", "click", closeSettingsModal);
   bind("close-persona-review-button", "click", closePersonaReviewModal);
   bind("close-relation-details-button", "click", closeRelationDetailsModal);
+  bind("close-scene-card-button", "click", closeSceneCardModal);
   bind("close-self-card-button", "click", closeSelfCardModal);
+  bind("close-opening-preset-button", "click", closeOpeningPresetModal);
   bind("close-app-update-button", "click", dismissAppUpdateModal);
   bind("dismiss-app-update-button", "click", dismissAppUpdateModal);
   bind("confirm-app-update-button", "click", handleConfirmAppUpdate);
@@ -1557,13 +2521,28 @@ function bindEvents() {
 
   bind("model-settings-form", "submit", handleModelSettingsSubmit);
   bind("persona-review-form", "submit", handlePersonaReviewSubmit);
+  bind("scene-card-form", "submit", handleSceneCardSubmit);
   bind("self-card-form", "submit", handleSelfCardSubmit);
+  bind("opening-preset-form", "submit", handleOpeningPresetSubmit);
   bind("create-run-form", "submit", handleCreateRunSubmit);
   bind("redistill-button", "click", handleRedistill);
   bind("redistill-add-button", "click", handleRedistillAdd);
   bind("redistill-refresh-button", "click", handleRedistillRefresh);
   bind("redistill-recommend-button", "click", handleRedistillRecommend);
   bind("dialogue-session-form", "submit", handleDialogueSessionSubmit);
+  bind("create-opening-preset-button", "click", () => openNewOpeningPreset());
+  bind("edit-opening-preset-button", "click", () => openExistingOpeningPreset());
+  bind("apply-opening-preset-button", "click", handleApplyOpeningPreset);
+  bind("start-opening-preset-button", "click", handleStartOpeningPreset);
+  bind("delete-opening-preset-button", "click", handleDeleteOpeningPreset);
+  bind("recommend-scene-card-button", "click", handleRecommendSceneCard);
+  bind("dialogue-live-scene-recommend", "click", handleRecommendDialogueSceneCard);
+  bind("dialogue-live-scene-apply", "click", handleApplyDialogueSceneCard);
+  bind("create-scene-card-button", "click", handleOpenNewSceneCard);
+  bind("edit-scene-card-button", "click", handleEditCurrentSceneCard);
+  bind("generate-scene-card-button", "click", handleGenerateSceneCard);
+  bind("duplicate-scene-card-button", "click", handleDuplicateSceneCard);
+  bind("delete-scene-card-button", "click", handleDeleteSceneCard);
   bind("create-self-card-button", "click", handleOpenNewSelfCard);
   bind("edit-self-card-button", "click", handleEditCurrentSelfCard);
   bind("generate-self-card-button", "click", handleGenerateSelfCard);
@@ -1588,7 +2567,12 @@ function bindEvents() {
   });
 
   bind("dialogue-mode", "change", syncModeFields);
+  bind("dialogue-opening-preset", "change", handleOpeningPresetSelectionChange);
+  bind("dialogue-scene-card", "change", handleSceneCardSelectionChange);
   bind("dialogue-self-card", "change", handleSelfCardSelectionChange);
+  el("scene-card-form")?.addEventListener("input", () => {
+    publishSceneCardEditorState("scene-card-input");
+  });
   el("self-card-form")?.addEventListener("input", () => {
     publishSelfCardEditorState("self-card-input");
   });
@@ -1640,6 +2624,8 @@ function bindEvents() {
       const modalId = target.dataset.modalId || "settings-modal";
       if (modalId === "persona-review-modal") {
         closePersonaReviewModal();
+      } else if (modalId === "scene-card-modal") {
+        closeSceneCardModal();
       } else if (modalId === "self-card-modal") {
         closeSelfCardModal();
       } else if (modalId === "relation-details-modal") {
@@ -1666,10 +2652,13 @@ async function boot() {
   resizeComposer();
   setDialogueMessageKind(currentDialogueMessageKind);
   applySidebarState();
+  initCustomSelect("dialogue-scene-card");
   initCustomSelect("dialogue-self-card");
   try {
     await Promise.all([
       loadModelSettings().catch((error) => console.warn("loadModelSettings failed", error)),
+      loadOpeningPresets().catch((error) => console.warn("loadOpeningPresets failed", error)),
+      loadSceneCards().catch((error) => console.warn("loadSceneCards failed", error)),
       loadSelfCards().catch((error) => console.warn("loadSelfCards failed", error)),
       loadRecentSessions().catch((error) => console.warn("loadRecentSessions failed", error)),
       loadRunsOverview().catch((error) => console.warn("loadRunsOverview failed", error)),
@@ -1705,6 +2694,27 @@ const chatSetupActions = {
     setValue("dialogue-controlled", value);
     publishChatSetupState("chat-setup-controlled-updated");
   },
+  setOpeningPresetId(cardId) {
+    const select = el("dialogue-opening-preset");
+    if (select) {
+      select.value = cardId;
+    }
+    syncSelectedOpeningPresetFromSelect();
+  },
+  applyOpeningPreset() {
+    return handleApplyOpeningPreset({ preventDefault() {} });
+  },
+  applyOpeningPresetAndSubmit() {
+    return handleStartOpeningPreset({ preventDefault() {} });
+  },
+  setSceneCardId(cardId) {
+    const select = el("dialogue-scene-card");
+    if (select) {
+      select.value = cardId;
+      syncCustomSelect("dialogue-scene-card");
+    }
+    syncSelectedSceneCardFromSelect();
+  },
   setSelfCardId(cardId) {
     const select = el("dialogue-self-card");
     if (select) {
@@ -1725,6 +2735,21 @@ const chatSetupActions = {
   },
   submit() {
     return handleDialogueSessionSubmit({ preventDefault() {} });
+  },
+  openNewOpeningPreset() {
+    return openNewOpeningPreset();
+  },
+  editCurrentOpeningPreset() {
+    return openExistingOpeningPreset();
+  },
+  openNewSceneCard() {
+    return openNewSceneCard();
+  },
+  editCurrentSceneCard() {
+    return selectedSceneCardId ? openExistingSceneCard(selectedSceneCardId) : openNewSceneCard();
+  },
+  recommendSceneCard() {
+    return handleRecommendSceneCard({ preventDefault() {} });
   },
   openNewSelfCard() {
     return openNewSelfCard();
@@ -1785,6 +2810,33 @@ window.handleStopRun = handleStopRun;
 window.handleRedistillAdd = handleRedistillAdd;
 window.handleRedistillRefresh = handleRedistillRefresh;
 window.handleDialogueSessionSubmit = handleDialogueSessionSubmit;
+window.sceneCardFieldId = sceneCardFieldId;
+window.collectSceneCardPayload = collectSceneCardPayload;
+window.validateSceneCardPayload = validateSceneCardPayload;
+window.fillSceneCardFields = fillSceneCardFields;
+window.buildSceneCardEditorState = buildSceneCardEditorState;
+window.publishSceneCardEditorState = publishSceneCardEditorState;
+window.updateSceneCardDeleteButton = updateSceneCardDeleteButton;
+window.startSceneCardDraft = startSceneCardDraft;
+window.openNewSceneCard = openNewSceneCard;
+window.openExistingSceneCard = openExistingSceneCard;
+window.renderSceneCardOptions = renderSceneCardOptions;
+window.loadSceneCards = loadSceneCards;
+window.syncSelectedSceneCardFromSelect = syncSelectedSceneCardFromSelect;
+window.renderSelectedSceneCardPreview = renderSelectedSceneCardPreview;
+window.handleSceneCardSelectionChange = handleSceneCardSelectionChange;
+window.handleOpenNewSceneCard = handleOpenNewSceneCard;
+window.handleEditCurrentSceneCard = handleEditCurrentSceneCard;
+window.handleGenerateSceneCard = handleGenerateSceneCard;
+window.handleDuplicateSceneCard = handleDuplicateSceneCard;
+window.handleSceneCardSubmit = handleSceneCardSubmit;
+window.handleDeleteSceneCard = handleDeleteSceneCard;
+window.renderDialogueSceneSwitcher = renderDialogueSceneSwitcher;
+window.handleApplyDialogueSceneCard = handleApplyDialogueSceneCard;
+window.handleRecommendDialogueSceneCard = handleRecommendDialogueSceneCard;
+window.applyDialogueSceneTimelineEntry = applyDialogueSceneTimelineEntry;
+window.branchDialogueSessionFromScene = branchDialogueSessionFromScene;
+window.handleRecommendSceneCard = handleRecommendSceneCard;
 window.selfCardFieldId = selfCardFieldId;
 window.collectSelfCardPayload = collectSelfCardPayload;
 window.validateSelfCardPayload = validateSelfCardPayload;

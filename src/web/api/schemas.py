@@ -106,8 +106,43 @@ class CreateDialogueSessionRequest(BaseModel):
     mode: str = Field(...)
     participants: list[str] = Field(default_factory=list)
     controlled_character: str = Field(default="")
+    scene_card_id: str = Field(default="")
+    scene_profile: dict[str, str] = Field(default_factory=dict)
     self_card_id: str = Field(default="")
     self_profile: dict[str, str] = Field(default_factory=dict)
+
+
+class SaveSceneCardRequest(BaseModel):
+    title: str = Field(default="")
+    time_hint: str = Field(default="")
+    location: str = Field(default="")
+    atmosphere: str = Field(default="")
+    opening_situation: str = Field(default="")
+    public_goal: str = Field(default="")
+    hidden_tension: str = Field(default="")
+    scene_drive: str = Field(default="")
+    expected_rhythm: str = Field(default="")
+    forbidden_topics: str = Field(default="")
+
+
+class RecommendSceneCardRequest(BaseModel):
+    mode: str = Field(default="observe")
+    participants: list[str] = Field(default_factory=list)
+
+
+class SaveOpeningPresetRequest(BaseModel):
+    title: str = Field(default="")
+    note: str = Field(default="")
+    mode: str = Field(default="observe")
+    participants: list[str] = Field(default_factory=list)
+    controlled_character: str = Field(default="")
+    scene_card_id: str = Field(default="")
+    scene_card: dict[str, object] = Field(default_factory=dict)
+    self_card_id: str = Field(default="")
+    self_card: dict[str, object] = Field(default_factory=dict)
+    self_name: str = Field(default="")
+    self_identity: str = Field(default="")
+    self_style: str = Field(default="")
 
 
 class SaveSelfCardRequest(BaseModel):
@@ -155,6 +190,16 @@ class PrepareDialogueTurnRequest(BaseModel):
 
 class SuggestDialogueTurnRequest(BaseModel):
     seed_text: str = Field(default="")
+
+
+class SwitchDialogueSceneCardRequest(BaseModel):
+    scene_card_id: str = Field(default="")
+    scene_profile: dict[str, str] = Field(default_factory=dict)
+    transition_message: str = Field(default="")
+
+
+class BranchDialogueSessionRequest(BaseModel):
+    scene_index: int = Field(default=0, ge=0)
 
 
 class DialogueResponseItem(BaseModel):

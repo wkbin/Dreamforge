@@ -65,7 +65,15 @@
   }
 
   function openRelationsWithStatus() {
-    openRelationDetails().catch((error) => {
+    const previousScrollY = window.scrollY || window.pageYOffset || 0;
+    openRelationDetails().then(() => {
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: previousScrollY, behavior: "auto" });
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: previousScrollY, behavior: "auto" });
+        });
+      });
+    }).catch((error) => {
       setStatus("bookshelf-status", error.message || "关系明细暂时没有载入。");
     });
   }

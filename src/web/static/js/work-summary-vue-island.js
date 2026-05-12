@@ -38,36 +38,31 @@
       <div v-if="run" class="work-summary-vue-shell">
         <section class="work-summary-shell">
           <article class="work-summary-card is-hero">
-            <span class="work-summary-label">一句话概览</span>
+            <span class="work-summary-label">概览</span>
             <strong>{{ viewState.summaryLine }}</strong>
-            <p class="work-summary-copy">{{ viewState.bottleneck }}</p>
           </article>
-          <div class="work-summary-grid">
-            <article class="work-summary-card">
-              <span class="work-summary-label">最近进展</span>
-              <div v-if="viewState.events.length" class="work-summary-events">
-                <div v-for="item in viewState.events" :key="item.stageLabel + ':' + item.message" class="work-summary-event">
-                  <strong>{{ item.stageLabel }}</strong>
-                  <p>{{ item.message }}</p>
-                </div>
-              </div>
-              <p v-else class="card-note">这一轮暂时还没有新的进展记录。</p>
-            </article>
-            <article class="work-summary-card">
+          <article class="work-summary-card work-summary-card-inline">
+            <span class="work-summary-label">最近进展</span>
+            <div v-if="viewState.events.length" class="work-summary-events compact">
+              <span v-for="item in viewState.events" :key="item.stageLabel + ':' + item.message" class="work-summary-pill">{{ item.stageLabel }}</span>
+            </div>
+            <p v-else class="card-note">这一轮暂时还没有新的进展记录。</p>
+          </article>
+          <article class="work-summary-card work-summary-card-inline is-action">
+            <div class="work-summary-inline-head">
               <span class="work-summary-label">推荐动作</span>
               <strong>{{ viewState.recommendation.title }}</strong>
-              <p class="work-summary-copy">{{ viewState.recommendation.copy }}</p>
-              <div class="work-summary-actions">
-                <button
-                  type="button"
-                  class="soft-button"
-                  @click="runRecommended(viewState.recommendation.action, viewState.recommendation.payload)"
-                >
-                  {{ viewState.recommendation.buttonLabel || '去执行' }}
-                </button>
-              </div>
-            </article>
-          </div>
+            </div>
+            <div class="work-summary-actions">
+              <button
+                type="button"
+                class="soft-button"
+                @click="runRecommended(viewState.recommendation.action, viewState.recommendation.payload)"
+              >
+                {{ viewState.recommendation.buttonLabel || '去执行' }}
+              </button>
+            </div>
+          </article>
         </section>
 
         <details v-if="viewState.quality.visible" class="quality-section-shell" :open="viewState.quality.open">

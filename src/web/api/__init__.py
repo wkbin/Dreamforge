@@ -1,22 +1,37 @@
 from .deps import get_run_service
-from .routes import ROUTERS, dialogue_router, runs_router, self_cards_router, settings_router
+from .routes import (
+    ROUTERS,
+    dialogue_router,
+    opening_presets_router,
+    runs_router,
+    scene_cards_router,
+    self_cards_router,
+    settings_router,
+)
 from .schemas import (
     CreateDialogueSessionRequest,
+    BranchDialogueSessionRequest,
     CreateRunRequest,
     DialogueResponseItem,
     IngestCharacterRequest,
     IngestDialogueTurnRequest,
     IngestRelationRequest,
     PrepareDialogueTurnRequest,
+    RecommendSceneCardRequest,
     RestartRunRequest,
     SaveModelSettingsRequest,
+    SaveOpeningPresetRequest,
+    SaveSceneCardRequest,
     SavePersonaReviewRequest,
     SaveSelfCardRequest,
+    SwitchDialogueSceneCardRequest,
 )
 
 __all__ = [
     "ROUTERS",
     "dialogue_router",
+    "BranchDialogueSessionRequest",
+    "opening_presets_router",
     "CreateDialogueSessionRequest",
     "CreateRunRequest",
     "DialogueResponseItem",
@@ -25,11 +40,16 @@ __all__ = [
     "IngestDialogueTurnRequest",
     "IngestRelationRequest",
     "PrepareDialogueTurnRequest",
+    "RecommendSceneCardRequest",
     "RestartRunRequest",
     "runs_router",
+    "scene_cards_router",
     "self_cards_router",
     "SaveModelSettingsRequest",
+    "SaveOpeningPresetRequest",
+    "SaveSceneCardRequest",
     "SavePersonaReviewRequest",
     "SaveSelfCardRequest",
     "settings_router",
+    "SwitchDialogueSceneCardRequest",
 ]

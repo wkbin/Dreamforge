@@ -5,6 +5,7 @@ from typing import Any
 
 from src.utils.file_utils import save_markdown_data
 from src.web.artifacts.ingest import load_relations_source
+from src.web.service_facades.scene_cards import SceneCardServiceMixin
 from src.web.chat import (
     build_dialogue_llm_messages,
     build_dialogue_suggestion_llm_messages,
@@ -42,10 +43,23 @@ class DialogueServiceMixin:
         mode: str,
         participants: list[str],
         controlled_character: str = "",
+        scene_card_id: str = "",
+        scene_profile: dict[str, str] | None = None,
         self_card_id: str = "",
         self_profile: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         manifest = self._require_manifest(run_id)
+        resolved_scene_profile = dict(scene_profile or {})
+        if scene_card_id:
+            try:
+                card = self.get_scene_card(scene_card_id)
+            except FileNotFoundError as exc:
+                raise ValueError("所选场景卡不存在。") from exc
+            resolved_scene_profile = {
+                **dict(card.get("fields", {}) or {}),
+                **resolved_scene_profile,
+                "scene_card_id": str(card.get("card_id", "")).strip(),
+            }
         resolved_self_profile = dict(self_profile or {})
         if mode == "insert" and self_card_id:
             try:
@@ -64,6 +78,7 @@ class DialogueServiceMixin:
             mode=mode,
             participants=participants,
             controlled_character=controlled_character,
+            scene_profile=resolved_scene_profile,
             self_profile=resolved_self_profile,
             build_dialogue_opening_message=build_dialogue_opening_message,
             load_pending_turn_payload=self._load_pending_turn_payload,
@@ -75,6 +90,45 @@ class DialogueServiceMixin:
     def get_dialogue_session(self, run_id: str, session_id: str) -> dict[str, Any]:
         self._ensure_run_exists(run_id)
         return self.dialogue.get_session(run_id, session_id)
+
+    def branch_dialogue_session_from_scene(self, run_id: str, *, session_id: str, scene_index: int) -> dict[str, Any]:
+        manifest = self._require_manifest(run_id)
+        return self.dialogue.branch_session_from_scene(
+            manifest,
+            session_id,
+            scene_index=scene_index,
+        )
+
+    def switch_dialogue_scene_card(
+        self,
+        run_id: str,
+        *,
+        session_id: str,
+        scene_card_id: str = "",
+        scene_profile: dict[str, str] | None = None,
+        transition_message: str = "",
+    ) -> dict[str, Any]:
+        self._ensure_run_exists(run_id)
+        resolved_scene_profile = dict(scene_profile or {})
+        if scene_card_id:
+            try:
+                card = self.get_scene_card(scene_card_id)
+            except FileNotFoundError as exc:
+                raise ValueError("所选场景卡不存在。") from exc
+            resolved_scene_profile = {
+                **dict(card.get("fields", {}) or {}),
+                **resolved_scene_profile,
+                "scene_card_id": str(card.get("card_id", "")).strip(),
+            }
+        return self.dialogue.update_scene_card(
+            run_id,
+            session_id,
+            scene_profile=resolved_scene_profile,
+            transition_message=transition_message,
+        )
+
+    def recommend_dialogue_scene_card(self, run_id: str, *, session_id: str) -> dict[str, Any]:
+        return SceneCardServiceMixin.recommend_dialogue_scene_card(self, run_id, session_id=session_id)
 
     def delete_dialogue_session(self, run_id: str, session_id: str) -> None:
         self._ensure_run_exists(run_id)

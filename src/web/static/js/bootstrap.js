@@ -1,5 +1,5 @@
 (() => {
-  const version = "20260512093001";
+  const version = "20260512124101";
   window.__ZAOMENG_WEB_UI_VERSION__ = version;
   const rootFragments = [
     { id: "header-root", url: `/web/fragments/header.html?v=${version}` },
@@ -29,6 +29,7 @@
     ["composer-vue-root", "composer-vue-root", { kind: "vue-island", trial: "composer" }],
     ["persona-review-vue-root", "persona-review-vue-root", { kind: "vue-island", trial: "persona-review" }],
     ["relation-details-vue-root", "relation-details-vue-root", { kind: "vue-island", trial: "relation-details" }],
+    ["scene-card-vue-root", "scene-card-vue-root", { kind: "vue-island", trial: "scene-card" }],
     ["self-card-vue-root", "self-card-vue-root", { kind: "vue-island", trial: "self-card" }],
     ["model-settings-vue-root", "model-settings-vue-root", { kind: "vue-island", trial: "model-settings" }],
     ["modal-root", "modal-root", { kind: "root" }],
@@ -68,6 +69,7 @@
     `/web/js/persona-review-vue-island.js?v=${version}`,
     `/web/js/composer-vue-island.js?v=${version}`,
     `/web/js/relation-details-vue-island.js?v=${version}`,
+    `/web/js/scene-card-vue-island.js?v=${version}`,
     `/web/js/self-card-vue-island.js?v=${version}`,
     `/web/js/model-settings-vue-island.js?v=${version}`,
     `/web/js/chat-setup-vue-island.js?v=${version}`,
