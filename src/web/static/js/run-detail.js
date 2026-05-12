@@ -1,3 +1,9 @@
+(() => {
+const existingRunDetailModule = window.__ZAOMENG_RUN_DETAIL_MODULE__;
+if (existingRunDetailModule?.initialized) {
+  return;
+}
+
 const WORK_OVERVIEW_STATE = window.__ZAOMENG_WORK_OVERVIEW_STATE__ || {};
 const CHARACTER_OVERVIEW_STATE = window.__ZAOMENG_CHARACTER_OVERVIEW_STATE__ || {};
 const RUN_DETAIL_SUPPORT_STATE = window.__ZAOMENG_RUN_DETAIL_SUPPORT_STATE__ || {};
@@ -1284,3 +1290,106 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
+
+window.WORK_OVERVIEW_STATE = WORK_OVERVIEW_STATE;
+window.CHARACTER_OVERVIEW_STATE = CHARACTER_OVERVIEW_STATE;
+window.RUN_DETAIL_SUPPORT_STATE = RUN_DETAIL_SUPPORT_STATE;
+window.CHARACTER_OVERVIEW_KEY_FIELDS = CHARACTER_OVERVIEW_KEY_FIELDS;
+window.CHARACTER_OVERVIEW_ADVANCED_GROUPS = CHARACTER_OVERVIEW_ADVANCED_GROUPS;
+window.CHARACTER_OVERVIEW_FIELD_LABELS = CHARACTER_OVERVIEW_FIELD_LABELS;
+window.characterOverviewExpandedGroups = characterOverviewExpandedGroups;
+window.characterOverviewAutofillHistory = characterOverviewAutofillHistory;
+
+window.getCurrentRunEvents = getCurrentRunEvents;
+window.setWorkOverviewLoading = setWorkOverviewLoading;
+window.renderRunSummary = renderRunSummary;
+window.buildWorkImportStatus = buildWorkImportStatus;
+window.buildWorkDistillStatus = buildWorkDistillStatus;
+window.renderWorkHeroMetrics = renderWorkHeroMetrics;
+window.renderWorkSummaryNarrative = renderWorkSummaryNarrative;
+window.buildWorkSummaryEvents = buildWorkSummaryEvents;
+window.buildWorkSummaryLine = buildWorkSummaryLine;
+window.buildWorkSummaryBottleneck = buildWorkSummaryBottleneck;
+window.renderWorkSummaryEvents = renderWorkSummaryEvents;
+window.buildWorkRecommendedAction = buildWorkRecommendedAction;
+window.renderWorkRecommendedAction = renderWorkRecommendedAction;
+window.buildQualitySnapshotState = buildQualitySnapshotState;
+window.buildWorkPriorityReviewViewState = buildWorkPriorityReviewViewState;
+window.buildWorkGraphSummaryState = buildWorkGraphSummaryState;
+window.buildWorkGraphLinks = buildWorkGraphLinks;
+window.buildWorkSessionPreviewState = buildWorkSessionPreviewState;
+window.buildWorkOverviewNextStep = buildWorkOverviewNextStep;
+window.buildWorkReviewStatus = buildWorkReviewStatus;
+window.buildWorkGraphStatus = buildWorkGraphStatus;
+window.countWeakCharacters = countWeakCharacters;
+window.buildCharacterReadinessItems = buildCharacterReadinessItems;
+window.buildCharacterReadinessViewState = buildCharacterReadinessViewState;
+window.renderCharacterReadiness = renderCharacterReadiness;
+window.buildWorkPriorityReviewItems = buildWorkPriorityReviewItems;
+window.buildWorkPriorityHeadline = buildWorkPriorityHeadline;
+window.buildWorkPriorityReason = buildWorkPriorityReason;
+window.renderWorkPriorityReview = renderWorkPriorityReview;
+window.renderWorkGraphSummary = renderWorkGraphSummary;
+window.renderWorkSessionPreview = renderWorkSessionPreview;
+window.getSessionPreviewSnippet = getSessionPreviewSnippet;
+window.findMatchedSessionCharacter = findMatchedSessionCharacter;
+window.openWorkSummaryExport = openWorkSummaryExport;
+window.openCharacterOverview = openCharacterOverview;
+window.renderCharacterOverview = renderCharacterOverview;
+window.buildCharacterOverviewChangeTimelineItems = buildCharacterOverviewChangeTimelineItems;
+window.renderCharacterOverviewChangeTimeline = renderCharacterOverviewChangeTimeline;
+window.buildCharacterOverviewHealthSnapshot = buildCharacterOverviewHealthSnapshot;
+window.renderCharacterOverviewHealthMetrics = renderCharacterOverviewHealthMetrics;
+window.buildCharacterOverviewEvidenceSnapshot = buildCharacterOverviewEvidenceSnapshot;
+window.renderCharacterOverviewEvidenceMetrics = renderCharacterOverviewEvidenceMetrics;
+window.characterOverviewHistoryKey = characterOverviewHistoryKey;
+window.getCharacterOverviewAutofillItems = getCharacterOverviewAutofillItems;
+window.rememberCharacterOverviewAutofill = rememberCharacterOverviewAutofill;
+window.buildCharacterOverviewTrustSignals = buildCharacterOverviewTrustSignals;
+window.renderCharacterOverviewTrustSignals = renderCharacterOverviewTrustSignals;
+window.findLatestRunEventForCharacter = findLatestRunEventForCharacter;
+window.buildCharacterOverviewReviewCopy = buildCharacterOverviewReviewCopy;
+window.openWorkTimeline = openWorkTimeline;
+window.buildCharacterOverviewRedistillSignal = buildCharacterOverviewRedistillSignal;
+window.formatCharacterOverviewAutofillSource = formatCharacterOverviewAutofillSource;
+window.buildCharacterOverviewFieldTags = buildCharacterOverviewFieldTags;
+window.renderCharacterOverviewKeyFields = renderCharacterOverviewKeyFields;
+window.syncCharacterOverviewFieldSaveButton = syncCharacterOverviewFieldSaveButton;
+window.handleCharacterOverviewFieldInput = handleCharacterOverviewFieldInput;
+window.buildCharacterOverviewSavePayload = buildCharacterOverviewSavePayload;
+window.isCharacterOverviewFieldWeak = isCharacterOverviewFieldWeak;
+window.buildCharacterOverviewFieldHint = buildCharacterOverviewFieldHint;
+window.renderCharacterOverviewVoiceSummary = renderCharacterOverviewVoiceSummary;
+window.renderCharacterOverviewRelationSummary = renderCharacterOverviewRelationSummary;
+window.renderCharacterOverviewAdvancedGroups = renderCharacterOverviewAdvancedGroups;
+window.handleCharacterOverviewAdvancedGroupToggle = handleCharacterOverviewAdvancedGroupToggle;
+window.handleCharacterOverviewFieldAutofill = handleCharacterOverviewFieldAutofill;
+window.handleCharacterOverviewFieldSave = handleCharacterOverviewFieldSave;
+window.openCharacterOverviewIncrementalDistill = openCharacterOverviewIncrementalDistill;
+window.openIncrementalDistillForCharacter = openIncrementalDistillForCharacter;
+window.openCharacterOverviewSessionMode = openCharacterOverviewSessionMode;
+window.openCurrentCharacterProfileFile = openCurrentCharacterProfileFile;
+window.renderQualitySnapshot = renderQualitySnapshot;
+window.renderRunEvents = renderRunEvents;
+window.renderRunGraphLinks = renderRunGraphLinks;
+window.syncRunArtifacts = syncRunArtifacts;
+window.renderRun = renderRun;
+window.refreshCurrentRunView = refreshCurrentRunView;
+window.scheduleRunPolling = scheduleRunPolling;
+window.renderRedistillPlan = renderRedistillPlan;
+window.renderRedistillPlanGroup = renderRedistillPlanGroup;
+window.renderRedistillRecentChanges = renderRedistillRecentChanges;
+window.renderSourceHistory = renderSourceHistory;
+window.getCurrentNovelSource = getCurrentNovelSource;
+window.PathNameFrom = PathNameFrom;
+window.formatSourceStats = formatSourceStats;
+window.buildSourceDetailText = buildSourceDetailText;
+window.formatCompactNumber = formatCompactNumber;
+window.formatByteSize = formatByteSize;
+window.escapeHtml = escapeHtml;
+
+window.__ZAOMENG_RUN_DETAIL_MODULE__ = {
+  initialized: true,
+  version: String(window.__ZAOMENG_WEB_UI_VERSION__ || ""),
+};
+})();

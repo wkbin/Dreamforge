@@ -1,4 +1,11 @@
 (() => {
+  const runNovelTitleSafe = (run) => {
+    if (typeof runNovelTitle === "function") {
+      return runNovelTitle(run);
+    }
+    return String(run?.novel_name || run?.novel_id || "当前书卷");
+  };
+
   const bridge = window.__ZAOMENG_LEGACY_BRIDGE__;
   const vue = window.Vue;
   const host = document.getElementById("character-overview-vue-root");
@@ -280,6 +287,7 @@
         payload,
         relationSummary,
         run,
+        runNovelTitleSafe,
         saveField,
         setField,
         timelineItems,
@@ -294,7 +302,7 @@
       <div v-if="visible && payload" class="character-overview-vue-shell">
         <section class="character-overview-hero">
           <div class="character-overview-hero-copy">
-            <p class="character-overview-kicker">出自《{{ run ? runNovelTitle(run) : '当前书卷' }}》</p>
+            <p class="character-overview-kicker">出自《{{ run ? runNovelTitleSafe(run) : '当前书卷' }}》</p>
             <h4>{{ character || '人物' }}</h4>
             <p class="character-overview-role">{{ payload.fields?.story_role || payload.fields?.core_identity || '这一页会慢慢把他的轮廓立起来' }}</p>
           </div>

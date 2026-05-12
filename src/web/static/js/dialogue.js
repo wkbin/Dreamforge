@@ -1,3 +1,8 @@
+(() => {
+const existingDialogueModule = window.__ZAOMENG_DIALOGUE_MODULE__;
+if (existingDialogueModule?.initialized) {
+  return;
+}
 function scrollTranscriptToBottom() {
   const root = el("dialogue-transcript");
   if (!root) return;
@@ -669,4 +674,31 @@ async function loadLatestRun() {
   if (!preferred?.run_id) return null;
   return apiJson(`/api/web/runs/${preferred.run_id}`);
 }
+window.scrollTranscriptToBottom = scrollTranscriptToBottom;
+window.applySessionListViewportLock = applySessionListViewportLock;
+window.appendStyledMessageContent = appendStyledMessageContent;
+window.createMessageBubble = createMessageBubble;
+window.buildSessionMetaMessage = buildSessionMetaMessage;
+window.renderDialogueTranscript = renderDialogueTranscript;
+window.trimInlineMessage = trimInlineMessage;
+window.buildDialogueMemorySnapshot = buildDialogueMemorySnapshot;
+window.renderDialogueMemory = renderDialogueMemory;
+window.buildDialogueMemoryClipboardText = buildDialogueMemoryClipboardText;
+window.copyDialogueMemorySummary = copyDialogueMemorySummary;
+window.toggleDialogueMemory = toggleDialogueMemory;
+window.renderTranscript = renderTranscript;
+window.renderSessionBooting = renderSessionBooting;
+window.runDetailActionsForDialogue = runDetailActionsForDialogue;
+window.renderRunFallbackForDialogue = renderRunFallbackForDialogue;
+window.ensureRunReadyForDialogue = ensureRunReadyForDialogue;
+window.buildOptimisticTranscript = buildOptimisticTranscript;
+window.latestSessionSnippetFromTranscript = latestSessionSnippetFromTranscript;
+window.renderDialogueSession = renderDialogueSession;
+window.loadRecentSessions = loadRecentSessions;
+window.loadLatestRun = loadLatestRun;
+window.__ZAOMENG_DIALOGUE_MODULE__ = {
+  initialized: true,
+  version: String(window.__ZAOMENG_WEB_UI_VERSION__ || ""),
+};
+})();
 

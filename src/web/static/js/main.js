@@ -1,3 +1,8 @@
+(() => {
+const existingMainModule = window.__ZAOMENG_MAIN_MODULE__;
+if (existingMainModule?.initialized) {
+  return;
+}
 let appUpdateStatus = null;
 let appUpdatePollTimer = 0;
 
@@ -21,6 +26,66 @@ function readNamedActionBridge(name) {
     return UI_BRIDGE_TOOLS.readLegacyActionBridge(name);
   }
   return window[String(name || "").trim()] || {};
+}
+
+function characterOverviewActions() {
+  return readNamedActionBridge("__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__");
+}
+
+function openCharacterOverviewViaBridge(characterName = "") {
+  const target = String(characterName || "").trim();
+  if (!target) {
+    return Promise.resolve(null);
+  }
+  const actions = characterOverviewActions();
+  if (typeof actions.openCharacterOverview === "function") {
+    return Promise.resolve(actions.openCharacterOverview(target));
+  }
+  return Promise.reject(new Error("人物档案暂时没有载入。"));
+}
+
+function openCharacterOverviewIncrementalDistillViaBridge() {
+  const actions = characterOverviewActions();
+  if (typeof actions.openCharacterOverviewIncrementalDistill === "function") {
+    actions.openCharacterOverviewIncrementalDistill();
+    return true;
+  }
+  return false;
+}
+
+function openCharacterOverviewSessionModeViaBridge(mode) {
+  const actions = characterOverviewActions();
+  if (typeof actions.openCharacterOverviewSessionMode === "function") {
+    return Promise.resolve(actions.openCharacterOverviewSessionMode(mode));
+  }
+  return Promise.reject(new Error("当前角色暂时无法直接入场。"));
+}
+
+function openCurrentCharacterProfileFileViaBridge() {
+  const actions = characterOverviewActions();
+  if (typeof actions.openCurrentCharacterProfileFile === "function") {
+    return Boolean(actions.openCurrentCharacterProfileFile());
+  }
+  return false;
+}
+
+function openWorkSummaryExportFallback() {
+  const target =
+    currentRun?.file_urls?.manifest ||
+    currentRun?.file_urls?.graph_relations_file ||
+    currentRun?.file_urls?.graph_html ||
+    currentRun?.file_urls?.graph_svg ||
+    "";
+  if (!target) {
+    setStatus("bookshelf-status", "当前没有可导出的摘要文件。");
+    return false;
+  }
+  window.open(target, "_blank", "noopener,noreferrer");
+  return true;
+}
+
+function openWorkTimelineFallback() {
+  el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function buildChatSetupState() {
@@ -738,11 +803,11 @@ async function openWorkCharacterReview() {
     return;
   }
 
-  if (typeof openCharacterOverview === "function") {
-    await openCharacterOverview(targetCharacter);
-    return;
+  try {
+    await openCharacterOverviewViaBridge(targetCharacter);
+  } catch (_error) {
+    await openPersonaReviewForCharacter(targetCharacter);
   }
-  await openPersonaReviewForCharacter(targetCharacter);
 }
 
 async function openQuickDialogueMode(mode) {
@@ -1328,12 +1393,16 @@ function bindEvents() {
   bind("detail-export-summary-button", "click", () => {
     if (typeof openWorkSummaryExport === "function") {
       openWorkSummaryExport();
+      return;
     }
+    openWorkSummaryExportFallback();
   });
   bind("detail-view-timeline-button", "click", () => {
     if (typeof openWorkTimeline === "function") {
       openWorkTimeline();
+      return;
     }
+    openWorkTimelineFallback();
   });
   bind("back-to-work-overview-button", "click", () => {
     characterOverviewOpen = false;
@@ -1348,21 +1417,37 @@ function bindEvents() {
   bind("character-overview-redistill-button", "click", () => {
     if (typeof openCharacterOverviewIncrementalDistill === "function") {
       openCharacterOverviewIncrementalDistill();
+      return;
+    }
+    if (!openCharacterOverviewIncrementalDistillViaBridge()) {
+      setStatus("redistill-status", "角色增量能力暂时没有载入。");
     }
   });
   bind("character-overview-act-button", "click", () => {
     if (typeof openCharacterOverviewSessionMode === "function") {
       openCharacterOverviewSessionMode("act").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+      return;
     }
+    openCharacterOverviewSessionModeViaBridge("act").catch((error) =>
+      setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。")
+    );
   });
   bind("character-overview-insert-button", "click", () => {
     if (typeof openCharacterOverviewSessionMode === "function") {
       openCharacterOverviewSessionMode("insert").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+      return;
     }
+    openCharacterOverviewSessionModeViaBridge("insert").catch((error) =>
+      setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。")
+    );
   });
   bind("character-overview-export-button", "click", () => {
     if (typeof openCurrentCharacterProfileFile === "function") {
       openCurrentCharacterProfileFile();
+      return;
+    }
+    if (!openCurrentCharacterProfileFileViaBridge()) {
+      setStatus("character-overview-status", "当前人物原档暂时不可用。");
     }
   });
   el("character-overview-key-fields")?.addEventListener("click", (event) => {
@@ -1630,3 +1715,88 @@ window.syncSuggestButtonVisibility = syncSuggestButtonVisibility;
 syncSuggestButtonVisibility(null);
 console.log("[zaomeng web] main.js loaded", window.__ZAOMENG_WEB_UI_VERSION__ || "unknown");
 boot();
+window.applyRunViewSafely = applyRunViewSafely;
+window.readNamedActionBridge = readNamedActionBridge;
+window.characterOverviewActions = characterOverviewActions;
+window.openCharacterOverviewViaBridge = openCharacterOverviewViaBridge;
+window.openCharacterOverviewIncrementalDistillViaBridge = openCharacterOverviewIncrementalDistillViaBridge;
+window.openCharacterOverviewSessionModeViaBridge = openCharacterOverviewSessionModeViaBridge;
+window.openCurrentCharacterProfileFileViaBridge = openCurrentCharacterProfileFileViaBridge;
+window.openWorkSummaryExportFallback = openWorkSummaryExportFallback;
+window.openWorkTimelineFallback = openWorkTimelineFallback;
+window.buildChatSetupState = buildChatSetupState;
+window.publishChatSetupState = publishChatSetupState;
+window.syncModeFields = syncModeFields;
+window.handleModelSettingsSubmit = handleModelSettingsSubmit;
+window.handleCreateRunSubmit = handleCreateRunSubmit;
+window.handleRedistill = handleRedistill;
+window.handleRedistillRecommend = handleRedistillRecommend;
+window.handleStopRun = handleStopRun;
+window.handleRedistillAdd = handleRedistillAdd;
+window.handleRedistillRefresh = handleRedistillRefresh;
+window.handleDialogueSessionSubmit = handleDialogueSessionSubmit;
+window.selfCardFieldId = selfCardFieldId;
+window.collectSelfCardPayload = collectSelfCardPayload;
+window.validateSelfCardPayload = validateSelfCardPayload;
+window.fillSelfCardFields = fillSelfCardFields;
+window.buildSelfCardEditorState = buildSelfCardEditorState;
+window.publishSelfCardEditorState = publishSelfCardEditorState;
+window.updateSelfCardDeleteButton = updateSelfCardDeleteButton;
+window.startSelfCardDraft = startSelfCardDraft;
+window.openNewSelfCard = openNewSelfCard;
+window.openExistingSelfCard = openExistingSelfCard;
+window.renderSelfCardOptions = renderSelfCardOptions;
+window.loadSelfCards = loadSelfCards;
+window.syncSelectedSelfCardFromSelect = syncSelectedSelfCardFromSelect;
+window.renderSelectedSelfCardPreview = renderSelectedSelfCardPreview;
+window.handleSelfCardSelectionChange = handleSelfCardSelectionChange;
+window.handleOpenNewSelfCard = handleOpenNewSelfCard;
+window.handleEditCurrentSelfCard = handleEditCurrentSelfCard;
+window.handleGenerateSelfCard = handleGenerateSelfCard;
+window.handleSelfCardSubmit = handleSelfCardSubmit;
+window.handleDeleteSelfCard = handleDeleteSelfCard;
+window.openPersonaReviewForCharacter = openPersonaReviewForCharacter;
+window.openPersonaReview = openPersonaReview;
+window.openWorkCharacterReview = openWorkCharacterReview;
+window.openQuickDialogueMode = openQuickDialogueMode;
+window.handlePersonaCharacterChange = handlePersonaCharacterChange;
+window.collectPersonaReviewPayload = collectPersonaReviewPayload;
+window.handlePersonaFieldAutofill = handlePersonaFieldAutofill;
+window.handlePersonaReviewSubmit = handlePersonaReviewSubmit;
+window.openRelationDetails = openRelationDetails;
+window.openAppUpdateModal = openAppUpdateModal;
+window.closeAppUpdateModal = closeAppUpdateModal;
+window.appUpdateDismissKey = appUpdateDismissKey;
+window.rememberDismissedAppUpdate = rememberDismissedAppUpdate;
+window.wasAppUpdateDismissed = wasAppUpdateDismissed;
+window.clearAppUpdatePolling = clearAppUpdatePolling;
+window.renderAppUpdateStatus = renderAppUpdateStatus;
+window.fetchAppUpdateStatus = fetchAppUpdateStatus;
+window.scheduleAppUpdatePolling = scheduleAppUpdatePolling;
+window.checkAppUpdateOnBoot = checkAppUpdateOnBoot;
+window.dismissAppUpdateModal = dismissAppUpdateModal;
+window.handleConfirmAppUpdate = handleConfirmAppUpdate;
+window.buildComposerUiState = buildComposerUiState;
+window.publishComposerUiState = publishComposerUiState;
+window.normalizeDialogueMessageKind = normalizeDialogueMessageKind;
+window.readDialogueMessageKind = readDialogueMessageKind;
+window.updateDialogueMessagePlaceholder = updateDialogueMessagePlaceholder;
+window.setDialogueMessageKind = setDialogueMessageKind;
+window.setQuickRepliesEnabled = setQuickRepliesEnabled;
+window.syncSuggestButtonVisibility = syncSuggestButtonVisibility;
+window.setComposerWaiting = setComposerWaiting;
+window.setSuggestingState = setSuggestingState;
+window.renderObserveQuickReplies = renderObserveQuickReplies;
+window.applyQuickReply = applyQuickReply;
+window.setComposerDraft = setComposerDraft;
+window.coerceMessageOverride = coerceMessageOverride;
+window.handleSendTurn = handleSendTurn;
+window.handleSuggestTurn = handleSuggestTurn;
+window.bindEvents = bindEvents;
+window.boot = boot;
+window.__ZAOMENG_MAIN_MODULE__ = {
+  initialized: true,
+  version: String(window.__ZAOMENG_WEB_UI_VERSION__ || ""),
+};
+})();
+

@@ -35,7 +35,12 @@
 
       const workflow = computed(() => snapshot.value.workflow || {});
       const setup = computed(() => snapshot.value.chatSetup || {});
-      const visible = computed(() => !shell.classList.contains("hidden") && Boolean(workflow.value.chatModePickerOpen));
+      const visible = computed(() => {
+        if (Boolean(workflow.value.showChatSetup || workflow.value.chatModePickerOpen)) {
+          return true;
+        }
+        return !shell.classList.contains("hidden");
+      });
       const mode = computed(() => String(setup.value.mode || "observe").trim());
       const participants = computed(() => Array.isArray(setup.value.participantList) ? setup.value.participantList : []);
       const availableCharacters = computed(() => Array.isArray(setup.value.availableCharacters) ? setup.value.availableCharacters : []);

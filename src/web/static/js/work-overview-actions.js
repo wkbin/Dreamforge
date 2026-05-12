@@ -1,5 +1,50 @@
 (() => {
   const bridgeTools = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
+  const characterOverviewActions = () => window.__ZAOMENG_CHARACTER_OVERVIEW_ACTIONS__ || {};
+
+  function openCharacterOverviewBridge(name = "") {
+    const target = String(name || "").trim();
+    if (!target) {
+      return Promise.resolve(null);
+    }
+    const actions = characterOverviewActions();
+    if (typeof actions.openCharacterOverview === "function") {
+      return Promise.resolve(actions.openCharacterOverview(target));
+    }
+    return Promise.reject(new Error("人物档案暂时没有载入。"));
+  }
+
+  function openIncrementalDistillBridge(name = "") {
+    const target = String(name || "").trim();
+    if (!target) {
+      return false;
+    }
+    const actions = characterOverviewActions();
+    if (typeof actions.openIncrementalDistillForCharacter === "function") {
+      actions.openIncrementalDistillForCharacter(target);
+      return true;
+    }
+    return false;
+  }
+
+  function openSummaryExportBridge() {
+    const target =
+      currentRun?.file_urls?.manifest ||
+      currentRun?.file_urls?.graph_relations_file ||
+      currentRun?.file_urls?.graph_html ||
+      currentRun?.file_urls?.graph_svg ||
+      "";
+    if (!target) {
+      setStatus("bookshelf-status", "当前没有可导出的摘要文件。");
+      return false;
+    }
+    window.open(target, "_blank", "noopener,noreferrer");
+    return true;
+  }
+
+  function openTimelineBridge() {
+    el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 
   function publishRunOverviewUi(source, overrides = {}) {
     if (typeof publishLegacyUiState === "function") {
@@ -8,7 +53,7 @@
   }
 
   function openCharacterWithStatus(name = "") {
-    openCharacterOverview(String(name || "").trim()).catch((error) => {
+    openCharacterOverviewBridge(name).catch((error) => {
       setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
     });
   }
@@ -60,7 +105,9 @@
       return;
     }
     if (action === "redistill_character") {
-      openIncrementalDistillForCharacter(payload);
+      if (!openIncrementalDistillBridge(payload)) {
+        setStatus("redistill-status", "角色增量能力暂时没有载入。");
+      }
       return;
     }
     if (action === "open_character") {
@@ -91,7 +138,9 @@
       publishRunOverviewUi("work-character-toggled");
     },
     redistillPriorityCharacter(name = "") {
-      openIncrementalDistillForCharacter(String(name || "").trim());
+      if (!openIncrementalDistillBridge(name)) {
+        setStatus("redistill-status", "角色增量能力暂时没有载入。");
+      }
     },
     openEntrySession(item) {
       openPreviewSessionWithStatus(item);
@@ -129,7 +178,7 @@
       openRelationsWithStatus();
     },
     exportTopSummary() {
-      openWorkSummaryExport();
+      openSummaryExportBridge();
     },
     openTopGraph() {
       const target = currentRun?.file_urls?.graph_html || currentRun?.file_urls?.graph_svg || "";
@@ -137,7 +186,7 @@
       window.open(target, "_blank", "noopener,noreferrer");
     },
     openTopTimeline() {
-      openWorkTimeline();
+      openTimelineBridge();
     },
   };
 

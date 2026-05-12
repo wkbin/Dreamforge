@@ -1,19 +1,24 @@
+(() => {
+const existingBookshelfModule = window.__ZAOMENG_BOOKSHELF_MODULE__;
+if (existingBookshelfModule?.initialized) {
+  return;
+}
 function syncBookshelfSelection() {
   window.__ZAOMENG_BOOKSHELF_LEGACY_RENDER__?.syncBookshelfSelection?.();
 }
 
-const WORK_OVERVIEW_STATE = window.__ZAOMENG_WORK_OVERVIEW_STATE__ || {};
+const BOOKSHELF_WORK_OVERVIEW_STATE = window.__ZAOMENG_WORK_OVERVIEW_STATE__ || {};
 
 function buildRunStatusBannerState(run) {
-  if (typeof WORK_OVERVIEW_STATE.buildRunStatusBannerState === "function") {
-    return WORK_OVERVIEW_STATE.buildRunStatusBannerState(run);
+  if (typeof BOOKSHELF_WORK_OVERVIEW_STATE.buildRunStatusBannerState === "function") {
+    return BOOKSHELF_WORK_OVERVIEW_STATE.buildRunStatusBannerState(run);
   }
   return { visible: false, kicker: "", stage: "", description: "" };
 }
 
 function buildWorkActionState(run) {
-  if (typeof WORK_OVERVIEW_STATE.buildWorkActionState === "function") {
-    return WORK_OVERVIEW_STATE.buildWorkActionState(run);
+  if (typeof BOOKSHELF_WORK_OVERVIEW_STATE.buildWorkActionState === "function") {
+    return BOOKSHELF_WORK_OVERVIEW_STATE.buildWorkActionState(run);
   }
   return {
     primaryVisible: false,
@@ -27,8 +32,8 @@ function buildWorkActionState(run) {
 }
 
 function buildWorkTopOverviewState(run) {
-  if (typeof WORK_OVERVIEW_STATE.buildWorkTopOverviewState === "function") {
-    return WORK_OVERVIEW_STATE.buildWorkTopOverviewState(run);
+  if (typeof BOOKSHELF_WORK_OVERVIEW_STATE.buildWorkTopOverviewState === "function") {
+    return BOOKSHELF_WORK_OVERVIEW_STATE.buildWorkTopOverviewState(run);
   }
   return {
     title: run ? `《${runNovelTitle(run)}》` : "人物与关系正在慢慢浮现",
@@ -310,3 +315,25 @@ if (typeof BOOKSHELF_BRIDGE_TOOLS.mergeLegacyActionBridge === "function") {
     openRun: openBookshelfRun,
   };
 }
+window.syncBookshelfSelection = syncBookshelfSelection;
+window.buildRunStatusBannerState = buildRunStatusBannerState;
+window.buildWorkActionState = buildWorkActionState;
+window.buildWorkTopOverviewState = buildWorkTopOverviewState;
+window.runDetailActions = runDetailActions;
+window.renderRunFallbackFromBookshelf = renderRunFallbackFromBookshelf;
+window.renderBookshelfDetail = renderBookshelfDetail;
+window.renderRunStatusBanner = renderRunStatusBanner;
+window.renderBookshelf = renderBookshelf;
+window.formatBookshelfDeleteStatus = formatBookshelfDeleteStatus;
+window.getBookshelfCardState = getBookshelfCardState;
+window.loadRunsOverview = loadRunsOverview;
+window.openBookshelfRun = openBookshelfRun;
+window.deleteBookshelfRun = deleteBookshelfRun;
+window.showBookshelfHome = showBookshelfHome;
+window.startNewRunFlow = startNewRunFlow;
+window.__ZAOMENG_BOOKSHELF_MODULE__ = {
+  initialized: true,
+  version: String(window.__ZAOMENG_WEB_UI_VERSION__ || ""),
+};
+})();
+
