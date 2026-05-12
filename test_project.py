@@ -17,7 +17,6 @@ def test_project_structure():
     
     # 必需的文件
     required_files = [
-        "PROJECT.md",
         "README.md",
         "requirements.txt",
         "src/core/main.py",

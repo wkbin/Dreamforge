@@ -154,7 +154,7 @@ class ZaomengCLI:
                 "zaomeng: local rule-based novel character tooling. "
                 "Not a general-purpose LLM chatbot."
             ),
-            epilog="See PROJECT.md for project notes.",
+            epilog="See README.md for project overview and usage notes.",
         )
         subparsers = parser.add_subparsers(dest="command", help="Available commands")
 

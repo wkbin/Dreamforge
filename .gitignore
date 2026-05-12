@@ -26,9 +26,3 @@ config.yaml
 data/
 logs/
 clawhub-zaomeng-skill/runtime/data/
-
-# Internal planning docs (not for public repo)
-PROJECT.md
-PROJECT_STRUCTURE.md
-DEVELOPMENT_SUMMARY.md
-CURRENT_STATUS.md
