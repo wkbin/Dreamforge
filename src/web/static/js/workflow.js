@@ -82,6 +82,7 @@ function buildWorkflowVisibilityState() {
     hasCharacters,
     hasSession,
     failed,
+    workflowBootPending: Boolean(workflowBootPending),
     showModel,
     showBookshelf,
     showDistill,
@@ -109,7 +110,7 @@ function updateWorkflowState() {
   toggle("turn-stage", state.configured && state.hasSession && !state.sessionBooting);
   toggle("dialogue-empty", !state.hasSession);
   toggle("dialogue-detail", state.hasSession);
-  toggle("workflow-strip", !(state.hasSession || state.sessionBooting));
+  toggle("workflow-strip", !state.workflowBootPending && !(state.hasSession || state.sessionBooting));
 
   const workflowStrip = el("workflow-strip");
   if (workflowStrip) {

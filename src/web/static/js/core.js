@@ -29,6 +29,7 @@ var runPollTimer = null;
 var chatSetupPrefilledForRunId = "";
 var sidebarCollapsed = false;
 var sessionBooting = false;
+var workflowBootPending = true;
 var recentSessionsRequestId = 0;
 var recentSessionsCache = [];
 var recentSessionSnippets = new Map();

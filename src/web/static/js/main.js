@@ -1622,13 +1622,18 @@ async function boot() {
   setDialogueMessageKind(currentDialogueMessageKind);
   applySidebarState();
   initCustomSelect("dialogue-self-card");
-  await Promise.all([
-    loadModelSettings().catch((error) => console.warn("loadModelSettings failed", error)),
-    loadSelfCards().catch((error) => console.warn("loadSelfCards failed", error)),
-    loadRecentSessions().catch((error) => console.warn("loadRecentSessions failed", error)),
-    loadRunsOverview().catch((error) => console.warn("loadRunsOverview failed", error)),
-  ]);
-  await checkAppUpdateOnBoot();
+  try {
+    await Promise.all([
+      loadModelSettings().catch((error) => console.warn("loadModelSettings failed", error)),
+      loadSelfCards().catch((error) => console.warn("loadSelfCards failed", error)),
+      loadRecentSessions().catch((error) => console.warn("loadRecentSessions failed", error)),
+      loadRunsOverview().catch((error) => console.warn("loadRunsOverview failed", error)),
+    ]);
+    await checkAppUpdateOnBoot();
+  } finally {
+    workflowBootPending = false;
+    updateWorkflowState();
+  }
 }
 
 bindEvents();
