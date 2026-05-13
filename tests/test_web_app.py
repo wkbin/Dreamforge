@@ -1274,6 +1274,36 @@ class WebRunServiceTests(unittest.TestCase):
 
             self.assertEqual([item["run_id"] for item in items], [payload["run_id"]])
 
+    def test_list_runs_tolerates_legacy_nested_payload_maps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("王熙凤见了史湘云。晴雯与袭人也在场。".encode("utf-8")).decode("ascii"),
+                characters=["王熙凤", "史湘云", "晴雯", "袭人"],
+            )
+            manifest_path = Path(tmp) / "runs" / payload["run_id"] / "run_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest.setdefault("artifacts", {}).setdefault("payloads", {})["distill_characters"] = {
+                "王熙凤": r"D:\work2\Dreamforge\.zaomeng-web\runs\run-legacy\payloads\distill_王熙凤.json",
+                "史湘云": r"D:\work2\Dreamforge\.zaomeng-web\runs\run-legacy\payloads\distill_史湘云.json",
+                "晴雯": r"D:\work2\Dreamforge\.zaomeng-web\runs\run-legacy\payloads\distill_晴雯.json",
+                "袭人": r"D:\work2\Dreamforge\.zaomeng-web\runs\run-legacy\payloads\distill_袭人.json",
+            }
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            items = service.list_runs()
+
+            self.assertEqual([item["run_id"] for item in items], [payload["run_id"]])
+            self.assertIn("payload_distill", items[0]["file_urls"])
+            self.assertNotIn("payload_distill_characters", items[0]["file_urls"])
+
     def test_create_run_auto_run_starts_background_pipeline(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)

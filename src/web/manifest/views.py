@@ -79,8 +79,8 @@ def build_file_urls(
     payloads = manifest.get("artifacts", {}).get("payloads", {})
     if isinstance(payloads, dict):
         for key, value in payloads.items():
-            path = Path(str(value))
-            if not path.exists():
+            path = _existing_manifest_path(value)
+            if path is None:
                 continue
             relative = relative_to_run_dir(path, run_dir)
             if relative is not None:
@@ -89,8 +89,8 @@ def build_file_urls(
     character_items = manifest.get("artifact_index", {}).get("characters", [])
     if isinstance(character_items, list):
         for item in character_items:
-            profile = Path(str(item.get("profile_file", "")))
-            if not profile.exists():
+            profile = _existing_manifest_path(item.get("profile_file", ""))
+            if profile is None:
                 continue
             relative = relative_to_run_dir(profile, run_dir)
             if relative is not None:
@@ -99,11 +99,8 @@ def build_file_urls(
     relation_graph = manifest.get("artifact_index", {}).get("relation_graph", {})
     if isinstance(relation_graph, dict):
         for key in ("html_path", "svg_path", "mermaid_path", "relations_file"):
-            value = str(relation_graph.get(key, "")).strip()
-            if not value:
-                continue
-            path = Path(value)
-            if not path.exists():
+            path = _existing_manifest_path(relation_graph.get(key, ""))
+            if path is None:
                 continue
             relative = relative_to_run_dir(path, run_dir)
             if relative is not None:
@@ -158,3 +155,21 @@ def _relative_candidates(path: Path, run_dir: Path) -> list[tuple[Path, Path]]:
 def _normalized_parts(path: Path) -> tuple[str, ...]:
     resolved = Path(path).resolve(strict=False)
     return tuple(part.casefold() for part in resolved.parts)
+
+
+def _existing_manifest_path(value: Any) -> Path | None:
+    if isinstance(value, Path):
+        candidate = value
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        candidate = Path(text)
+    else:
+        return None
+    try:
+        if not candidate.exists():
+            return None
+    except (OSError, ValueError):
+        return None
+    return candidate
