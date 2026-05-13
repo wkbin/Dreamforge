@@ -338,6 +338,38 @@
   </div>
 </div>
 
+<div id="dialogue-memory-modal" class="modal hidden">
+  <div
+    id="dialogue-memory-modal-backdrop"
+    class="modal-backdrop"
+    data-close-modal="true"
+    data-modal-id="dialogue-memory-modal"
+    onclick="window.closeDialogueMemoryModal && window.closeDialogueMemoryModal()"
+  ></div>
+  <div class="modal-card dialogue-memory-modal-card">
+    <div class="panel-head dialogue-memory-modal-head">
+      <div>
+        <p class="eyebrow">本局记忆</p>
+        <h3>把这一局先捋顺</h3>
+        <p id="dialogue-memory-modal-updated" class="panel-copy">更新于刚刚</p>
+      </div>
+      <button
+        id="close-dialogue-memory-modal-button"
+        type="button"
+        class="soft-button"
+        data-close-modal="true"
+        data-modal-id="dialogue-memory-modal"
+        onclick="window.closeDialogueMemoryModal && window.closeDialogueMemoryModal()"
+      >
+        关闭
+      </button>
+    </div>
+    <div class="modal-scroll dialogue-memory-modal-scroll">
+      <div id="dialogue-memory-modal-mount"></div>
+    </div>
+  </div>
+</div>
+
 <div id="scene-card-modal" class="modal hidden">
   <div class="modal-backdrop" data-close-modal="true" data-modal-id="scene-card-modal"></div>
   <div class="modal-card inspector-modal-card">

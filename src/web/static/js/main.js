@@ -2556,13 +2556,23 @@ function bindEvents() {
     setDialogueMessageKind(target.dataset.kind || "dialogue");
   });
   bind("dialogue-memory-copy-button", "click", () => {
-    if (typeof copyDialogueMemorySummary === "function") {
-      copyDialogueMemorySummary();
+    if (typeof window.copyDialogueMemorySummary === "function") {
+      window.copyDialogueMemorySummary();
     }
   });
   bind("dialogue-memory-toggle-button", "click", () => {
-    if (typeof toggleDialogueMemory === "function") {
-      toggleDialogueMemory();
+    if (typeof window.toggleDialogueMemory === "function") {
+      window.toggleDialogueMemory();
+    }
+  });
+  bind("close-dialogue-memory-modal-button", "click", () => {
+    if (typeof window.closeDialogueMemoryModal === "function") {
+      window.closeDialogueMemoryModal();
+    }
+  });
+  bind("dialogue-memory-modal-backdrop", "click", () => {
+    if (typeof window.closeDialogueMemoryModal === "function") {
+      window.closeDialogueMemoryModal();
     }
   });
 
@@ -2628,6 +2638,10 @@ function bindEvents() {
         closeSceneCardModal();
       } else if (modalId === "self-card-modal") {
         closeSelfCardModal();
+      } else if (modalId === "dialogue-memory-modal") {
+        if (typeof window.closeDialogueMemoryModal === "function") {
+          window.closeDialogueMemoryModal();
+        }
       } else if (modalId === "relation-details-modal") {
         closeRelationDetailsModal();
       } else if (modalId === "app-update-modal") {

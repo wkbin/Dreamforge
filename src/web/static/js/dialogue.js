@@ -213,11 +213,13 @@ function renderDialogueMemory(session) {
   const root = el("dialogue-memory");
   if (!root) return;
   if (!session) {
+    closeDialogueMemoryModal({ silent: true });
     root.classList.add("hidden");
     return;
   }
+  root.classList.add("is-collapsed");
   const snapshot = buildDialogueMemorySnapshot(session);
-  const collapsed = root.classList.contains("is-collapsed");
+  const modalOpen = isDialogueMemoryModalOpen();
   root.classList.remove("hidden");
   setText("dialogue-memory-recap", snapshot.recap, "");
   setText("dialogue-memory-cast", snapshot.cast, "");
@@ -234,13 +236,14 @@ function renderDialogueMemory(session) {
     branchNote.classList.toggle("hidden", !branchTitle);
   }
   setText("dialogue-memory-updated", `更新于 ${snapshot.updated}`, "");
+  setText("dialogue-memory-modal-updated", `更新于 ${snapshot.updated}`, "");
   const toggle = el("dialogue-memory-toggle-button");
   if (toggle) {
-    toggle.textContent = collapsed ? "展开" : "收起";
+    toggle.textContent = modalOpen ? "关闭弹窗" : "弹窗查看";
   }
   const body = el("dialogue-memory-body");
   if (body) {
-    body.classList.toggle("hidden", collapsed);
+    body.classList.toggle("hidden", body.parentElement === root);
   }
   renderDialogueSceneTimeline(session);
   if (typeof window.renderDialogueSceneSwitcher === "function") {
@@ -395,11 +398,71 @@ async function copyDialogueMemorySummary() {
 }
 
 function toggleDialogueMemory() {
-  const root = el("dialogue-memory");
-  if (!root) return;
-  root.classList.toggle("is-collapsed");
-  renderDialogueMemory(currentDialogueSession);
+  if (isDialogueMemoryModalOpen()) {
+    closeDialogueMemoryModal();
+    return;
+  }
+  openDialogueMemoryModal();
 }
+
+function isDialogueMemoryModalOpen() {
+  const modal = el("dialogue-memory-modal");
+  return Boolean(modal && !modal.classList.contains("hidden"));
+}
+
+function openDialogueMemoryModal() {
+  const modal = el("dialogue-memory-modal");
+  const mount = el("dialogue-memory-modal-mount");
+  const root = el("dialogue-memory");
+  const body = el("dialogue-memory-body");
+  if (!modal || !mount || !root || !body) return;
+  root.classList.add("is-collapsed");
+  body.classList.remove("hidden");
+  if (body.parentElement !== mount) {
+    mount.appendChild(body);
+  }
+  toggle("dialogue-memory-modal", true);
+  if (typeof syncModalScrollLock === "function") {
+    syncModalScrollLock();
+  }
+  const toggleButton = el("dialogue-memory-toggle-button");
+  if (toggleButton) {
+    toggleButton.textContent = "关闭弹窗";
+  }
+}
+
+function closeDialogueMemoryModal(options = {}) {
+  const silent = Boolean(options && options.silent);
+  const modal = el("dialogue-memory-modal");
+  const root = el("dialogue-memory");
+  const body = el("dialogue-memory-body");
+  if (root && body && body.parentElement !== root) {
+    root.appendChild(body);
+    if (!root.classList.contains("is-collapsed")) {
+      body.classList.remove("hidden");
+    } else {
+      body.classList.add("hidden");
+    }
+  }
+  if (modal) {
+    toggle("dialogue-memory-modal", false);
+  }
+  if (typeof syncModalScrollLock === "function") {
+    syncModalScrollLock();
+  }
+  if (!silent) {
+    const toggleButton = el("dialogue-memory-toggle-button");
+    if (toggleButton) {
+      toggleButton.textContent = "弹窗查看";
+    }
+  }
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!isDialogueMemoryModalOpen()) return;
+  closeDialogueMemoryModal();
+});
 
 function renderTranscript(items) {
   const root = el("dialogue-transcript");
@@ -879,6 +942,8 @@ window.buildDialogueMemorySnapshot = buildDialogueMemorySnapshot;
 window.renderDialogueMemory = renderDialogueMemory;
 window.buildDialogueMemoryClipboardText = buildDialogueMemoryClipboardText;
 window.copyDialogueMemorySummary = copyDialogueMemorySummary;
+window.openDialogueMemoryModal = openDialogueMemoryModal;
+window.closeDialogueMemoryModal = closeDialogueMemoryModal;
 window.toggleDialogueMemory = toggleDialogueMemory;
 window.renderTranscript = renderTranscript;
 window.renderSessionBooting = renderSessionBooting;
