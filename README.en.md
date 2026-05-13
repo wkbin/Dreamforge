@@ -122,6 +122,9 @@ The current Web UI already supports:
 
 - a guided linear workflow, without requiring the user to understand the skill ecosystem first
 - saving model settings and launching distillation directly from the UI
+- trying ready-made built-in novels from `builtin_novels/` right after model setup, without distilling one manually first
+- importing and exporting a unified “novel package” so a playable run can move between machines
+- publishing the current run into `builtin_novels/` with one click, so it can become a built-in playable sample
 - volume-aware excerpt suggestions, including estimated chunk count, model calls, rough token cost, and time range
 - tracking character distillation progress and graph artifacts in one place
 - a bookshelf-style workbench where you can return to a run and keep distilling, review personas, inspect relations, or jump into chat
@@ -134,6 +137,15 @@ The current Web UI already supports:
 - incremental distillation and re-distillation entrypoints
 
 If you want to use `zaomeng` as an actual product entry instead of only as a skill companion, the Web UI is now the most complete primary surface.
+
+That also means the project now has a reusable asset flow:
+
+- distill a complete novel locally
+- export it as a portable novel package from the run detail page
+- or publish it straight into the repository-level `builtin_novels/` directory
+- then another user can clone the repo, configure a model, and try it immediately from the built-in novel picker
+
+This shared package format is intended to unify built-in samples, portable exports, and local asset reuse, instead of maintaining different formats for each surface.
 
 ## What You Can Do With It ✨
 

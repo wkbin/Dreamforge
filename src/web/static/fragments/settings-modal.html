@@ -734,6 +734,27 @@
   </div>
 </div>
 
+<div id="builtin-novel-modal" class="modal hidden">
+  <div class="modal-backdrop" data-close-modal="true" data-modal-id="builtin-novel-modal"></div>
+  <div class="modal-card inspector-modal-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">内置小说</p>
+        <h3>挑一卷已经备好的故事直接试玩</h3>
+        <p class="panel-copy">这些都是已经整理好的小说包。接通声源后，点一下就会复制出你自己的本地书卷，不会改动原包。</p>
+      </div>
+      <button id="close-builtin-novel-button" type="button" class="soft-button" data-close-modal="true" data-modal-id="builtin-novel-modal">先放一放</button>
+    </div>
+    <div class="modal-scroll">
+      <div class="card-actions">
+        <button id="refresh-builtin-novels-button" type="button" class="soft-button">刷新列表</button>
+      </div>
+      <div id="builtin-novel-list" class="builtin-novel-list"></div>
+      <p id="builtin-novel-status" class="card-note"></p>
+    </div>
+  </div>
+</div>
+
 <div id="app-update-modal" class="modal hidden">
   <div class="modal-backdrop" data-close-modal="true" data-modal-id="app-update-modal"></div>
   <div class="modal-card update-modal-card">

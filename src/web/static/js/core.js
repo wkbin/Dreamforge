@@ -1231,6 +1231,16 @@ function closeRelationDetailsModal() {
   syncModalScrollLock();
 }
 
+function openBuiltinNovelModal() {
+  toggle("builtin-novel-modal", true);
+  syncModalScrollLock();
+}
+
+function closeBuiltinNovelModal() {
+  toggle("builtin-novel-modal", false);
+  syncModalScrollLock();
+}
+
 function openSelfCardModal() {
   toggle("self-card-modal", true);
   syncModalScrollLock();

@@ -16,6 +16,7 @@ from src.web.service_facades import (
     CoreServiceMixin,
     DialogueServiceMixin,
     OpeningPresetServiceMixin,
+    PackageServiceMixin,
     PipelineHelpersMixin,
     ReviewHelpersMixin,
     RunPreparationMixin,
@@ -48,6 +49,7 @@ class WebRunService(
     CoreServiceMixin,
     RunPreparationMixin,
     RunServiceMixin,
+    PackageServiceMixin,
     ArtifactServiceMixin,
     OpeningPresetServiceMixin,
     SceneCardServiceMixin,
@@ -208,11 +210,13 @@ class WebRunService(
             resolved_storage_root = self.project_root / ".zaomeng-web"
         self.storage_root = resolved_storage_root
         self.runs_root = self.storage_root / "runs"
+        self.builtin_novels_root = self.project_root / "builtin_novels"
         self.scene_cards_root = self.storage_root / "scene-cards"
         self.self_cards_root = self.storage_root / "self-cards"
         self.opening_presets_root = self.storage_root / "opening-presets"
         self.settings_path = self.storage_root / "model_settings.json"
         self.runs_root.mkdir(parents=True, exist_ok=True)
+        self.builtin_novels_root.mkdir(parents=True, exist_ok=True)
         self.scene_cards_root.mkdir(parents=True, exist_ok=True)
         self.self_cards_root.mkdir(parents=True, exist_ok=True)
         self.opening_presets_root.mkdir(parents=True, exist_ok=True)

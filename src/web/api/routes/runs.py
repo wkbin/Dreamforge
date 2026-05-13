@@ -9,6 +9,7 @@ from src.web.api.compat import model_to_dict
 from src.web.api.deps import get_run_service
 from src.web.api.schemas import (
     CreateRunRequest,
+    ImportRunPackageRequest,
     IngestCharacterRequest,
     IngestRelationRequest,
     RestartRunRequest,
@@ -20,6 +21,21 @@ from src.web.api.schemas import (
 from src.web.workflow import WebRunService
 
 router = APIRouter()
+
+
+@router.get("/api/web/builtin-novels")
+def list_builtin_novels(run_service: WebRunService = Depends(get_run_service)) -> dict[str, Any]:
+    return {"items": run_service.list_builtin_novels()}
+
+
+@router.post("/api/web/builtin-novels/{package_id}/clone")
+def clone_builtin_novel(package_id: str, run_service: WebRunService = Depends(get_run_service)) -> dict[str, Any]:
+    try:
+        return run_service.clone_builtin_novel(package_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Built-in novel not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/api/web/runs")
@@ -50,12 +66,60 @@ def create_run_route(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/api/web/runs/import")
+def import_run_package_route(
+    payload: ImportRunPackageRequest,
+    run_service: WebRunService = Depends(get_run_service),
+) -> dict[str, Any]:
+    try:
+        return run_service.import_run_package(
+            filename=payload.filename,
+            content_base64=payload.content_base64,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Package not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/api/web/runs/{run_id}")
 def get_run(run_id: str, run_service: WebRunService = Depends(get_run_service)) -> dict[str, Any]:
     try:
         return run_service.get_run(run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Run not found.") from exc
+
+
+@router.get("/api/web/runs/{run_id}/export")
+def export_run_package_route(
+    run_id: str,
+    builtin: bool = False,
+    run_service: WebRunService = Depends(get_run_service),
+) -> FileResponse:
+    try:
+        exported = run_service.export_run_package(run_id, builtin=builtin)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Run not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FileResponse(
+        exported["path"],
+        media_type="application/zip",
+        filename=str(exported.get("filename", "")).strip() or None,
+    )
+
+
+@router.post("/api/web/runs/{run_id}/publish-builtin")
+def publish_run_as_builtin_route(
+    run_id: str,
+    run_service: WebRunService = Depends(get_run_service),
+) -> dict[str, Any]:
+    try:
+        return run_service.publish_run_as_builtin(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Run not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("/api/web/runs/{run_id}")

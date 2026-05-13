@@ -23,6 +23,7 @@
       chat: "openTopChat",
       stop: "stopTopRun",
       relations: "openTopRelations",
+      export_package: "exportTopPackage",
       export: "exportTopSummary",
       graph: "openTopGraph",
       timeline: "openTopTimeline",
@@ -98,7 +99,7 @@
                 v-for="item in viewState.actions.secondaryButtons"
                 :key="'secondary-' + item.key"
                 type="button"
-                class="soft-button"
+                :class="['soft-button', { 'is-busy': item.busy }]"
                 :disabled="item.disabled"
                 @click="invokeAction(item.key)"
               >

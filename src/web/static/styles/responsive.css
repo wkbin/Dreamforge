@@ -106,6 +106,17 @@
     margin-left: 0;
   }
 
+  .bookshelf-card .card-head {
+    flex-direction: column;
+  }
+
+  .bookshelf-head-actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
   .transcript {
     padding: 24px 16px 20px;
     max-height: min(56vh, 32rem);
