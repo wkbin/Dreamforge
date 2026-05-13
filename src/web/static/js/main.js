@@ -5,6 +5,7 @@ if (existingMainModule?.initialized) {
 }
 let appUpdateStatus = null;
 let appUpdatePollTimer = 0;
+let exportRunPackagePendingId = "";
 
 const APP_UPDATE_DISMISS_PREFIX = "zaomeng:update-dismissed:";
 const UI_BRIDGE_TOOLS = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
@@ -86,6 +87,67 @@ function openWorkSummaryExportFallback() {
 
 function openWorkTimelineFallback() {
   el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function currentExportRunPackageId() {
+  return String(exportRunPackagePendingId || "").trim();
+}
+
+function isRunPackageExportPending(runId = "") {
+  const pendingId = currentExportRunPackageId();
+  const targetId = String(runId || currentRunId || "").trim();
+  return Boolean(pendingId) && Boolean(targetId) && pendingId === targetId;
+}
+
+function publishRunPackageExportUiState(source = "run-package-export") {
+  if (typeof renderBookshelfDetail === "function") {
+    renderBookshelfDetail(currentRun);
+  }
+  if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
+    UI_BRIDGE_TOOLS.syncLegacyUiState(source, {});
+  } else if (typeof publishLegacyUiState === "function") {
+    publishLegacyUiState(source, {});
+  }
+}
+
+function setRunPackageExportPending(runId = "", pending = false) {
+  const targetId = String(runId || currentRunId || "").trim();
+  exportRunPackagePendingId = pending ? targetId : "";
+  publishRunPackageExportUiState(pending ? "run-package-export-started" : "run-package-export-finished");
+}
+
+function resolveDownloadFilename(response, fallbackName = "zaomeng-run-package.zip") {
+  const header = String(response?.headers?.get("content-disposition") || "").trim();
+  if (!header) {
+    return fallbackName;
+  }
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]).trim() || fallbackName;
+    } catch (_) {
+      return utf8Match[1].trim() || fallbackName;
+    }
+  }
+  const plainMatch = header.match(/filename="?([^";]+)"?/i);
+  if (plainMatch?.[1]) {
+    return plainMatch[1].trim() || fallbackName;
+  }
+  return fallbackName;
+}
+
+function downloadBlobFile(blob, filename) {
+  const objectUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(objectUrl);
+  }, 1500);
 }
 
 function buildChatSetupState() {
@@ -1926,6 +1988,176 @@ async function openRelationDetails() {
   }
 }
 
+function renderBuiltinNovelList(items) {
+  const root = el("builtin-novel-list");
+  if (!root) return;
+  root.innerHTML = "";
+  const entries = Array.isArray(items) ? items : [];
+  entries.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "builtin-novel-card";
+
+    const head = document.createElement("div");
+    head.className = "builtin-novel-card-head";
+    head.innerHTML = `
+      <div>
+        <strong>${escapeHtml(item.title || item.novel_id || item.package_id || "未命名书卷")}</strong>
+        <p>${escapeHtml(item.novel_id || "")}</p>
+      </div>
+      <span class="builtin-novel-badge">${escapeHtml(item.status || "ready")}</span>
+    `;
+
+    const meta = document.createElement("p");
+    meta.className = "builtin-novel-card-meta";
+    const metaParts = [];
+    if (Number(item.character_count || 0) > 0) {
+      metaParts.push(`${Number(item.character_count || 0)} 位角色`);
+    }
+    if (item.has_relation_graph) {
+      metaParts.push("含关系图谱");
+    }
+    if (item.updated_at) {
+      metaParts.push(`更新于 ${escapeHtml(formatWeakTime(item.updated_at) || item.updated_at)}`);
+    }
+    meta.textContent = metaParts.join(" · ");
+
+    const actions = document.createElement("div");
+    actions.className = "card-actions";
+    const startButton = document.createElement("button");
+    startButton.type = "button";
+    startButton.className = "primary-button";
+    startButton.textContent = "复制到我的书架";
+    startButton.addEventListener("click", () => {
+      handleCloneBuiltinNovel(item.package_id, item.title || item.novel_id || "");
+    });
+    actions.appendChild(startButton);
+
+    card.appendChild(head);
+    if (meta.textContent) {
+      card.appendChild(meta);
+    }
+    card.appendChild(actions);
+    root.appendChild(card);
+  });
+}
+
+async function loadBuiltinNovels() {
+  setStatus("builtin-novel-status", "正在翻出内置书卷...");
+  try {
+    const payload = await apiJson("/api/web/builtin-novels", {}, "内置小说列表载入失败。");
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    renderBuiltinNovelList(items);
+    setStatus(
+      "builtin-novel-status",
+      items.length
+        ? `当前有 ${items.length} 卷可直接试玩的内置小说。`
+        : "内置目录里暂时还没有小说包，你可以先导出一卷再放进去。"
+    );
+    return items;
+  } catch (error) {
+    renderBuiltinNovelList([]);
+    setStatus("builtin-novel-status", error.message || "内置小说列表暂时没有载入。");
+    throw error;
+  }
+}
+
+async function handleOpenBuiltinNovelModal() {
+  if (!modelSettings.configured) {
+    openSettingsModal();
+    setStatus("builtin-novel-status", "先把故事声源接进来，再直接试玩内置小说。");
+    return;
+  }
+  openBuiltinNovelModal();
+  await loadBuiltinNovels().catch(() => {});
+}
+
+async function handleCloneBuiltinNovel(packageId, title = "") {
+  const safeTitle = String(title || "").trim();
+  setStatus("builtin-novel-status", safeTitle ? `正在把《${safeTitle}》复制到你的书架...` : "正在复制这卷书...");
+  try {
+    const run = await apiJson(
+      `/api/web/builtin-novels/${encodeURIComponent(packageId)}/clone`,
+      {
+        method: "POST",
+      },
+      "复制内置小说失败。"
+    );
+    closeBuiltinNovelModal();
+    applyRunViewSafely(run);
+    await loadRunsOverview();
+    setStatus("bookshelf-status", safeTitle ? `《${safeTitle}》已经落到你的书架里，可以直接开聊。` : "内置小说已经复制到你的书架里。");
+  } catch (error) {
+    setStatus("builtin-novel-status", error.message || "这卷内置小说暂时没有复制成功。");
+  }
+}
+
+function triggerImportRunPackage() {
+  el("import-run-package-input")?.click();
+}
+
+async function handleImportRunPackage(event) {
+  const input = event?.target;
+  if (!(input instanceof HTMLInputElement)) return;
+  const file = input.files?.[0];
+  if (!file) return;
+  setStatus("bookshelf-status", `正在导入 ${file.name}...`);
+  try {
+    const run = await apiJson(
+      "/api/web/runs/import",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          content_base64: await fileToBase64(file),
+        }),
+      },
+      "导入小说包失败。"
+    );
+    input.value = "";
+    applyRunViewSafely(run);
+    await loadRunsOverview();
+    setStatus("bookshelf-status", `《${runNovelTitle(run)}》已经导入到你的书架。`);
+  } catch (error) {
+    input.value = "";
+    setStatus("bookshelf-status", error.message || "这次导入没有接上。");
+  }
+}
+
+async function handleExportRunPackage() {
+  if (!currentRunId) {
+    setStatus("bookshelf-status", "先选中一卷书，再导出小说包。");
+    return;
+  }
+  const run = currentRun || findRunById(currentRunId);
+  if (String(run?.status || "").trim() === "running") {
+    setStatus("bookshelf-status", "这本书还在整理中，等这一轮结束后再导出。");
+    return;
+  }
+  const runId = String(currentRunId || "").trim();
+  if (isRunPackageExportPending(runId)) {
+    return;
+  }
+  const title = runNovelTitle(run);
+  setRunPackageExportPending(runId, true);
+  setStatus("bookshelf-status", `正在打包《${title}》的小说包...`);
+  try {
+    const response = await fetch(`/api/web/runs/${encodeURIComponent(runId)}/export`);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "导出小说包失败。");
+    }
+    const blob = await response.blob();
+    const fallbackName = `${String(run?.novel_id || title || "zaomeng-run").trim() || "zaomeng-run"}.zaomeng-run.zip`;
+    downloadBlobFile(blob, resolveDownloadFilename(response, fallbackName));
+    setStatus("bookshelf-status", `《${title}》的小说包已经准备好，正在开始下载。`);
+  } catch (error) {
+    setStatus("bookshelf-status", error.message || "这次导出没有接上。");
+  } finally {
+    setRunPackageExportPending(runId, false);
+  }
+}
+
 function openAppUpdateModal() {
   toggle("app-update-modal", true);
   if (typeof syncModalScrollLock === "function") syncModalScrollLock();
@@ -2372,6 +2604,7 @@ function bindEvents() {
   bind("close-scene-card-button", "click", closeSceneCardModal);
   bind("close-self-card-button", "click", closeSelfCardModal);
   bind("close-opening-preset-button", "click", closeOpeningPresetModal);
+  bind("close-builtin-novel-button", "click", closeBuiltinNovelModal);
   bind("close-app-update-button", "click", dismissAppUpdateModal);
   bind("dismiss-app-update-button", "click", dismissAppUpdateModal);
   bind("confirm-app-update-button", "click", handleConfirmAppUpdate);
@@ -2380,8 +2613,16 @@ function bindEvents() {
     applySidebarState();
   });
   bind("new-dialogue-session-button", "click", openNewDialogueSession);
+  bind("bookshelf-open-builtin-button", "click", () => {
+    handleOpenBuiltinNovelModal().catch((error) => setStatus("builtin-novel-status", error.message || "内置小说列表暂时没有载入。"));
+  });
+  bind("bookshelf-import-run-button", "click", triggerImportRunPackage);
+  bind("refresh-builtin-novels-button", "click", () => {
+    loadBuiltinNovels().catch(() => {});
+  });
   bind("bookshelf-new-run-button", "click", startNewRunFlow);
   bind("back-from-distill-button", "click", showBookshelfHome);
+  bind("import-run-package-input", "change", handleImportRunPackage);
   bind("detail-start-chat-button", "click", openNewDialogueSession);
   bind("quick-open-observe-button", "click", () => {
     openQuickDialogueMode("observe").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
@@ -2406,6 +2647,7 @@ function bindEvents() {
     }
     openWorkSummaryExportFallback();
   });
+  bind("detail-export-package-button", "click", handleExportRunPackage);
   bind("detail-view-timeline-button", "click", () => {
     if (typeof openWorkTimeline === "function") {
       openWorkTimeline();
@@ -2644,6 +2886,8 @@ function bindEvents() {
         }
       } else if (modalId === "relation-details-modal") {
         closeRelationDetailsModal();
+      } else if (modalId === "builtin-novel-modal") {
+        closeBuiltinNovelModal();
       } else if (modalId === "app-update-modal") {
         dismissAppUpdateModal();
       } else {
@@ -2880,6 +3124,14 @@ window.collectPersonaReviewPayload = collectPersonaReviewPayload;
 window.handlePersonaFieldAutofill = handlePersonaFieldAutofill;
 window.handlePersonaReviewSubmit = handlePersonaReviewSubmit;
 window.openRelationDetails = openRelationDetails;
+window.renderBuiltinNovelList = renderBuiltinNovelList;
+window.loadBuiltinNovels = loadBuiltinNovels;
+window.handleOpenBuiltinNovelModal = handleOpenBuiltinNovelModal;
+window.handleCloneBuiltinNovel = handleCloneBuiltinNovel;
+window.triggerImportRunPackage = triggerImportRunPackage;
+window.handleImportRunPackage = handleImportRunPackage;
+window.isRunPackageExportPending = isRunPackageExportPending;
+window.handleExportRunPackage = handleExportRunPackage;
 window.openAppUpdateModal = openAppUpdateModal;
 window.closeAppUpdateModal = closeAppUpdateModal;
 window.appUpdateDismissKey = appUpdateDismissKey;

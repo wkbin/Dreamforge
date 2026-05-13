@@ -238,6 +238,11 @@
       Boolean(run?.file_urls?.graph_html) ||
       Boolean(run?.file_urls?.graph_svg);
     const hasGraphLink = Boolean(run?.file_urls?.graph_html || run?.file_urls?.graph_svg);
+    const exportPackagePending =
+      Boolean(run) &&
+      typeof isRunPackageExportPending === "function" &&
+      isRunPackageExportPending(run?.run_id || run?.runId || "");
+    const canExportPackage = Boolean(run) && run.status !== "running" && !exportPackagePending;
     const showActionNote = Boolean(run) && (isRunning || isStopped || run?.status === "failed");
     let actionNote = "";
     if (stopRequested) {
@@ -263,6 +268,7 @@
       ],
       secondaryButtons: [
         { key: "relations", label: "关系明细", disabled: !hasRelation },
+        { key: "export_package", label: exportPackagePending ? "正在打包..." : "导出小说包", disabled: !canExportPackage, busy: exportPackagePending },
         { key: "export", label: "导出摘要", disabled: !hasExport },
         { key: "graph", label: "查看关系图", disabled: !hasGraphLink },
         { key: "timeline", label: "查看时间线", disabled: false },

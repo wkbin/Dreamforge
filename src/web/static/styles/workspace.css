@@ -10,8 +10,25 @@
   grid-column: 1 / -1;
 }
 
+.bookshelf-card .card-head {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.bookshelf-card .card-head > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .bookshelf-head-actions {
+  display: flex !important;
+  flex-direction: row !important;
   margin-top: 0;
+  margin-left: auto;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: flex-end;
 }
 
 .bookshelf-empty {
@@ -498,6 +515,33 @@
 
 #detail-secondary-actions.is-softened {
   opacity: 0.78;
+}
+
+#detail-secondary-actions .soft-button:disabled,
+.work-action-groups .soft-button:disabled {
+  cursor: wait;
+  opacity: 0.76;
+  transform: none;
+  box-shadow: none;
+}
+
+#detail-secondary-actions .soft-button.is-busy,
+.work-action-groups .soft-button.is-busy {
+  position: relative;
+  background: linear-gradient(90deg, rgba(255, 245, 239, 0.92) 0%, rgba(243, 223, 211, 0.96) 50%, rgba(255, 245, 239, 0.92) 100%);
+  background-size: 200% 100%;
+  border-color: rgba(183, 124, 104, 0.26);
+  color: var(--ink);
+  animation: export-package-busy-sheen 1.15s linear infinite;
+}
+
+@keyframes export-package-busy-sheen {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
 }
 
 .work-progress-card {

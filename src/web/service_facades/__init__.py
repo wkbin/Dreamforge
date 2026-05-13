@@ -3,6 +3,7 @@ from .core import CoreServiceMixin
 from .artifacts import ArtifactServiceMixin
 from .dialogue import DialogueServiceMixin
 from .opening_presets import OpeningPresetServiceMixin
+from .packages import PackageServiceMixin
 from .pipeline_helpers import PipelineHelpersMixin
 from .review_helpers import ReviewHelpersMixin
 from .run_preparation import RunPreparationMixin
@@ -18,6 +19,7 @@ __all__ = [
     "CoreServiceMixin",
     "DialogueServiceMixin",
     "OpeningPresetServiceMixin",
+    "PackageServiceMixin",
     "PipelineHelpersMixin",
     "ReviewHelpersMixin",
     "RunPreparationMixin",

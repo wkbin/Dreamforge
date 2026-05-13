@@ -42,6 +42,15 @@
     return true;
   }
 
+  function openRunPackageExportBridge() {
+    if (typeof handleExportRunPackage === "function") {
+      handleExportRunPackage();
+      return true;
+    }
+    setStatus("bookshelf-status", "导出小说包能力暂时没有载入。");
+    return false;
+  }
+
   function openTimelineBridge() {
     el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
@@ -184,6 +193,9 @@
     },
     openTopRelations() {
       openRelationsWithStatus();
+    },
+    exportTopPackage() {
+      openRunPackageExportBridge();
     },
     exportTopSummary() {
       openSummaryExportBridge();

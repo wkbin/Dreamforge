@@ -6,7 +6,10 @@
         <h3>已经醒来的故事</h3>
       </div>
       <div class="card-actions bookshelf-head-actions">
+        <button id="bookshelf-open-builtin-button" type="button" class="soft-button">试玩内置小说</button>
+        <button id="bookshelf-import-run-button" type="button" class="soft-button">导入小说包</button>
         <button id="bookshelf-new-run-button" type="button" class="soft-button">蒸馏新小说</button>
+        <input id="import-run-package-input" class="native-hidden" type="file" accept=".zip" />
       </div>
     </div>
     <div id="bookshelf-vue-root" class="bookshelf-vue-root hidden"></div>
@@ -163,6 +166,7 @@
           <span class="work-action-label">次动作</span>
           <div id="detail-secondary-actions" class="card-actions">
             <button id="open-relation-details-button" type="button" class="soft-button hidden">关系明细</button>
+            <button id="detail-export-package-button" type="button" class="soft-button hidden">导出小说包</button>
             <button id="detail-export-summary-button" type="button" class="soft-button hidden">导出摘要</button>
             <button id="detail-view-graph-button" type="button" class="soft-button hidden">查看关系图</button>
             <button id="detail-view-timeline-button" type="button" class="soft-button">查看时间线</button>

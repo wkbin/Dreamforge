@@ -50,6 +50,11 @@ class IngestRelationRequest(BaseModel):
     filename: str = Field(default="relations.md")
 
 
+class ImportRunPackageRequest(BaseModel):
+    filename: str = Field(..., min_length=1)
+    content_base64: str = Field(..., min_length=1)
+
+
 class SavePersonaReviewRequest(BaseModel):
     core_identity: str = Field(default="")
     story_role: str = Field(default="")

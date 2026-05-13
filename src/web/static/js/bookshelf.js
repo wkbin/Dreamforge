@@ -173,6 +173,14 @@ function renderBookshelfDetail(run) {
     exportButton.classList.remove("hidden");
     exportButton.disabled = !hasExport;
   }
+  const exportPackageButton = el("detail-export-package-button");
+  if (exportPackageButton) {
+    const exportPackageAction = actionState.secondaryButtons.find((entry) => entry.key === "export_package");
+    exportPackageButton.classList.remove("hidden");
+    exportPackageButton.disabled = Boolean(exportPackageAction?.disabled);
+    exportPackageButton.textContent = exportPackageAction?.label || "导出小说包";
+    exportPackageButton.classList.toggle("is-busy", Boolean(exportPackageAction?.busy));
+  }
   const graphButton = el("detail-view-graph-button");
   let hasGraphLink = false;
   if (graphButton) {

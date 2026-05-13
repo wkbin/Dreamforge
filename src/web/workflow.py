@@ -16,6 +16,7 @@ from src.web.service_facades import (
     CoreServiceMixin,
     DialogueServiceMixin,
     OpeningPresetServiceMixin,
+    PackageServiceMixin,
     PipelineHelpersMixin,
     ReviewHelpersMixin,
     RunPreparationMixin,
@@ -29,6 +30,23 @@ from src.web.service_facades import (
 
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def _resolve_builtin_novels_root(
+    *,
+    project_root: Path,
+    storage_root: Path,
+    has_explicit_storage_root: bool,
+) -> Path:
+    env_builtin_root = str(
+        os.getenv("ZAOMENG_WEB_BUILTIN_NOVELS_ROOT", "")
+        or os.getenv("ZAOMENG_BUILTIN_NOVELS_DIR", "")
+    ).strip()
+    if env_builtin_root:
+        return Path(env_builtin_root)
+    if has_explicit_storage_root:
+        return storage_root / "builtin_novels"
+    return project_root / "builtin_novels"
 
 
 def _utc_now() -> str:
@@ -48,6 +66,7 @@ class WebRunService(
     CoreServiceMixin,
     RunPreparationMixin,
     RunServiceMixin,
+    PackageServiceMixin,
     ArtifactServiceMixin,
     OpeningPresetServiceMixin,
     SceneCardServiceMixin,
@@ -200,6 +219,7 @@ class WebRunService(
     def __init__(self, storage_root: str | Path | None = None) -> None:
         self.project_root = _project_root()
         env_storage_root = str(os.getenv("ZAOMENG_WEB_STORAGE_ROOT", "") or os.getenv("ZAOMENG_STORAGE_DIR", "")).strip()
+        has_explicit_storage_root = bool(storage_root or env_storage_root)
         if storage_root:
             resolved_storage_root = Path(storage_root)
         elif env_storage_root:
@@ -208,11 +228,17 @@ class WebRunService(
             resolved_storage_root = self.project_root / ".zaomeng-web"
         self.storage_root = resolved_storage_root
         self.runs_root = self.storage_root / "runs"
+        self.builtin_novels_root = _resolve_builtin_novels_root(
+            project_root=self.project_root,
+            storage_root=self.storage_root,
+            has_explicit_storage_root=has_explicit_storage_root,
+        )
         self.scene_cards_root = self.storage_root / "scene-cards"
         self.self_cards_root = self.storage_root / "self-cards"
         self.opening_presets_root = self.storage_root / "opening-presets"
         self.settings_path = self.storage_root / "model_settings.json"
         self.runs_root.mkdir(parents=True, exist_ok=True)
+        self.builtin_novels_root.mkdir(parents=True, exist_ok=True)
         self.scene_cards_root.mkdir(parents=True, exist_ok=True)
         self.self_cards_root.mkdir(parents=True, exist_ok=True)
         self.opening_presets_root.mkdir(parents=True, exist_ok=True)
