@@ -20,6 +20,7 @@ def create_dialogue_session_payload(
     generate_dialogue_responses: Callable[[str, dict[str, Any]], list[dict[str, str]]],
     friendly_dialogue_llm_error: Callable[[Exception], str],
     evolve_relations_from_turn: Callable[[str, dict[str, Any], list[dict[str, str]]], None],
+    refresh_scene_progress: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     session = dialogue.create_session(
         manifest,
@@ -50,6 +51,8 @@ def create_dialogue_session_payload(
         responses=responses,
         remember_turn_memory=True,
     )
+    if callable(refresh_scene_progress):
+        ingested = refresh_scene_progress(run_id, ingested)
     return ingested
 
 
@@ -65,6 +68,7 @@ def reply_dialogue_turn_payload(
     generate_dialogue_responses: Callable[[str, dict[str, Any]], list[dict[str, str]]],
     friendly_dialogue_llm_error: Callable[[Exception], str],
     evolve_relations_from_turn: Callable[[str, dict[str, Any], list[dict[str, str]]], None],
+    refresh_scene_progress: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     speaker_override = "场景提示" if str(message_kind or "").strip() == "narration" else ""
     dialogue.prepare_turn(
@@ -86,6 +90,8 @@ def reply_dialogue_turn_payload(
         responses=responses,
         remember_turn_memory=True,
     )
+    if callable(refresh_scene_progress):
+        ingested = refresh_scene_progress(run_id, ingested)
     return ingested
 
 

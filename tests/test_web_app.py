@@ -2925,6 +2925,296 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertLess(len(relation_excerpt), 4000)
             self.assertIn("林黛玉_贾宝玉", relation_excerpt)
 
+    def test_dialogue_relation_delta_and_character_snapshot_are_session_isolated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        (
+                            f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: {name}人物\n"
+                            f"- story_role: {name}位置\n- speech_style: {name}自有口气\n- stress_response: {name}越急越压住\n"
+                        ).encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            relation_path = Path(tmp) / "relations.md"
+            original_relation_text = "\n".join(
+                [
+                    "# RELATION_GRAPH",
+                    "",
+                    "## 林黛玉_贾宝玉",
+                    "- trust: 8",
+                    "- affection: 9",
+                    "- hostility: 1",
+                    "- ambiguity: 3",
+                ]
+            )
+            relation_path.write_text(original_relation_text, encoding="utf-8")
+            manifest = service._require_manifest(run_id)
+            manifest["artifact_index"]["relation_graph"] = {"relations_file": str(relation_path)}
+            (service.runs_root / run_id / "run_manifest.json").write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            session_one = service.dialogue.create_session(manifest, mode="observe", participants=["林黛玉", "贾宝玉"])
+            session_two = service.dialogue.create_session(manifest, mode="observe", participants=["林黛玉", "贾宝玉"])
+
+            pending_payload = {
+                "session_id": session_one["session_id"],
+                "input": {
+                    "speaker": "林黛玉",
+                    "participants": ["林黛玉", "贾宝玉"],
+                    "active_participants": ["林黛玉", "贾宝玉"],
+                },
+            }
+            service._evolve_relations_from_turn(
+                run_id,
+                pending_payload,
+                [{"speaker": "贾宝玉", "message": "谢谢你愿意陪我一起，我不是不在意你。"}],
+            )
+
+            raw_one = service.dialogue._read_json(service.dialogue._session_file(run_id, session_one["session_id"]))
+            raw_two = service.dialogue._read_json(service.dialogue._session_file(run_id, session_two["session_id"]))
+
+            delta = raw_one.get("state", {}).get("relation_delta", {}).get("林黛玉_贾宝玉", {})
+            self.assertEqual(delta.get("trust"), 1)
+            self.assertEqual(delta.get("affection"), 1)
+            self.assertEqual(delta.get("hostility"), -1)
+            snapshot = raw_one.get("state", {}).get("character_snapshots", {}).get("贾宝玉", {})
+            self.assertEqual(snapshot.get("interaction_state"), "softening")
+            self.assertEqual(snapshot.get("last_target"), "林黛玉")
+
+            self.assertEqual(raw_two.get("state", {}).get("relation_delta", {}), {})
+            self.assertEqual(raw_two.get("state", {}).get("character_snapshots", {}), {})
+            self.assertEqual(relation_path.read_text(encoding="utf-8"), original_relation_text)
+
+    def test_build_turn_payload_includes_session_relation_delta_and_snapshots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        (
+                            f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: {name}人物\n"
+                            f"- story_role: {name}位置\n- soul_goal: {name}想护住眼前人\n"
+                            f"- speech_style: {name}自有口气\n- stress_response: {name}越急越压住\n"
+                        ).encode("utf-8")
+                    ).decode("ascii"),
+                )
+            manifest = service._require_manifest(run_id)
+            session = service.dialogue.create_session(
+                manifest,
+                mode="observe",
+                participants=["林黛玉", "贾宝玉"],
+            )
+            raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
+            raw_session["state"] = {
+                **dict(raw_session.get("state", {}) or {}),
+                "relation_matrix": {
+                    "林黛玉_贾宝玉": {"trust": 8, "affection": 8, "hostility": 1, "ambiguity": 3}
+                },
+                "relation_delta": {
+                    "林黛玉_贾宝玉": {
+                        "trust": 1,
+                        "affection": 1,
+                        "last_event": "刚刚把话说软了下来。",
+                        "evidence_lines": ["贾宝玉->林黛玉: 谢谢你愿意陪我一起。"],
+                    }
+                },
+                "character_snapshots": {
+                    "贾宝玉": {
+                        "mood": "放松",
+                        "interaction_state": "softening",
+                        "focus": "林黛玉",
+                        "last_target": "林黛玉",
+                        "last_message": "谢谢你愿意陪我一起。",
+                    }
+                },
+            }
+
+            payload = service.dialogue._build_turn_payload(
+                manifest,
+                raw_session,
+                turn_id="turn-session-delta",
+                message="你继续说。",
+            )
+
+            memory_context = payload.get("memory_context", {})
+            self.assertTrue(memory_context.get("relation_delta", {}).get("林黛玉_贾宝玉"))
+            self.assertTrue(memory_context.get("character_snapshots", {}).get("贾宝玉"))
+            relation_excerpt = str(payload.get("relation_context", {}).get("relations_excerpt", ""))
+            self.assertIn("SESSION_RELATION_STATE", relation_excerpt)
+            self.assertIn("session_delta", relation_excerpt)
+            detail_map = {item["name"]: item for item in payload.get("persona_contexts", [])}
+            self.assertEqual(detail_map["贾宝玉"]["session_snapshot"]["interaction_state"], "softening")
+
+    def test_dialogue_relation_state_llm_can_lightly_refine_session_delta(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            session = service.dialogue.create_session(
+                service._require_manifest(run_id),
+                mode="observe",
+                participants=["林黛玉", "贾宝玉"],
+            )
+            pending_payload = {
+                "session_id": session["session_id"],
+                "input": {
+                    "speaker": "林黛玉",
+                    "participants": ["林黛玉", "贾宝玉"],
+                    "active_participants": ["林黛玉", "贾宝玉"],
+                },
+            }
+            with patch.object(
+                service,
+                "_generate_dialogue_relation_state",
+                return_value={
+                    "relation_delta": {
+                        "林黛玉_贾宝玉": {
+                            "trust": 2,
+                            "affection": 1,
+                            "last_event": "这次道谢让两人之间明显更松了一步。",
+                        }
+                    },
+                    "character_snapshots": {
+                        "贾宝玉": {
+                            "mood": "放松",
+                            "interaction_state": "softening",
+                            "focus": "林黛玉",
+                            "last_target": "林黛玉",
+                        }
+                    },
+                },
+            ):
+                service._evolve_relations_from_turn(
+                    run_id,
+                    pending_payload,
+                    [{"speaker": "贾宝玉", "message": "谢谢你愿意陪我一起。"}],
+                )
+
+            raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
+            delta = raw_session.get("state", {}).get("relation_delta", {}).get("林黛玉_贾宝玉", {})
+            self.assertEqual(delta.get("trust"), 2)
+            self.assertEqual(delta.get("affection"), 1)
+            self.assertIn("明显更松", str(delta.get("last_event", "")))
+            snapshot = raw_session.get("state", {}).get("character_snapshots", {}).get("贾宝玉", {})
+            self.assertEqual(snapshot.get("interaction_state"), "softening")
+
+    def test_dialogue_event_signals_capture_scene_and_inline_action_categories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉", "薛宝钗"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉", "薛宝钗"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            session = service.dialogue.create_session(
+                service._require_manifest(run_id),
+                mode="observe",
+                participants=["林黛玉", "贾宝玉", "薛宝钗"],
+            )
+            pending_payload = {
+                "session_id": session["session_id"],
+                "input": {
+                    "speaker": "场景提示",
+                    "message": "夜里雨更大了，众人转入花厅，薛宝钗先回房。",
+                    "message_kind": "narration",
+                    "participants": ["林黛玉", "贾宝玉", "薛宝钗"],
+                    "active_participants": ["林黛玉", "贾宝玉", "薛宝钗"],
+                },
+            }
+            with patch.object(service, "_generate_dialogue_relation_state", return_value={}):
+                service._evolve_relations_from_turn(
+                    run_id,
+                    pending_payload,
+                    responses=[
+                        {"speaker": "林黛玉", "message": "（低头笑了笑）那就进屋再说。"},
+                        {"speaker": "贾宝玉", "message": "屋里一下安静下来，我陪你进去。"},
+                    ],
+                )
+
+            raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
+            event_signals = dict(raw_session.get("state", {}).get("event_signals", {}) or {})
+            recent = list(event_signals.get("recent", []) or [])
+            kinds = {str(item.get("kind", "")).strip() for item in recent}
+
+            self.assertIn("time_change", kinds)
+            self.assertIn("environment_change", kinds)
+            self.assertIn("scene_transition", kinds)
+            self.assertIn("cast_exit", kinds)
+            self.assertIn("micro_action", kinds)
+            self.assertIn("atmosphere_shift", kinds)
+
+            micro_action = next(item for item in recent if str(item.get("kind", "")).strip() == "micro_action")
+            self.assertEqual(micro_action.get("actor"), "林黛玉")
+            self.assertTrue(bool(micro_action.get("should_inline", False)))
+
     def test_build_turn_payload_prioritizes_active_personas_for_full_context(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
@@ -5128,6 +5418,48 @@ class WebAppRouteTests(unittest.TestCase):
 
 
 class DialogueTurnBehaviorTests(unittest.TestCase):
+    def test_dialogue_prompt_prefers_inline_parenthetical_actions_over_standalone_narration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    payload["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            manifest = service._require_manifest(payload["run_id"])
+            session = service.dialogue.create_session(
+                manifest,
+                mode="observe",
+                participants=["林黛玉", "贾宝玉"],
+            )
+            raw_session = service.dialogue._read_json(service.dialogue._session_file(payload["run_id"], session["session_id"]))
+            turn_payload = service.dialogue._build_turn_payload(
+                manifest,
+                raw_session,
+                turn_id="turn-inline-action",
+                message="你们继续说。",
+            )
+            llm_messages = service._build_dialogue_llm_messages(turn_payload, retry_on_empty=False)
+            system_prompt = llm_messages[0]["content"]
+
+            self.assertIn("括号动作", system_prompt)
+            self.assertIn("不要单独写成旁白或场景提示", system_prompt)
+
     def test_prepare_turn_narration_sets_scene_speaker_and_kind(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
@@ -5230,6 +5562,147 @@ class DialogueTurnBehaviorTests(unittest.TestCase):
             self.assertIn("林黛玉", active)
             self.assertIn("贾宝玉", active)
             self.assertNotIn("薛宝钗", active)
+
+    def test_ingest_turn_updates_scene_progress_and_future_active_participants(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉", "薛宝钗"],
+            )
+            for name in ("林黛玉", "贾宝玉", "薛宝钗"):
+                service.ingest_character_result(
+                    payload["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                service,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "开场。"}],
+            ), patch.object(service, "_generate_dialogue_scene_progress", return_value={}):
+                session = service.create_dialogue_session(
+                    payload["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉", "薛宝钗"],
+                )
+
+            service.prepare_dialogue_turn(
+                payload["run_id"],
+                session_id=session["session_id"],
+                message="你们先去私人影院，我晚点回家。",
+            )
+            with patch.object(
+                service,
+                "_generate_dialogue_scene_progress",
+                return_value={
+                    "present_participants": ["林黛玉", "贾宝玉"],
+                    "offstage_participants": ["薛宝钗"],
+                    "time_hint": "夜里",
+                    "location": "私人影院",
+                    "progression_note": "地点已经转到私人影院，只剩林黛玉和贾宝玉同场，薛宝钗暂时留在家中。",
+                    "should_offer_scene_shift": False,
+                    "scene_shift_reason": "",
+                },
+            ):
+                updated = service.ingest_dialogue_turn(
+                    payload["run_id"],
+                    session_id=session["session_id"],
+                    responses=[
+                        {"speaker": "林黛玉", "message": "那便只我们先过去。"},
+                        {"speaker": "贾宝玉", "message": "我陪你一起。"},
+                    ],
+                )
+
+            self.assertEqual(updated["scene_progress"]["location"], "私人影院")
+            self.assertEqual(updated["scene_progress"]["time_hint"], "夜里")
+            self.assertEqual(updated["scene_progress"]["present_participants"], ["林黛玉", "贾宝玉"])
+            self.assertEqual(updated["scene_progress"]["offstage_participants"], ["薛宝钗"])
+            self.assertIn("夜里", updated["session_memory_summary"]["scene_frame"])
+            self.assertIn("薛宝钗", updated["session_memory_summary"]["cast"])
+
+            prepared = service.prepare_dialogue_turn(
+                payload["run_id"],
+                session_id=session["session_id"],
+                message="你们继续看电影。",
+            )
+            active = prepared.get("pending_turn_summary", {}).get("active_participants", [])
+            self.assertEqual(active, ["林黛玉", "贾宝玉"])
+
+    def test_scene_progress_can_flag_natural_scene_shift_after_longer_turn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            payload = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    payload["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                service,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "开场。"}],
+            ), patch.object(service, "_generate_dialogue_scene_progress", return_value={}):
+                session = service.create_dialogue_session(
+                    payload["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉"],
+                )
+
+            service.prepare_dialogue_turn(
+                payload["run_id"],
+                session_id=session["session_id"],
+                message="这一幕差不多说开了。",
+            )
+            with patch.object(
+                service,
+                "_generate_dialogue_scene_progress",
+                return_value={
+                    "present_participants": ["林黛玉", "贾宝玉"],
+                    "offstage_participants": [],
+                    "time_hint": "夜深",
+                    "location": "花厅",
+                    "progression_note": "这一幕已经把话说透，适合顺势转入下一幕。",
+                    "should_offer_scene_shift": True,
+                    "scene_shift_reason": "情绪和信息都已经落定，适合自然切到下一幕。",
+                },
+            ):
+                updated = service.ingest_dialogue_turn(
+                    payload["run_id"],
+                    session_id=session["session_id"],
+                    responses=[
+                        {"speaker": "林黛玉", "message": "那这句话便到这里。"},
+                        {"speaker": "贾宝玉", "message": "我们也该换个地方再说。"},
+                    ],
+                )
+
+            self.assertTrue(updated["scene_progress"]["should_offer_scene_shift"])
+            self.assertIn("下一幕", updated["scene_progress"]["scene_shift_reason"])
+            self.assertIn("转场提示", updated["session_memory_summary"]["scene_frame"])
 
 
 if __name__ == "__main__":
