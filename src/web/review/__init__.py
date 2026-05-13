@@ -70,6 +70,8 @@ from .profile_repair import (
     parse_profile_metric_map,
     profile_field_is_effectively_empty,
     profile_list_value,
+    sanitize_profile_identity_fields,
+    sanitize_profile_surface_fields,
     split_profile_list_value,
 )
 from .relation_repair import collect_relation_repair_issues, looks_like_unstable_relation_scalar
@@ -109,6 +111,8 @@ __all__ = [
     "profile_list_value",
     "read_persona_review_fields",
     "resolve_persona_review_source",
+    "sanitize_profile_identity_fields",
+    "sanitize_profile_surface_fields",
     "save_persona_review_payload",
     "blank_opening_preset_fields",
     "SCENE_CARD_FIELDS",

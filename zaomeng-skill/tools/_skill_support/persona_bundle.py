@@ -135,6 +135,8 @@ SCALAR_FIELDS = {
     "source_path",
     "timeline_stage",
     "core_identity",
+    "gender",
+    "age_stage",
     "faction_position",
     "story_role",
     "stance_stability",
@@ -669,6 +671,8 @@ def render_profile_md(profile: Dict[str, Any]) -> str:
         f"- timeline_stage: {profile.get('timeline_stage', '')}\n"
         f"- role_tags: {join_items(profile.get('role_tags', []))}\n"
         f"- core_identity: {profile.get('core_identity', '')}\n"
+        f"- gender: {profile.get('gender', '')}\n"
+        f"- age_stage: {profile.get('age_stage', '')}\n"
         f"- faction_position: {profile.get('faction_position', '')}\n"
         f"- story_role: {profile.get('story_role', '')}\n"
         f"- stance_stability: {profile.get('stance_stability', '')}\n"

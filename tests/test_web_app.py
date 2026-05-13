@@ -2610,9 +2610,49 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(result["progress"]["chunking"]["distill"]["status"], "complete")
             self.assertIn("chunking", result["summary"])
             self.assertTrue(any("本次整理耗时" in str(item.get("message", "")) for item in result.get("events", [])))
-            repair_messages = fake_parts.llm.chat_completion.call_args_list[1].args[0]
+            repair_messages = next(
+                call.args[0]
+                for call in fake_parts.llm.chat_completion.call_args_list
+                if "REPAIR_TASK" in call.args[0][1]["content"]
+            )
             self.assertIn("REPAIR_TASK", repair_messages[1]["content"])
             self.assertIn("剧情碎句", repair_messages[1]["content"])
+
+    def test_automatic_pipeline_surface_field_sanitizer_drops_transient_patch_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            profile_path = Path(tmp) / "PROFILE.generated.md"
+            profile_path.write_text(
+                "# PROFILE\n- name: 甲\n- novel_id: demo\n- appearance_feature: 证据不足\n- habit_action: 证据不足\n",
+                encoding="utf-8",
+            )
+
+            fake_parts = Mock()
+            fake_parts.llm.chat_completion = Mock(
+                return_value={
+                    "content": "- appearance_feature: 只见他回头看了一眼，忽然转身就走\n- habit_action: 他说完就立刻转身离开\n"
+                }
+            )
+            config = Mock(get=Mock(side_effect=lambda key, default=None: default))
+            payload = {
+                "prompt": "system",
+                "references": {"output_schema": "", "style_differ": "", "logic_constraint": "", "validation_policy": ""},
+                "request": {"excerpt": "甲回头看了一眼。", "excerpt_stages": {"start": "", "mid": "", "end": ""}},
+                "meta": {"novel_id": "demo"},
+            }
+
+            repaired = service._maybe_repair_generated_profile(
+                parts=fake_parts,
+                config=config,
+                payload=payload,
+                character="甲",
+                peer_characters=[],
+                source_path=profile_path,
+            )
+
+            self.assertIsNotNone(repaired)
+            self.assertIn("- appearance_feature: 证据不足", repaired)
+            self.assertIn("- habit_action: 证据不足", repaired)
 
     def test_suggest_dialogue_turn_does_not_mutate_session_history(self):
         with tempfile.TemporaryDirectory() as tmp:

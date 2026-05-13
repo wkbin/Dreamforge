@@ -287,7 +287,7 @@
         <section class="review-group">
           <div class="review-group-head">
             <strong>关键字段</strong>
-            <p>先收紧最影响聊天味道的人物骨架。剩下的细字段收进二级菜单里慢慢磨。</p>
+            <p>先抓住身份、外显辨识、关系和说话味道。只要这一层站稳，聊天里的这个人就先活起来了。</p>
           </div>
           <div class="mini-grid persona-vue-grid">
             <schema-field-card
@@ -308,7 +308,7 @@
         <details class="review-advanced-shell" :open="state.advancedOpen" @toggle="state.advancedOpen = $event.target.open">
           <summary class="review-advanced-trigger">
             <span>继续细调更多字段</span>
-            <small>打开二级菜单，补全和微调全部剩余字段</small>
+            <small>这里会把容易互相重叠的细字段拆开，你可以按分工慢慢修，不必一口气全写满。</small>
           </summary>
           <section v-for="group in advancedGroups" :key="group.title" class="review-group review-advanced-panel">
             <div class="review-group-head">

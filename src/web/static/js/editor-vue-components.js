@@ -39,6 +39,7 @@
             {{ isAutofilling ? '生成中...' : 'AI补全' }}
           </button>
         </div>
+        <small v-if="item.hint">{{ item.hint }}</small>
         <input
           v-if="item.control === 'input'"
           :value="modelValue || ''"

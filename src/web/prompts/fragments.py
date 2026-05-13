@@ -79,6 +79,15 @@ def build_profile_group_task_block(
         "### TARGET_FIELDS",
         *[f"- {field}" for field in fields],
     ]
+    if any(field in {"gender", "age_stage"} for field in fields):
+        instruction_lines.extend(
+            [
+                "",
+                "### FIELD_EVIDENCE_NOTE",
+                "- gender / age_stage 只能依据正文中的稳定称谓、亲属称呼、年龄序列、身份辈分或明确描写来写。",
+                "- 不能因为角色气质、名字印象或影视常识去脑补；拿不准就直接写“证据不足”。",
+            ]
+        )
     if repair_targets:
         instruction_lines.extend(
             [

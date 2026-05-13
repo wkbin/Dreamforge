@@ -142,6 +142,31 @@ class WebFrontendBridgeSyncTests(unittest.TestCase):
         self.assertIn(".chat-setup-curation-card {", content)
         self.assertIn(".chat-setup-option-card.active {", content)
 
+    def test_editor_schema_exposes_embodiment_fields_in_persona_core(self):
+        content = read_js("editor-schemas.js")
+        self.assertIn('{ field: "gender", label: "性别"', content)
+        self.assertIn('{ field: "age_stage", label: "年龄阶段"', content)
+        self.assertIn('{ field: "appearance_feature", label: "外貌辨识"', content)
+        self.assertIn('{ field: "habit_action", label: "习惯动作"', content)
+        self.assertIn('{ field: "preference_like", label: "偏好喜好"', content)
+        self.assertIn('{ field: "dislike_hate", label: "明显厌恶"', content)
+        self.assertIn('hint: "只写正文能稳定判断的性别或呈现。"', content)
+        self.assertIn('hint: "优先写年龄感和阶段，不强求具体岁数。"', content)
+        self.assertIn('hint: "写客观身份和社会定位，不写剧情职能。"', content)
+        self.assertIn('hint: "写他主观上怎么定义自己、怎么站位。"', content)
+
+    def test_editor_schema_exposes_self_card_entry_hints(self):
+        content = read_js("editor-schemas.js")
+        self.assertIn('hint: "别人会怎么称呼你，尽量简短好叫。"', content)
+        self.assertIn('hint: "写你在这场故事里以什么身份走进来。"', content)
+
+    def test_editor_schema_exposes_overlap_hints_for_redundant_persona_fields(self):
+        content = read_js("editor-schemas.js")
+        self.assertIn('hint: "写他在剧情里承担什么职能，不是身份头衔。"', content)
+        self.assertIn('hint: "只写拉扯和矛盾，不写自评和隐藏面。"', content)
+        self.assertIn('hint: "只写他怎么看自己，可与他人观感形成反差。"', content)
+        self.assertIn('hint: "写不对外展示的一面，不要重复内在冲突。"', content)
+
     def test_core_exposes_shared_bridge_sync_helper(self):
         content = read_js("core.js")
         self.assertIn("function syncLegacyUiState(source = \"legacy\", overrides = {}) {", content)

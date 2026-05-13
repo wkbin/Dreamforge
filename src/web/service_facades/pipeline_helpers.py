@@ -40,6 +40,8 @@ from src.web.review import (
     maybe_repair_generated_profile,
     maybe_repair_generated_relations,
     profile_field_is_effectively_empty,
+    sanitize_profile_identity_fields,
+    sanitize_profile_surface_fields,
 )
 
 
@@ -395,6 +397,8 @@ class PipelineHelpersMixin:
             build_distill_completion_messages=self._build_distill_completion_messages,
             sanitize_markdown_output=self._sanitize_markdown_output,
             merge_profile_patch=self._merge_profile_patch,
+            sanitize_profile_identity_fields=sanitize_profile_identity_fields,
+            sanitize_profile_surface_fields=sanitize_profile_surface_fields,
             apply_profile_missing_fallbacks=self._apply_profile_missing_fallbacks,
             render_profile_md=render_profile_md,
             llm_cap=self._llm_cap,

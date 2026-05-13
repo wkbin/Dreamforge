@@ -1368,6 +1368,7 @@ class DialogueService:
             "display_name": str(preview.get("display_name", "")).strip() or str(normalized_profile.get("display_name", "")).strip(),
             "core_identity": str(preview.get("core_identity", "")).strip() or str(normalized_profile.get("core_identity", "")).strip(),
             "speech_style": str(preview.get("speech_style", "")).strip() or str(normalized_profile.get("speech_style", "")).strip(),
+            "appearance_feature": str(preview.get("appearance_feature", "")).strip() or str(normalized_profile.get("appearance_feature", "")).strip(),
         }
 
     @staticmethod
@@ -1375,6 +1376,10 @@ class DialogueService:
         base = {
             "core_identity": normalized_profile.get("core_identity", ""),
             "story_role": normalized_profile.get("story_role", ""),
+            "gender": normalized_profile.get("gender", ""),
+            "age_stage": normalized_profile.get("age_stage", ""),
+            "appearance_feature": normalized_profile.get("appearance_feature", ""),
+            "habit_action": normalized_profile.get("habit_action", ""),
             "speech_style": normalized_profile.get("speech_style", ""),
             "temperament_type": normalized_profile.get("temperament_type", ""),
             "stress_response": normalized_profile.get("stress_response", ""),
@@ -1384,7 +1389,10 @@ class DialogueService:
             base.update(
                 {
                     "soul_goal": normalized_profile.get("soul_goal", ""),
+                    "worldview": normalized_profile.get("worldview", ""),
                     "social_mode": normalized_profile.get("social_mode", ""),
+                    "preference_like": normalized_profile.get("preference_like", []),
+                    "dislike_hate": normalized_profile.get("dislike_hate", []),
                     "reward_logic": normalized_profile.get("reward_logic", ""),
                 }
             )
