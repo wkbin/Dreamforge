@@ -918,7 +918,15 @@ function buildCharacterOverviewReviewCopy(reviewEvent) {
 }
 
 function openWorkTimeline() {
-  el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  const vueTimelineRoot = el("run-timeline-vue-root");
+  const legacyEvents = el("events");
+  const timelineSection = document.querySelector(".detail-section-timeline");
+  const target =
+    (vueTimelineRoot && !vueTimelineRoot.classList.contains("hidden") && vueTimelineRoot) ||
+    (legacyEvents && !legacyEvents.classList.contains("hidden") && legacyEvents) ||
+    timelineSection ||
+    legacyEvents;
+  target?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function buildCharacterOverviewRedistillSignal(character) {

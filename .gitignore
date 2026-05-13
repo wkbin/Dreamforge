@@ -26,3 +26,4 @@ config.yaml
 data/
 logs/
 clawhub-zaomeng-skill/runtime/data/
+.tools/

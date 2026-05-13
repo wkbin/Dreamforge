@@ -52,7 +52,15 @@
   }
 
   function openTimelineBridge() {
-    el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const vueTimelineRoot = el("run-timeline-vue-root");
+    const legacyEvents = el("events");
+    const timelineSection = document.querySelector(".detail-section-timeline");
+    const target =
+      (timelineSection && timelineSection) ||
+      (vueTimelineRoot && !vueTimelineRoot.classList.contains("hidden") && vueTimelineRoot) ||
+      (legacyEvents && !legacyEvents.classList.contains("hidden") && legacyEvents) ||
+      legacyEvents;
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function publishRunOverviewUi(source, overrides = {}) {
@@ -110,7 +118,7 @@
       return;
     }
     if (action === "focus_timeline") {
-      el("events")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      openTimelineBridge();
       return;
     }
     if (action === "open_redistill") {
