@@ -16,6 +16,10 @@ PERSONA_REVIEW_FIELD_LABELS = {
     "story_role": "故事位置",
     "identity_anchor": "身份锚点",
     "temperament_type": "气质底色",
+    "gender": "性别",
+    "age_stage": "年龄阶段",
+    "appearance_feature": "外貌辨识",
+    "habit_action": "习惯动作",
     "soul_goal": "灵魂目标",
     "hidden_desire": "隐秘渴望",
     "inner_conflict": "内在冲突",
@@ -37,6 +41,8 @@ PERSONA_REVIEW_FIELD_LABELS = {
     "restraint_threshold": "失控阈值",
     "core_traits": "核心特质",
     "key_bonds": "重要牵系",
+    "preference_like": "偏好喜好",
+    "dislike_hate": "明显厌恶",
     "forbidden_behaviors": "不会做的事",
     "stress_response": "应激反应",
     "emotion_model": "情绪底模",
@@ -50,21 +56,30 @@ PERSONA_REVIEW_FIELDS = tuple(PERSONA_REVIEW_FIELD_LABELS.keys())
 
 PERSONA_REVIEW_KEY_FIELDS = (
     "core_identity",
-    "story_role",
     "identity_anchor",
     "temperament_type",
+    "gender",
+    "age_stage",
+    "appearance_feature",
+    "habit_action",
     "soul_goal",
     "core_traits",
     "key_bonds",
     "speech_style",
     "worldview",
-    "belief_anchor",
-    "moral_bottom_line",
-    "restraint_threshold",
-    "stress_response",
 )
 
 PERSONA_REVIEW_ADVANCED_GROUPS = (
+    (
+        "定位与外显",
+        (
+            "story_role",
+            "social_mode",
+            "others_impression",
+            "preference_like",
+            "dislike_hate",
+        ),
+    ),
     (
         "内核细调",
         (
@@ -72,11 +87,11 @@ PERSONA_REVIEW_ADVANCED_GROUPS = (
             "inner_conflict",
             "self_cognition",
             "private_self",
-            "social_mode",
             "thinking_style",
             "decision_rules",
             "reward_logic",
-            "others_impression",
+            "belief_anchor",
+            "moral_bottom_line",
         ),
     ),
     (
@@ -93,6 +108,8 @@ PERSONA_REVIEW_ADVANCED_GROUPS = (
         "情绪细调",
         (
             "forbidden_behaviors",
+            "restraint_threshold",
+            "stress_response",
             "emotion_model",
             "anger_style",
             "joy_style",
@@ -106,6 +123,10 @@ PERSONA_AUTOFILLABLE_FIELDS = {
     "story_role",
     "identity_anchor",
     "temperament_type",
+    "gender",
+    "age_stage",
+    "appearance_feature",
+    "habit_action",
     "soul_goal",
     "hidden_desire",
     "inner_conflict",
@@ -119,6 +140,8 @@ PERSONA_AUTOFILLABLE_FIELDS = {
     "moral_bottom_line",
     "core_traits",
     "key_bonds",
+    "preference_like",
+    "dislike_hate",
     "others_impression",
 }
 
@@ -138,7 +161,7 @@ SELF_CARD_FIELD_LABELS = {
     **PERSONA_REVIEW_FIELD_LABELS,
 }
 
-_LIST_STYLE_FIELDS = {"core_traits", "key_bonds"}
+_LIST_STYLE_FIELDS = {"core_traits", "key_bonds", "preference_like", "dislike_hate"}
 _SPEECH_LIST_FIELDS = {
     "signature_phrases",
     "sentence_openers",
@@ -152,6 +175,18 @@ _PROFILE_LIST_FIELDS = {
     "forbidden_behaviors",
 }
 _EMOTION_FIELDS = {"anger_style", "joy_style", "grievance_style"}
+
+
+def _field_completion_extra_guidance(field: str) -> list[str]:
+    mapping = {
+        "core_identity": ["只写客观身份与社会定位，不要混入剧情职能或自我宣言。"],
+        "story_role": ["只写角色在剧情里承担的职能，不要重复核心身份。"],
+        "identity_anchor": ["只写角色主观上的自我定位、立场抓手或行动凭据。"],
+        "inner_conflict": ["只写角色内部拉扯，不要把自我评价或隐藏面混进来。"],
+        "self_cognition": ["只写角色如何看待自己，不要改写成外界评价。"],
+        "private_self": ["只写不对外展示的一面，不要重复内在冲突或自我认知。"],
+    }
+    return list(mapping.get(field, []))
 
 
 def resolve_persona_review_source(persona_dir: str | Path) -> tuple[Path, Path, Path]:
@@ -214,6 +249,7 @@ def build_persona_field_completion_messages(
     profile_summary = _render_profile_summary(current_fields, exclude_field=field)
     reference_text = _render_reference_summary(references or [])
     list_hint = "如果该字段适合多项值，请用全角分号“；”分隔。" if field in _LIST_STYLE_FIELDS else "只输出一个可直接落表单的自然中文结论。"
+    extra_guidance = _field_completion_extra_guidance(field)
     if use_model_knowledge:
         user_prompt = "\n".join(
             [
@@ -227,6 +263,7 @@ def build_persona_field_completion_messages(
                 "请先只依据你对该作品和角色的已有知识来判断能否补全这个字段。",
                 "如果这是常见作品、经典角色、或你对该角色有稳定把握，可以直接给出适合写入人物校对表单的内容。",
                 "如果你拿不准、记忆模糊、或只能靠猜测，请明确拒绝生成。",
+                *extra_guidance,
                 list_hint,
                 "value 字段只能放最终要写入表单的内容，不能包含“我们要求”“需要从”“已知有”“可以根据”等分析过程。",
                 "不要编造，不要输出剧情摘要，不要伪装成查到网页资料。",
@@ -254,6 +291,7 @@ def build_persona_field_completion_messages(
                 "请只根据联网摘录判断能否补全这个字段。",
                 "如果资料足够，返回一段适合直接写入人物校对表单的内容。",
                 "如果资料不足、互相矛盾、或只能靠脑补，请明确拒绝生成。",
+                *extra_guidance,
                 list_hint,
                 "value 字段只能放最终要写入表单的内容，不能包含“我们要求”“需要从”“已知有”“可以根据”等分析过程。",
                 "不要编造，不要把剧情长摘要塞进字段。",
@@ -283,6 +321,7 @@ def build_persona_field_retry_messages(
     label = PERSONA_REVIEW_FIELD_LABELS.get(field, field)
     profile_summary = _render_profile_summary(current_fields, exclude_field=field)
     reference_text = _render_reference_summary(references or [])
+    extra_guidance = _field_completion_extra_guidance(field)
     if use_model_knowledge:
         user_prompt = "\n".join(
             [
@@ -295,6 +334,7 @@ def build_persona_field_retry_messages(
                 "",
                 "上一轮输出格式不对。",
                 "现在不要 JSON，不要代码块，不要解释。",
+                *extra_guidance,
                 "如果你对该角色有稳定把握，只返回一句可直接写入表单的中文内容。",
                 "如果你拿不准，就只返回：证据不足",
             ]
@@ -314,6 +354,7 @@ def build_persona_field_retry_messages(
                 "",
                 "上一轮输出格式不对。",
                 "现在不要 JSON，不要代码块，不要解释。",
+                *extra_guidance,
                 "如果这些摘录足够支持结论，只返回一句可直接写入表单的中文内容。",
                 "如果仍然不足，就只返回：证据不足",
             ]
@@ -524,7 +565,7 @@ def parse_random_self_card_response(text: str) -> dict[str, str]:
         raise ValueError("模型返回格式不完整。")
     normalized = normalize_self_card_fields(payload)
     validate_self_card_fields(normalized)
-    for field in PERSONA_REVIEW_FIELDS:
+    for field in SELF_CARD_REQUIRED_FIELDS:
         if not normalized[field]:
             raise ValueError(f"模型没有填完整字段：{SELF_CARD_FIELD_LABELS.get(field, field)}")
     return normalized

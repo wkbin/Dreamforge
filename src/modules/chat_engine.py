@@ -104,6 +104,8 @@ class ChatEngine:
         "identity_anchor",
         "soul_goal",
         "trauma_scar",
+        "gender",
+        "age_stage",
         "worldview",
         "thinking_style",
         "temperament_type",

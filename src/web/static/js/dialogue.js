@@ -4,6 +4,7 @@ if (existingDialogueModule?.initialized) {
   return;
 }
 const UI_BRIDGE_TOOLS = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
+let lastAutoSceneRecommendationKey = "";
 
 function scrollTranscriptToBottom() {
   const root = el("dialogue-transcript");
@@ -534,6 +535,32 @@ function latestSessionSnippetFromTranscript(items) {
   return "";
 }
 
+async function maybeAutoRecommendNextScene(session) {
+  const progress = session?.scene_progress || {};
+  const sessionId = String(session?.session_id || "").trim();
+  if (!sessionId || !progress?.should_offer_scene_shift) return;
+  const button = el("dialogue-live-scene-recommend");
+  const select = el("dialogue-live-scene-card");
+  if (!button || button.disabled) return;
+  if ((select?.options?.length || 0) < 3) return;
+  const marker = [
+    sessionId,
+    String(progress.updated_at || "").trim(),
+    String(progress.time_hint || "").trim(),
+    String(progress.location || "").trim(),
+    String(progress.scene_shift_reason || "").trim(),
+  ].join("::");
+  if (!marker || marker === lastAutoSceneRecommendationKey) return;
+  lastAutoSceneRecommendationKey = marker;
+  try {
+    if (typeof window.handleRecommendDialogueSceneCard === "function") {
+      await window.handleRecommendDialogueSceneCard();
+    }
+  } catch (error) {
+    lastAutoSceneRecommendationKey = "";
+  }
+}
+
 async function renderDialogueSession(session) {
   if (typeof UI_BRIDGE_TOOLS?.syncLegacyUiState === "function") {
     UI_BRIDGE_TOOLS.syncLegacyUiState("dialogue-session-local", {
@@ -573,6 +600,7 @@ async function renderDialogueSession(session) {
     });
   }
   scrollTranscriptToBottom();
+  await maybeAutoRecommendNextScene(session);
   el("dialogue-message")?.focus();
 }
 

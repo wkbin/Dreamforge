@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from src.web.review.persona_completion import PERSONA_REVIEW_FIELD_LABELS, PERSONA_REVIEW_KEY_FIELDS
+from src.web.review.persona_completion import PERSONA_REVIEW_FIELD_LABELS
 from src.web.review.persona import PERSONA_REVIEW_FIELDS
 
 
@@ -18,7 +18,22 @@ SELF_CARD_EXTRA_FIELDS = (
 )
 
 SELF_CARD_FIELDS = (*SELF_CARD_EXTRA_FIELDS, *PERSONA_REVIEW_FIELDS)
-SELF_CARD_REQUIRED_FIELDS = ("display_name", *PERSONA_REVIEW_KEY_FIELDS)
+SELF_CARD_REQUIRED_FIELDS = (
+    "display_name",
+    "core_identity",
+    "story_role",
+    "identity_anchor",
+    "temperament_type",
+    "soul_goal",
+    "core_traits",
+    "key_bonds",
+    "speech_style",
+    "worldview",
+    "belief_anchor",
+    "moral_bottom_line",
+    "restraint_threshold",
+    "stress_response",
+)
 SELF_CARD_META_FILE = "card.json"
 
 SELF_CARD_FIELD_LABELS = {
@@ -227,7 +242,7 @@ def parse_random_self_card_response(text: str) -> dict[str, str]:
         raise ValueError("模型返回格式不完整。")
     normalized = normalize_self_card_fields(payload)
     validate_self_card_fields(normalized)
-    for field in PERSONA_REVIEW_FIELDS:
+    for field in SELF_CARD_REQUIRED_FIELDS:
         if not normalized[field]:
             raise ValueError(f"模型没有填完整字段：{SELF_CARD_FIELD_LABELS.get(field, field)}")
     return normalized

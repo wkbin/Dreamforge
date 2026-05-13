@@ -17,6 +17,24 @@ _SPEECH_LIST_FIELDS = {
 }
 _EMOTION_FIELDS = {"anger_style", "joy_style", "grievance_style"}
 _DIALOGUE_EVIDENCE_LIMIT = 12
+_CANONICAL_GENDER_VALUES = (
+    ("女性", ("女性", "女子", "女孩", "少女", "女郎", "姑娘", "妇人", "夫人", "娘子")),
+    ("男性", ("男性", "男子", "男孩", "少年", "郎君", "公子", "少爷", "老爷")),
+)
+_CANONICAL_AGE_STAGE_VALUES = (
+    ("孩童", ("孩童", "幼童", "小童", "稚子", "童子", "儿童")),
+    ("少年", ("少年", "少男")),
+    ("少女", ("少女",)),
+    ("及笄前后", ("及笄",)),
+    ("豆蔻前后", ("豆蔻",)),
+    ("弱冠前后", ("弱冠",)),
+    ("青年", ("青年", "年轻", "年少", "年纪尚轻")),
+    ("中年", ("中年",)),
+    ("长者", ("长者", "老者", "年长", "暮年", "老年")),
+)
+_PROFILE_META_INFERENCE_TOKENS = ("应该", "大概", "像是", "推测", "推断", "从称呼看", "看起来像", "更像是")
+_TRANSIENT_APPEARANCE_TOKENS = ("忽然", "突然", "只见", "转过", "回头", "看了", "看向", "走了出来", "冲过来")
+_TRANSIENT_HABIT_TOKENS = ("忽然", "突然", "立刻", "连忙", "转身就", "说完就", "随即", "只见", "便", "于是")
 
 
 def collect_profile_repair_targets(
@@ -160,6 +178,32 @@ def apply_profile_missing_fallbacks(
         elif field in _EMOTION_FIELDS:
             profile.setdefault("emotion_profile", {})
             profile["emotion_profile"][field] = "证据不足"
+
+
+def sanitize_profile_identity_fields(profile: dict[str, Any]) -> None:
+    gender = _sanitize_gender_value(profile.get("gender", ""))
+    age_stage = _sanitize_age_stage_value(profile.get("age_stage", ""))
+    if gender:
+        profile["gender"] = gender
+    elif "gender" in profile and str(profile.get("gender", "")).strip():
+        profile["gender"] = "证据不足"
+    if age_stage:
+        profile["age_stage"] = age_stage
+    elif "age_stage" in profile and str(profile.get("age_stage", "")).strip():
+        profile["age_stage"] = "证据不足"
+
+
+def sanitize_profile_surface_fields(profile: dict[str, Any]) -> None:
+    appearance_feature = _sanitize_appearance_feature_value(profile.get("appearance_feature", ""))
+    habit_action = _sanitize_habit_action_value(profile.get("habit_action", ""))
+    if appearance_feature:
+        profile["appearance_feature"] = appearance_feature
+    elif "appearance_feature" in profile and str(profile.get("appearance_feature", "")).strip():
+        profile["appearance_feature"] = "证据不足"
+    if habit_action:
+        profile["habit_action"] = habit_action
+    elif "habit_action" in profile and str(profile.get("habit_action", "")).strip():
+        profile["habit_action"] = "证据不足"
 
 
 def split_profile_list_value(value: str) -> list[str]:
@@ -306,3 +350,62 @@ def looks_like_unstable_profile_scalar(value: str) -> bool:
             text,
         )
     )
+
+
+def _sanitize_gender_value(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text or text == "证据不足":
+        return text
+    if looks_like_unstable_profile_scalar(text) or len(text) > 8:
+        return ""
+    normalized = text.replace(" ", "")
+    if normalized in {"男", "男性"}:
+        return "男性"
+    if normalized in {"女", "女性"}:
+        return "女性"
+    matches = [label for label, tokens in _CANONICAL_GENDER_VALUES if any(token in normalized for token in tokens)]
+    return matches[0] if len(set(matches)) == 1 else ""
+
+
+def _sanitize_age_stage_value(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text or text == "证据不足":
+        return text
+    if looks_like_unstable_profile_scalar(text) or len(text) > 16:
+        return ""
+    normalized = text.replace(" ", "")
+    if re.fullmatch(r"(少年|少女|青年|中年|长者|孩童|及笄前后|豆蔻前后|弱冠前后)", normalized):
+        return normalized
+    matches = [label for label, tokens in _CANONICAL_AGE_STAGE_VALUES if any(token in normalized for token in tokens)]
+    return matches[0] if len(set(matches)) == 1 else ""
+
+
+def _sanitize_appearance_feature_value(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text or text == "证据不足":
+        return text
+    normalized = text.replace(" ", "")
+    if (
+        looks_like_unstable_profile_scalar(text)
+        or len(text) > 32
+        or any(token in text for token in _PROFILE_META_INFERENCE_TOKENS)
+        or any(token in text for token in _TRANSIENT_APPEARANCE_TOKENS)
+    ):
+        return ""
+    return text
+
+
+def _sanitize_habit_action_value(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text or text == "证据不足":
+        return text
+    if (
+        looks_like_unstable_profile_scalar(text)
+        or len(text) > 40
+        or any(token in text for token in _PROFILE_META_INFERENCE_TOKENS)
+        or any(token in text for token in _TRANSIENT_HABIT_TOKENS)
+    ):
+        return ""
+    if not any(token in text for token in ("常", "总", "会", "习惯", "每逢", "动辄", "先", "下意识")):
+        return ""
+    return text

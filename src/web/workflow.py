@@ -74,10 +74,16 @@ class WebRunService(
         "cadence",
     )
     PROFILE_COMPLETION_FIELDS = (
+        "gender",
+        "age_stage",
+        "appearance_feature",
+        "habit_action",
         "soul_goal",
         "hidden_desire",
         "core_traits",
         "temperament_type",
+        "preference_like",
+        "dislike_hate",
         "values",
         "worldview",
         "belief_anchor",
@@ -107,6 +113,17 @@ class WebRunService(
         "forbidden_fillers",
     )
     PROFILE_COMPLETION_GROUPS = (
+        (
+            "Embodiment",
+            (
+                "gender",
+                "age_stage",
+                "appearance_feature",
+                "habit_action",
+                "preference_like",
+                "dislike_hate",
+            ),
+        ),
         (
             "Inner Core",
             (

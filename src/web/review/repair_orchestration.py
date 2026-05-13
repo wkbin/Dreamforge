@@ -67,6 +67,8 @@ def maybe_repair_generated_profile(
     build_distill_completion_messages: Callable[..., list[dict[str, str]]],
     sanitize_markdown_output: Callable[[str], str],
     merge_profile_patch: Callable[[dict[str, Any], str], None],
+    sanitize_profile_identity_fields: Callable[[dict[str, Any]], None],
+    sanitize_profile_surface_fields: Callable[[dict[str, Any]], None],
     apply_profile_missing_fallbacks: Callable[[dict[str, Any]], None],
     render_profile_md: Callable[[dict[str, Any]], str],
     llm_cap: Callable[[Config, str, int], int],
@@ -119,8 +121,12 @@ def maybe_repair_generated_profile(
             if not patch_text:
                 continue
             merge_profile_patch(profile, patch_text)
+            sanitize_profile_identity_fields(profile)
+            sanitize_profile_surface_fields(profile)
             updated = True
 
+    sanitize_profile_identity_fields(profile)
+    sanitize_profile_surface_fields(profile)
     apply_profile_missing_fallbacks(profile)
     rendered = render_profile_md(profile).strip()
     return (rendered + "\n") if updated and rendered else (rendered if rendered else None)

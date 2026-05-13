@@ -258,7 +258,7 @@
         <section class="review-group">
           <div class="review-group-head">
             <strong>关键字段</strong>
-            <p>这部分最直接影响你入场后的说话方式和人物存在感。</p>
+            <p>先把你这个人立住：别人眼里你是谁，你怎么说话，你看起来像什么样，会被什么关系牵动。</p>
           </div>
           <schema-field-card
             v-for="item in keyFields"

@@ -313,6 +313,7 @@ def _compact_persona_context(item: dict[str, Any]) -> dict[str, Any]:
             "display_name": str(preview.get("display_name", "")).strip(),
             "core_identity": str(preview.get("core_identity", "")).strip(),
             "speech_style": str(preview.get("speech_style", "")).strip(),
+            "appearance_feature": _trim_text(str(preview.get("appearance_feature", "")).strip(), 80),
         }.items()
         if _has_meaningful_value(value)
     }
@@ -321,10 +322,16 @@ def _compact_persona_context(item: dict[str, Any]) -> dict[str, Any]:
         for key, value in {
             "core_identity": str(profile.get("core_identity", "")).strip(),
             "story_role": str(profile.get("story_role", "")).strip(),
+            "gender": str(profile.get("gender", "")).strip(),
+            "age_stage": str(profile.get("age_stage", "")).strip(),
+            "appearance_feature": _trim_text(str(profile.get("appearance_feature", "")).strip(), 100),
+            "habit_action": _trim_text(str(profile.get("habit_action", "")).strip(), 80),
             "speech_style": str(profile.get("speech_style", "")).strip(),
             "temperament_type": str(profile.get("temperament_type", "")).strip(),
             "stress_response": str(profile.get("stress_response", "")).strip(),
             "key_bonds": _normalize_short_list(profile.get("key_bonds")),
+            "preference_like": _normalize_short_list(profile.get("preference_like")),
+            "dislike_hate": _normalize_short_list(profile.get("dislike_hate")),
         }.items()
         if _has_meaningful_value(value)
     }
@@ -345,12 +352,18 @@ def _compact_user_persona(persona: dict[str, Any]) -> dict[str, Any]:
             "interaction_style": str(profile.get("interaction_style", "")).strip(),
             "core_identity": str(profile.get("core_identity", "")).strip(),
             "story_role": str(profile.get("story_role", "")).strip(),
+            "gender": str(profile.get("gender", "")).strip(),
+            "age_stage": str(profile.get("age_stage", "")).strip(),
+            "appearance_feature": _trim_text(str(profile.get("appearance_feature", "")).strip(), 100),
+            "habit_action": _trim_text(str(profile.get("habit_action", "")).strip(), 80),
             "soul_goal": str(profile.get("soul_goal", "")).strip(),
             "speech_style": str(profile.get("speech_style", "")).strip(),
             "worldview": _trim_text(str(profile.get("worldview", "")).strip(), 120),
             "belief_anchor": _trim_text(str(profile.get("belief_anchor", "")).strip(), 120),
             "stress_response": _trim_text(str(profile.get("stress_response", "")).strip(), 120),
             "key_bonds": _normalize_short_list(profile.get("key_bonds")),
+            "preference_like": _normalize_short_list(profile.get("preference_like")),
+            "dislike_hate": _normalize_short_list(profile.get("dislike_hate")),
             "preferred_moves": _normalize_short_list(profile.get("preferred_moves")),
             "goal": str(profile.get("goal", "")).strip(),
         }.items()

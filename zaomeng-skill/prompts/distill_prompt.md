@@ -26,7 +26,7 @@
 2. 世界观绑定：`world_rule_fit`、`rule_view`、`plot_restriction`
 3. 根源底层：`background_imprint`、`life_experience`、`trauma_scar`、`taboo_topics`、`forbidden_behaviors`
 4. 核心精神内核：`soul_goal`、`hidden_desire`、`core_traits`、`temperament_type`、`values`、`worldview`、`belief_anchor`、`moral_bottom_line`、`restraint_threshold`
-5. 外在具象人设：`appearance_feature`、`habit_action`、`preference_like`、`dislike_hate`
+5. 外在具象人设：`gender`、`age_stage`、`appearance_feature`、`habit_action`、`preference_like`、`dislike_hate`
 6. 利益与资源逻辑：`interest_claim`、`resource_dependence`、`trade_principle`
 7. 价值与内在矛盾：`inner_conflict`、`self_cognition`、`private_self`、`disguise_switch`
 8. 思维与决策：`thinking_style`、`cognitive_limits`、`decision_rules`、`action_style`、`reward_logic`
@@ -46,15 +46,16 @@
 4. 长期稳定性格高于一时冲动行为；核心底色高于阶段性反常；童年与成长烙印高于临时环境刺激。
 5. 若人物前后变化明显，必须配合 `timeline_stage`、`arc_*` 或 `contradiction_note` 区分，不得把后期状态强压到前期。
 6. `core_traits`、`typical_lines`、`decision_rules`、`strengths`、`weaknesses`、`fear_triggers` 等列表必须去重，避免同义反复。
-7. `appearance_feature` 只写原文稳定可见外在标识，不补影视化细节；`habit_action` 只写可重复观察到的小动作，不写一次性动作。
-8. `interest_claim`、`resource_dependence`、`trade_principle` 必须具体到该角色真正争夺、依赖、交换什么，禁止泛化成“想变强”“重利益”。
-9. `inner_conflict`、`self_cognition`、`private_self` 要分工明确：前者写冲突，中者写自评，后者写隐藏面。
-10. `decision_rules` 只写“为什么选”；`action_style` 只写“怎么做”。
-11. `sentence_openers`、`connective_tokens`、`sentence_endings`、`forbidden_fillers` 是可选字段；没有稳定语言证据时留空，不要为了凑满而硬填。
-12. `ooc_redline` 只写绝对不能虚构给该角色的行为边界，优先写背叛、自毁、失格、明显违背底色的行为。
-13. 对反派、灰色人物、失败者一律客观记录，不洗白、不丑化、不做审判式总结。
-14. 如果输入中包含用户纠错或长期修正记录，应视为高优先级约束，但不得覆盖原文中明确相反的硬证据。
-15. 若 `rules/character_hints/<novel_id>.md` 存在，可用于收紧表达边界、避免同质化，但不能覆盖与正文相反的证据。
+7. `gender`、`age_stage` 只能根据正文稳定证据来写，例如称谓、辈分、年龄序列、亲属关系、明确外貌年龄描写；拿不准就写 `证据不足`。
+8. `appearance_feature` 只写原文稳定可见外在标识，不补影视化细节；`habit_action` 只写可重复观察到的小动作，不写一次性动作。
+9. `interest_claim`、`resource_dependence`、`trade_principle` 必须具体到该角色真正争夺、依赖、交换什么，禁止泛化成“想变强”“重利益”。
+10. `inner_conflict`、`self_cognition`、`private_self` 要分工明确：前者写冲突，中者写自评，后者写隐藏面。
+11. `decision_rules` 只写“为什么选”；`action_style` 只写“怎么做”。
+12. `sentence_openers`、`connective_tokens`、`sentence_endings`、`forbidden_fillers` 是可选字段；没有稳定语言证据时留空，不要为了凑满而硬填。
+13. `ooc_redline` 只写绝对不能虚构给该角色的行为边界，优先写背叛、自毁、失格、明显违背底色的行为。
+14. 对反派、灰色人物、失败者一律客观记录，不洗白、不丑化、不做审判式总结。
+15. 如果输入中包含用户纠错或长期修正记录，应视为高优先级约束，但不得覆盖原文中明确相反的硬证据。
+16. 若 `rules/character_hints/<novel_id>.md` 存在，可用于收紧表达边界、避免同质化，但不能覆盖与正文相反的证据。
 
 ## 增量蒸馏规则
 
