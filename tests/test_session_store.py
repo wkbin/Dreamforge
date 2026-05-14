@@ -97,6 +97,37 @@ class SessionStoreTests(unittest.TestCase):
             self.assertTrue(hits)
             self.assertIn("黛玉", hits[0]["text"])
 
+    def test_session_store_compression_prefers_salient_conflict_and_action_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = Config()
+            config.update({"paths": {"sessions": str(root / "sessions")}})
+            store = MarkdownSessionStore(PathProvider(config))
+            session = {
+                "id": "salient123",
+                "novel_id": "demo",
+                "mode": "observe",
+                "history": [
+                    {"speaker": "林黛玉", "message": "这只是平常一句闲话。", "ts": 1},
+                    {"speaker": "贾宝玉", "message": "我明天会亲自去把这件事说清。", "ts": 2},
+                    {"speaker": "林黛玉", "message": "你不要再拿这种话来搪塞我。", "ts": 3},
+                    {"speaker": "旁白", "message": "（门忽然被推开，屋里一下静了。）", "ts": 4},
+                ]
+                + [
+                    {"speaker": "袭人", "message": f"普通补充句子{i}", "ts": 10 + i}
+                    for i in range(30)
+                ],
+                "state": {"memory": {"summary": {}}},
+            }
+
+            updated = store.compress_context(session, max_recent_turns=8)
+            summary = updated["state"]["memory"]["summary"]
+
+            self.assertIn("明天会亲自去把这件事说清", summary.get("summary", ""))
+            self.assertTrue(any("不要再拿这种话来搪塞我" in item for item in summary.get("key_points", [])))
+            self.assertIn("未完事项", summary.get("summary", ""))
+            self.assertIn("冲突张力", summary.get("summary", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

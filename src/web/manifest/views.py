@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Callable
+
+from .compat import coerce_manifest_path, relative_to_run_dir
 
 
 def serialize_manifest(payload: dict[str, Any], *, run_id: str, file_urls: dict[str, str]) -> dict[str, Any]:
@@ -79,7 +80,7 @@ def build_file_urls(
     payloads = manifest.get("artifacts", {}).get("payloads", {})
     if isinstance(payloads, dict):
         for key, value in payloads.items():
-            path = _existing_manifest_path(value)
+            path = coerce_manifest_path(value)
             if path is None:
                 continue
             relative = relative_to_run_dir(path, run_dir)
@@ -89,7 +90,7 @@ def build_file_urls(
     character_items = manifest.get("artifact_index", {}).get("characters", [])
     if isinstance(character_items, list):
         for item in character_items:
-            profile = _existing_manifest_path(item.get("profile_file", ""))
+            profile = coerce_manifest_path(item.get("profile_file", ""))
             if profile is None:
                 continue
             relative = relative_to_run_dir(profile, run_dir)
@@ -99,7 +100,7 @@ def build_file_urls(
     relation_graph = manifest.get("artifact_index", {}).get("relation_graph", {})
     if isinstance(relation_graph, dict):
         for key in ("html_path", "svg_path", "mermaid_path", "relations_file"):
-            path = _existing_manifest_path(relation_graph.get(key, ""))
+            path = coerce_manifest_path(relation_graph.get(key, ""))
             if path is None:
                 continue
             relative = relative_to_run_dir(path, run_dir)
@@ -111,65 +112,3 @@ def build_file_urls(
 
 def file_url(run_id: str, relative_path: Path) -> str:
     return f"/api/web/runs/{run_id}/files/{relative_path.as_posix()}"
-
-
-def relative_to_run_dir(path: Path, run_dir: Path) -> Path | None:
-    for candidate_path, candidate_run_dir in _relative_candidates(path, run_dir):
-        try:
-            return candidate_path.relative_to(candidate_run_dir)
-        except ValueError:
-            continue
-
-    path_parts = _normalized_parts(path)
-    run_parts = _normalized_parts(run_dir)
-    if len(path_parts) < len(run_parts) or path_parts[: len(run_parts)] != run_parts:
-        return None
-
-    actual_path = Path(path).resolve(strict=False)
-    actual_parts = actual_path.parts
-    if len(actual_parts) < len(run_parts):
-        return None
-    relative_parts = actual_parts[len(run_parts) :]
-    return Path(*relative_parts) if relative_parts else Path()
-
-
-def _relative_candidates(path: Path, run_dir: Path) -> list[tuple[Path, Path]]:
-    path_obj = Path(path)
-    run_dir_obj = Path(run_dir)
-    pairs = [
-        (path_obj, run_dir_obj),
-        (path_obj.resolve(strict=False), run_dir_obj.resolve(strict=False)),
-        (Path(os.path.realpath(os.fspath(path_obj))), Path(os.path.realpath(os.fspath(run_dir_obj)))),
-    ]
-    ordered: list[tuple[Path, Path]] = []
-    seen: set[tuple[str, str]] = set()
-    for candidate_path, candidate_run_dir in pairs:
-        key = (os.fspath(candidate_path), os.fspath(candidate_run_dir))
-        if key in seen:
-            continue
-        seen.add(key)
-        ordered.append((candidate_path, candidate_run_dir))
-    return ordered
-
-
-def _normalized_parts(path: Path) -> tuple[str, ...]:
-    resolved = Path(path).resolve(strict=False)
-    return tuple(part.casefold() for part in resolved.parts)
-
-
-def _existing_manifest_path(value: Any) -> Path | None:
-    if isinstance(value, Path):
-        candidate = value
-    elif isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        candidate = Path(text)
-    else:
-        return None
-    try:
-        if not candidate.exists():
-            return None
-    except (OSError, ValueError):
-        return None
-    return candidate
