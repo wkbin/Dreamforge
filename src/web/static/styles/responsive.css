@@ -136,7 +136,15 @@
     grid-template-columns: 1fr;
   }
 
+  .dialogue-memory-modal-scroll .dialogue-state-grid {
+    grid-template-columns: 1fr;
+  }
+
   .dialogue-memory-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dialogue-state-grid {
     grid-template-columns: 1fr;
   }
 

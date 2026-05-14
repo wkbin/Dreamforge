@@ -225,6 +225,125 @@
   line-height: 1.5;
 }
 
+.dialogue-state-overview {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.76rem 0.82rem;
+  border-radius: 14px;
+  border: 1px solid rgba(170, 146, 127, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 252, 248, 0.82), rgba(255, 248, 242, 0.7));
+}
+
+.dialogue-state-overview-head {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.dialogue-state-overview-head strong {
+  color: var(--ink);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.dialogue-state-overview-head small {
+  color: var(--ink-faint);
+  font-size: 0.67rem;
+  line-height: 1.5;
+}
+
+.dialogue-state-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+}
+
+.dialogue-state-pill,
+.dialogue-state-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.45rem;
+  padding: 0 0.56rem;
+  border-radius: 999px;
+  background: rgba(184, 132, 113, 0.1);
+  color: var(--accent-strong);
+  font-size: 0.64rem;
+  line-height: 1.35;
+}
+
+.dialogue-state-pill.is-faint,
+.dialogue-state-chip.is-faint {
+  background: rgba(122, 104, 90, 0.08);
+  color: var(--ink-faint);
+}
+
+.dialogue-state-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.46rem;
+}
+
+.dialogue-state-card {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.62rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid rgba(170, 146, 127, 0.1);
+  background: rgba(255, 255, 255, 0.62);
+  min-height: 0;
+}
+
+.dialogue-state-card span {
+  color: var(--ink-soft);
+  font-size: 0.67rem;
+  line-height: 1.35;
+}
+
+.dialogue-state-card p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.72rem;
+  line-height: 1.58;
+}
+
+.dialogue-state-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+}
+
+.dialogue-state-chip-list.is-muted .dialogue-state-chip {
+  background: rgba(122, 104, 90, 0.08);
+  color: var(--ink-faint);
+}
+
+.dialogue-state-mini-list {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.dialogue-state-mini-item {
+  display: grid;
+  gap: 0.08rem;
+  padding: 0.46rem 0.52rem;
+  border-radius: 10px;
+  background: rgba(255, 250, 246, 0.86);
+  border: 1px solid rgba(170, 146, 127, 0.08);
+}
+
+.dialogue-state-mini-item strong {
+  color: var(--ink);
+  font-size: 0.68rem;
+  line-height: 1.42;
+}
+
+.dialogue-state-mini-item p {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.65rem;
+  line-height: 1.5;
+}
+
 .dialogue-scene-timeline-list {
   display: grid;
   gap: 0.38rem;
