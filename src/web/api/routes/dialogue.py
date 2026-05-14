@@ -163,6 +163,7 @@ def switch_dialogue_scene_card(
             scene_card_id=payload.scene_card_id,
             scene_profile=payload.scene_profile,
             transition_message=payload.transition_message,
+            auto_continue=payload.auto_continue,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Session not found.") from exc

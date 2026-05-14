@@ -10,6 +10,7 @@ from src.web.chat import (
     build_dialogue_suggestion_llm_messages,
     build_dialogue_opening_message,
     compact_dialogue_suggestion_payload,
+    continue_dialogue_scene_opening_payload,
     create_dialogue_session_payload,
     friendly_dialogue_llm_error,
     generate_dialogue_suggestion,
@@ -109,6 +110,7 @@ class DialogueServiceMixin:
         scene_card_id: str = "",
         scene_profile: dict[str, str] | None = None,
         transition_message: str = "",
+        auto_continue: bool = False,
     ) -> dict[str, Any]:
         self._ensure_run_exists(run_id)
         resolved_scene_profile = dict(scene_profile or {})
@@ -122,11 +124,26 @@ class DialogueServiceMixin:
                 **resolved_scene_profile,
                 "scene_card_id": str(card.get("card_id", "")).strip(),
             }
-        return self.dialogue.update_scene_card(
+        switched = self.dialogue.update_scene_card(
             run_id,
             session_id,
             scene_profile=resolved_scene_profile,
             transition_message=transition_message,
+        )
+        if not auto_continue:
+            return switched
+        manifest = self._require_manifest(run_id)
+        return continue_dialogue_scene_opening_payload(
+            run_id=run_id,
+            session=switched,
+            manifest=manifest,
+            dialogue=self.dialogue,
+            build_dialogue_opening_message=build_dialogue_opening_message,
+            load_pending_turn_payload=self._load_pending_turn_payload,
+            generate_dialogue_responses=self._generate_dialogue_responses,
+            friendly_dialogue_llm_error=friendly_dialogue_llm_error,
+            evolve_relations_from_turn=self._evolve_relations_from_turn,
+            refresh_scene_progress=self._refresh_dialogue_scene_progress,
         )
 
     def recommend_dialogue_scene_card(self, run_id: str, *, session_id: str) -> dict[str, Any]:

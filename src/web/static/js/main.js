@@ -1023,6 +1023,7 @@ async function applySelectedDialogueSceneCard(options = {}) {
   const sceneCardId = String(select?.value || "").trim();
   const waitingText = String(options?.waitingText || "正在把这一幕转过去...").trim() || "正在把这一幕转过去...";
   const successText = String(options?.successText || "新的场景已经接上了。").trim() || "新的场景已经接上了。";
+  const autoContinue = Boolean(options?.autoContinue);
   if (!sceneCardId) {
     if (status) status.textContent = "先挑一张要切进去的场景卡。";
     return null;
@@ -1034,6 +1035,7 @@ async function applySelectedDialogueSceneCard(options = {}) {
       scene_card_id: sceneCardId,
       scene_profile: currentSceneCard?.card_id === sceneCardId ? (currentSceneCard?.fields || {}) : {},
       transition_message: transition,
+      auto_continue: autoContinue,
     });
     clearDialogueSceneRecommendationCache();
     if (el("dialogue-live-scene-transition")) {
@@ -1091,7 +1093,8 @@ async function handleRecommendDialogueSceneCard(event, options = {}) {
     if (autoApply) {
       await applySelectedDialogueSceneCard({
         waitingText: "正在顺手把这一幕转到下一拍...",
-        successText: "已经顺手切到下一幕了。",
+        successText: "已经顺手切到下一幕并接起新一拍了。",
+        autoContinue: true,
       });
     }
   } catch (error) {
@@ -1175,6 +1178,7 @@ async function applyDialogueSceneChain(chain = {}) {
     successText: tailTitles.length
       ? `这条线已经接上了，后面还可以顺势转到：${tailTitles.join("、")}。`
       : "这条线已经接上了。",
+    autoContinue: true,
   });
   return true;
 }

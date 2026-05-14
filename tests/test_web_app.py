@@ -423,6 +423,86 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(history[1]["transition_message"], "雨势更大，众人转入花厅。")
             self.assertEqual(history[1]["is_current"], "true")
 
+    def test_switch_dialogue_scene_card_can_auto_continue_new_scene(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            first_scene = service.save_scene_card(
+                fields={
+                    "title": "回廊夜谈",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "安静发紧",
+                    "opening_situation": "两人隔着雨声说话。",
+                    "public_goal": "先探来意。",
+                    "hidden_tension": "旧事随时会被挑开。",
+                    "scene_drive": "把试探慢慢逼紧。",
+                    "expected_rhythm": "慢热",
+                    "forbidden_topics": "前尘",
+                }
+            )
+            second_scene = service.save_scene_card(
+                fields={
+                    "title": "转入花厅",
+                    "time_hint": "夜深",
+                    "location": "花厅",
+                    "atmosphere": "表面客套，暗地收紧",
+                    "opening_situation": "雨势更大，众人不得不转入花厅。",
+                    "public_goal": "先把场面稳住。",
+                    "hidden_tension": "真正要问的话终于躲不过去。",
+                    "scene_drive": "从试探推向摊牌。",
+                    "expected_rhythm": "三句一推进",
+                    "forbidden_topics": "旧账",
+                }
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_responses",
+                side_effect=[
+                    [{"speaker": "场景提示", "message": "开场。"}],
+                    [{"speaker": "林黛玉", "message": "（她抬眼看了看门外雨势）进了花厅，也未见得就好说。"}],
+                ],
+            ):
+                session = service.create_dialogue_session(
+                    run["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉"],
+                    scene_card_id=first_scene["card_id"],
+                )
+                switched = service.switch_dialogue_scene_card(
+                    run["run_id"],
+                    session_id=session["session_id"],
+                    scene_card_id=second_scene["card_id"],
+                    transition_message="雨势更大，众人转入花厅。",
+                    auto_continue=True,
+                )
+
+            transcript = list(switched.get("transcript", []) or [])
+            self.assertEqual(switched["session_card"]["scene_card"]["title"], "转入花厅")
+            self.assertTrue(any("众人转入花厅" in str(item.get("message", "")) for item in transcript))
+            self.assertTrue(any(str(item.get("speaker", "")) == "林黛玉" for item in transcript))
+            self.assertEqual(switched.get("status"), "ready")
+            self.assertFalse(bool(switched.get("pending_turn")))
+
     def test_branch_dialogue_session_from_scene_creates_new_session(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
