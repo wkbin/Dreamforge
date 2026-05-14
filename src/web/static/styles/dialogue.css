@@ -140,6 +140,28 @@
   background: rgba(255, 255, 255, 0.62);
 }
 
+.dialogue-live-scene-shift-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.62rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid rgba(194, 157, 138, 0.18);
+  background: linear-gradient(180deg, rgba(255, 249, 244, 0.96), rgba(249, 238, 229, 0.9));
+}
+
+.dialogue-live-scene-shift-copy {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  line-height: 1.55;
+}
+
+#dialogue-live-scene-shift-recommend {
+  flex: 0 0 auto;
+}
+
 .dialogue-scene-chain-suggestions {
   display: grid;
   gap: 0.42rem;

@@ -930,6 +930,9 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
   const select = el("dialogue-live-scene-card");
   const status = el("dialogue-live-scene-status");
   const recommendButton = el("dialogue-live-scene-recommend");
+  const shiftHint = el("dialogue-live-scene-shift-hint");
+  const shiftCopy = el("dialogue-live-scene-shift-copy");
+  const shiftRecommendButton = el("dialogue-live-scene-shift-recommend");
   if (!shell || !select) return;
   const hasSession = Boolean(session?.session_id) && Boolean(currentRunId);
   shell.classList.toggle("hidden", !hasSession);
@@ -937,11 +940,19 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
     select.innerHTML = "";
     if (status) status.textContent = "";
     if (recommendButton) recommendButton.disabled = true;
+    if (shiftHint) shiftHint.classList.add("hidden");
+    if (shiftCopy) shiftCopy.textContent = "";
+    if (shiftRecommendButton) shiftRecommendButton.disabled = true;
     renderDialogueSceneChainSuggestions([], "");
     return;
   }
   if (recommendButton) recommendButton.disabled = sceneCards.length < 2;
+  if (shiftRecommendButton) shiftRecommendButton.disabled = sceneCards.length < 2;
   const currentSceneId = String(session?.session_card?.scene_card_id || "").trim();
+  const overview = session?.runtime_state_overview || {};
+  const shouldShift = Boolean(overview?.should_offer_scene_shift);
+  const shiftReason = String(overview?.scene_shift_reason || "").trim();
+  const nextHint = String(overview?.next_hint || "").trim();
   const previous = select.value || currentSceneId;
   select.innerHTML = "";
   const blank = document.createElement("option");
@@ -961,8 +972,20 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
   } else {
     select.value = currentSceneId;
   }
+  if (shiftHint) {
+    shiftHint.classList.toggle("hidden", !shouldShift);
+  }
+  if (shiftCopy) {
+    shiftCopy.textContent = shouldShift
+      ? (shiftReason || nextHint || "这一拍差不多收住了，可以顺势切到下一幕。")
+      : "";
+  }
   if (status && !String(status.textContent || "").trim()) {
-    status.textContent = currentSceneId ? "当前会话已经挂载场景卡，你可以随时切到另一幕。" : "当前会话还没挂场景卡，也可以直接在这里接入一张。";
+    if (shouldShift) {
+      status.textContent = "这一拍已经接近收束，可以顺势切一张场景卡。";
+    } else {
+      status.textContent = currentSceneId ? "当前会话已经挂载场景卡，你可以随时切到另一幕。" : "当前会话还没挂场景卡，也可以直接在这里接入一张。";
+    }
   }
   renderDialogueSceneChainSuggestions(currentDialogueSceneChainSuggestions, session?.session_id || "");
 }
@@ -2872,6 +2895,7 @@ function bindEvents() {
   bind("delete-opening-preset-button", "click", handleDeleteOpeningPreset);
   bind("recommend-scene-card-button", "click", handleRecommendSceneCard);
   bind("dialogue-live-scene-recommend", "click", handleRecommendDialogueSceneCard);
+  bind("dialogue-live-scene-shift-recommend", "click", handleRecommendDialogueSceneCard);
   bind("dialogue-live-scene-apply", "click", handleApplyDialogueSceneCard);
   bind("create-scene-card-button", "click", handleOpenNewSceneCard);
   bind("edit-scene-card-button", "click", handleEditCurrentSceneCard);
