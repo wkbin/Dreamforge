@@ -158,6 +158,13 @@
   line-height: 1.55;
 }
 
+#dialogue-live-scene-context {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.67rem;
+  line-height: 1.55;
+}
+
 #dialogue-live-scene-shift-recommend {
   flex: 0 0 auto;
 }

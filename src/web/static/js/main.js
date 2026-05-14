@@ -929,6 +929,7 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
   const shell = el("dialogue-scene-switcher");
   const select = el("dialogue-live-scene-card");
   const status = el("dialogue-live-scene-status");
+  const context = el("dialogue-live-scene-context");
   const recommendButton = el("dialogue-live-scene-recommend");
   const shiftHint = el("dialogue-live-scene-shift-hint");
   const shiftCopy = el("dialogue-live-scene-shift-copy");
@@ -939,6 +940,10 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
   if (!hasSession) {
     select.innerHTML = "";
     if (status) status.textContent = "";
+    if (context) {
+      context.textContent = "";
+      context.classList.add("hidden");
+    }
     if (recommendButton) recommendButton.disabled = true;
     if (shiftHint) shiftHint.classList.add("hidden");
     if (shiftCopy) shiftCopy.textContent = "";
@@ -953,6 +958,10 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
   const shouldShift = Boolean(overview?.should_offer_scene_shift);
   const shiftReason = String(overview?.scene_shift_reason || "").trim();
   const nextHint = String(overview?.next_hint || "").trim();
+  const timeHint = String(overview?.time_hint || "").trim();
+  const location = String(overview?.location || "").trim();
+  const present = Array.isArray(overview?.present) ? overview.present.filter(Boolean).slice(0, 3) : [];
+  const offstage = Array.isArray(overview?.offstage) ? overview.offstage.filter(Boolean).slice(0, 2) : [];
   const previous = select.value || currentSceneId;
   select.innerHTML = "";
   const blank = document.createElement("option");
@@ -979,6 +988,15 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
     shiftCopy.textContent = shouldShift
       ? (shiftReason || nextHint || "这一拍差不多收住了，可以顺势切到下一幕。")
       : "";
+  }
+  if (context) {
+    const parts = [];
+    if (location) parts.push(`地点：${location}`);
+    if (timeHint) parts.push(`时间：${timeHint}`);
+    if (present.length) parts.push(`在场：${present.join("、")}`);
+    if (offstage.length) parts.push(`离场：${offstage.join("、")}`);
+    context.textContent = parts.join(" · ");
+    context.classList.toggle("hidden", parts.length === 0);
   }
   if (status && !String(status.textContent || "").trim()) {
     if (shouldShift) {
