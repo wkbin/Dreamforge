@@ -314,6 +314,7 @@ set -euo pipefail
 
 INSTALL_ROOT="${INSTALL_ROOT}"
 STORAGE_ROOT="${STORAGE_ROOT}"
+BUILTIN_NOVELS_ROOT="\${INSTALL_ROOT}/builtin_novels"
 PYTHON_BIN="\${INSTALL_ROOT}/.venv/bin/python"
 INSTALL_PYTHON="${python_cmd}"
 REPO_SLUG="${REPO_SLUG}"
@@ -328,6 +329,11 @@ if [ ! -x "\${PYTHON_BIN}" ]; then
   echo "zaomeng runtime is missing / 缺少 zaomeng 运行时: \${PYTHON_BIN}" >&2
   exit 1
 fi
+
+run_webui() {
+  env ZAOMENG_WEB_BUILTIN_NOVELS_ROOT="\${BUILTIN_NOVELS_ROOT}" \
+    exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\${STORAGE_ROOT}" "\$@"
+}
 
 current_version() {
   local version_file="\${INSTALL_ROOT}/\${VERSION_FILE_RELATIVE}"
@@ -447,7 +453,7 @@ MSG
 }
 
 if [ \$# -eq 0 ]; then
-  exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\${STORAGE_ROOT}"
+  run_webui
 fi
 
 case "\$1" in
@@ -461,7 +467,7 @@ case "\$1" in
     ;;
   web)
     shift
-    exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\${STORAGE_ROOT}" "\$@"
+    run_webui "\$@"
     ;;
   bump-web-assets)
     shift
@@ -495,7 +501,7 @@ zaomeng commands / 可用命令:
 HELP
     ;;
   *)
-    exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\${STORAGE_ROOT}" "\$@"
+    run_webui "\$@"
     ;;
 esac
 EOF

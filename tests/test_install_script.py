@@ -53,8 +53,9 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('export PATH="$HOME/.local/bin:$PATH"', script_text)
         self.assertIn('Data root / 数据目录:   ${STORAGE_ROOT}', script_text)
         self.assertIn('ZAOMENG_STORAGE_DIR="\\${STORAGE_ROOT}"', script_text)
-        self.assertIn('"\\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\\${STORAGE_ROOT}"', script_text)
-        self.assertIn('exec "\\${PYTHON_BIN}" "\\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\\${STORAGE_ROOT}" "\\$@"', script_text)
+        self.assertIn('BUILTIN_NOVELS_ROOT="\\${INSTALL_ROOT}/builtin_novels"', script_text)
+        self.assertIn('env ZAOMENG_WEB_BUILTIN_NOVELS_ROOT="\\${BUILTIN_NOVELS_ROOT}"', script_text)
+        self.assertIn('run_webui()', script_text)
 
 
 if __name__ == "__main__":
