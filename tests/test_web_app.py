@@ -3881,6 +3881,111 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertIn("introduce a new action", payload["user_persona"]["profile"]["preferred_moves"])
             self.assertIn("pushes the plot forward", payload["instructions"]["response_style"])
 
+    def test_build_suggestion_payload_observe_mode_carries_scene_shift_pressure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+            manifest = service._require_manifest(run_id)
+            session = service.dialogue.create_session(
+                manifest,
+                mode="observe",
+                participants=["林黛玉", "贾宝玉"],
+                controlled_character="",
+                self_profile={},
+            )
+            service.dialogue.update_scene_progress_state(
+                run_id,
+                session["session_id"],
+                {
+                    "location": "回廊",
+                    "time_hint": "夜深",
+                    "beat_maturity": 85,
+                    "should_offer_scene_shift": True,
+                    "scene_shift_reason": "雨势更大，再站在回廊里已经接不下去了",
+                    "world_tension_summary": "两个人都知道下一句就该把局面带进新的地方",
+                },
+            )
+
+            payload = service.dialogue.build_suggestion_payload(
+                manifest,
+                session_id=session["session_id"],
+                seed_text="",
+            )
+
+            self.assertIn("turn the scene into its next beat naturally", payload["user_persona"]["profile"]["preferred_moves"])
+            self.assertEqual(payload["user_persona"]["profile"]["scene_shift_reason"], "雨势更大，再站在回廊里已经接不下去了")
+            self.assertIn("naturally turns this scene into its next beat", payload["host_prompt_brief"])
+            self.assertIn("Current transition pressure", payload["host_prompt_brief"])
+
+    def test_build_dialogue_suggestion_messages_use_scene_progress_for_observe_mode(self):
+        payload = {
+            "mode": "observe",
+            "input": {
+                "speaker": "User",
+                "message": "",
+                "participants": ["林黛玉", "贾宝玉"],
+            },
+            "persona_contexts": [],
+            "user_persona": {
+                "mode": "observe",
+                "speaker": "User",
+                "source": "observer_hint",
+                "must_follow": "Write as a scene observer giving a short in-world nudge.",
+                "profile": {
+                    "goal": "push_plot_forward",
+                    "preferred_moves": ["turn the scene into its next beat naturally"],
+                },
+            },
+            "relation_context": {"relations_excerpt": ""},
+            "history": [],
+            "memory_context": {"scene_progress": {"offstage_participants": ["薛宝钗"]}},
+            "scene_progress": {
+                "time_hint": "夜深",
+                "location": "回廊",
+                "offstage_participants": ["薛宝钗"],
+                "should_offer_scene_shift": True,
+                "scene_shift_reason": "这幕已经够满，可以顺势切到花厅",
+            },
+            "instructions": {
+                "generation_goal": "Draft one short, natural, directly sendable next user line that fits the current scene, relationships, and persona voices.",
+                "mode_rule": "Draft the user's next line as a short scene-steering utterance.",
+                "speaker_rule": "Treat the user message as a scene steering hint.",
+                "response_style": "Prefer one short scene-driving prompt that pushes the plot forward immediately.",
+                "scene_rule": "Keep the scene anchored.",
+            },
+            "host_action": {
+                "expected_output": {"suggestion": "一句可直接发送的话"},
+                "output_rule": "Keep it short, in-scene, directly sendable, and never explanatory.",
+            },
+            "host_prompt_brief": "Help the user guide 林黛玉, 贾宝玉 with one short prompt that naturally turns this scene into its next beat.",
+            "scene_card": {},
+        }
+
+        messages = WebRunService._build_dialogue_suggestion_llm_messages(payload)
+
+        self.assertIn("scene_progress", messages[1]["content"])
+        self.assertIn("这一拍已经成熟、适合转场", messages[0]["content"])
+        self.assertIn("offstage_participants", messages[0]["content"])
+
 
 @unittest.skipIf(TestClient is None or create_app is None, "fastapi test dependencies unavailable")
 class WebAppRouteTests(unittest.TestCase):

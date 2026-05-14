@@ -551,7 +551,13 @@ class DialogueService:
         speaker = str(payload.get("input", {}).get("speaker", "")).strip()
         participants = list(payload.get("input", {}).get("participants", []))
         payload["kind"] = "zaomeng_dialogue_suggestion"
-        payload["user_persona"] = self._build_user_suggestion_persona(mode, session, payload.get("persona_contexts", []))
+        scene_progress = dict(payload.get("scene_progress", {}) or {})
+        payload["user_persona"] = self._build_user_suggestion_persona(
+            mode,
+            session,
+            payload.get("persona_contexts", []),
+            scene_progress=scene_progress,
+        )
         payload["instructions"] = {
             "mode": mode,
             "generation_goal": "Draft one short, natural, directly sendable next user line that fits the current scene, relationships, and persona voices.",
@@ -563,7 +569,12 @@ class DialogueService:
             "expected_output": {"suggestion": "一句可直接发送的话"},
             "output_rule": "Keep it short, in-scene, directly sendable, and never explanatory.",
         }
-        payload["host_prompt_brief"] = self._host_suggestion_prompt_brief(mode, speaker, participants)
+        payload["host_prompt_brief"] = self._host_suggestion_prompt_brief(
+            mode,
+            speaker,
+            participants,
+            scene_progress=scene_progress,
+        )
         payload["updated_at"] = _utc_now()
         return payload
 
@@ -924,8 +935,11 @@ class DialogueService:
         mode: str,
         session: dict[str, Any],
         persona_contexts: list[dict[str, Any]],
+        *,
+        scene_progress: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         scene_card = dict(session.get("scene_card", {}) or {})
+        state = dict(scene_progress or {})
         if mode == "act":
             controlled = str(session.get("controlled_character", "")).strip()
             matched = next(
@@ -951,20 +965,39 @@ class DialogueService:
                 "profile": dict(card),
                 "scene_card": scene_card,
             }
+        preferred_moves = [
+            "introduce a new action",
+            "add a small interruption",
+            "surface a hidden tension",
+            "shift the emotional temperature",
+            "make someone notice something important",
+        ]
+        offstage = [str(item).strip() for item in list(state.get("offstage_participants", []) or []) if str(item).strip()]
+        if bool(state.get("should_offer_scene_shift", False)):
+            preferred_moves.extend(
+                [
+                    "turn the scene into its next beat naturally",
+                    "advance time or location without sounding abrupt",
+                ]
+            )
+        elif offstage:
+            preferred_moves.append("briefly cut to an offstage thread only if the text explicitly motivates it")
         return {
             "mode": "observe",
             "speaker": "User",
             "source": "observer_hint",
-            "must_follow": "Write as a scene observer giving a short in-world nudge that actively moves the scene, rather than speaking as a cast member.",
+            "must_follow": (
+                "Write as a scene observer giving a short in-world nudge that actively moves the scene, "
+                "rather than speaking as a cast member. Respect the current scene progress, presence state, "
+                "and whether this beat should continue or naturally turn into the next one."
+            ),
             "profile": {
                 "goal": "push_plot_forward",
-                "preferred_moves": [
-                    "introduce a new action",
-                    "add a small interruption",
-                    "surface a hidden tension",
-                    "shift the emotional temperature",
-                    "make someone notice something important",
-                ],
+                "preferred_moves": preferred_moves,
+                "scene_shift_reason": str(state.get("scene_shift_reason", "")).strip(),
+                "time_hint": str(state.get("time_hint", "")).strip(),
+                "location": str(state.get("location", "")).strip(),
+                "world_tension_summary": str(state.get("world_tension_summary", "")).strip(),
             },
             "scene_card": scene_card,
         }
@@ -993,11 +1026,30 @@ class DialogueService:
         return f"The user is observing. Let {', '.join(participants)} continue the scene in character and keep the chosen scene moving."
 
     @staticmethod
-    def _host_suggestion_prompt_brief(mode: str, speaker: str, participants: list[str]) -> str:
+    def _host_suggestion_prompt_brief(
+        mode: str,
+        speaker: str,
+        participants: list[str],
+        *,
+        scene_progress: dict[str, Any] | None = None,
+    ) -> str:
+        state = dict(scene_progress or {})
         if mode == "act":
             return f"Help the user speak as {speaker} with one believable next line."
         if mode == "insert":
             return f"Help the user speak as {speaker} inside the current scene with one natural next line."
+        shift_reason = str(state.get("scene_shift_reason", "")).strip()
+        if bool(state.get("should_offer_scene_shift", False)):
+            return (
+                f"Help the user guide {', '.join(participants)} with one short prompt that naturally turns this scene into its next beat. "
+                f"Current transition pressure: {shift_reason or 'the current beat already feels complete'}."
+            )
+        tension = str(state.get("world_tension_summary", "")).strip()
+        if tension:
+            return (
+                f"Help the user guide {', '.join(participants)} with one short prompt that clearly pushes the scene forward. "
+                f"Carry this tension: {tension}."
+            )
         return f"Help the user guide {', '.join(participants)} with one short prompt that clearly pushes the scene into its next beat."
 
     @staticmethod

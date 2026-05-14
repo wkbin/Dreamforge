@@ -420,6 +420,7 @@ def build_dialogue_suggestion_llm_messages(
     relation_excerpt = str(payload.get("relation_context", {}).get("relations_excerpt", "")).strip()
     history = payload.get("history", [])
     memory_context = dict(payload.get("memory_context", {}) or {})
+    scene_progress = dict(payload.get("scene_progress", {}) or memory_context.get("scene_progress", {}) or {})
     instructions = dict(payload.get("instructions", {}) or {})
     host_action = dict(payload.get("host_action", {}) or {})
     scene_card = dict(payload.get("scene_card", {}) or {})
@@ -439,6 +440,8 @@ def build_dialogue_suggestion_llm_messages(
         "如果上下文允许多种接法，优先选更符合 user_persona 的那一种，而不是只做一个泛用接话。",
         "如果 mode=act，就按 controlled character 的 persona profile、speech_style、temperament 和典型说话习惯来写。",
         "如果 mode=observe，就把这句话写成推动剧情的场景提示：让局势往前走，而不是复述、总结或劝说。",
+        "如果 scene_progress 显示这一拍已经成熟、适合转场，就优先写成自然的转场推进；如果还没到转场时机，就优先续当前这一拍的动作、情绪或张力。",
+        "offstage_participants 里的人不要被你无端写回来，除非这句提示本身就在明确推动他们重新入场。",
         "如果 scene_card 存在，优先服从它给出的地点、气氛、开场局面、明面目标、暗线张力与推进方向。",
         "只输出一句最终可发送的成品台词，不要解释上下文，不要总结历史，不要提供建议理由，不要写“作为/当前场景/我们可以/你可以/建议/回复：”这类分析话术。",
         "不要分段，不要项目符号，不要加引号，不要加说话人标签。",
@@ -454,6 +457,7 @@ def build_dialogue_suggestion_llm_messages(
         "speaker": str(input_block.get("speaker", "")).strip(),
         "seed_text": str(input_block.get("message", "")).strip(),
         "scene_card": scene_card,
+        "scene_progress": scene_progress,
         "memory_context": memory_context,
         "user_persona": user_persona,
         "participants": participants,
