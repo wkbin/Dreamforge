@@ -24,8 +24,10 @@ class SessionStoreTests(unittest.TestCase):
                 "updated_at": 1234567890,
                 "characters": ["刘备", "关羽"],
                 "state": {
-                    "relation_matrix": {"关羽_刘备": {"trust": 9}},
-                    "relation_delta": {"关羽_刘备": {"trust": 10}},
+                    "relations": {
+                        "matrix": {"关羽_刘备": {"trust": 9}},
+                        "delta": {"关羽_刘备": {"trust": 10}},
+                    }
                 },
             }
 
@@ -55,12 +57,12 @@ class SessionStoreTests(unittest.TestCase):
                     {"speaker": "林黛玉", "message": f"第{i}句提到了宝玉和心事。", "ts": i}
                     for i in range(32)
                 ],
-                "state": {},
+                "state": {"memory": {"summary": {}}},
             }
 
             updated = store.compress_context(session)
             self.assertLess(len(updated["history"]), 32)
-            memory_summary = updated.get("state", {}).get("memory_summary", {})
+            memory_summary = updated.get("state", {}).get("memory", {}).get("summary", {})
             self.assertTrue(memory_summary.get("summary"))
             self.assertGreater(memory_summary.get("compressed_turns", 0), 0)
 

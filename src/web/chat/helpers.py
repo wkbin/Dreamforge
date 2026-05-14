@@ -7,6 +7,55 @@ from typing import Any, Callable
 from src.core.exceptions import LLMRequestError
 
 
+def _session_state(session: dict[str, Any]) -> dict[str, Any]:
+    return dict(session.get("state", {}) or {})
+
+
+def _canonical_scene_progress(session: dict[str, Any]) -> dict[str, Any]:
+    state = _session_state(session)
+    scene = dict(state.get("scene", {}) or {})
+    presence = dict(state.get("presence", {}) or {})
+    progression = dict(state.get("progression", {}) or {})
+    derived = {
+        "present_participants": list(presence.get("present_participants", []) or []),
+        "offstage_participants": list(presence.get("offstage_participants", []) or []),
+        "time_hint": str(scene.get("time_hint", "")).strip(),
+        "location": str(scene.get("location", "")).strip(),
+        "atmosphere_summary": str(scene.get("atmosphere_summary", "")).strip(),
+        "progression_note": str(scene.get("progression_note", "")).strip(),
+        "should_offer_scene_shift": bool(progression.get("should_offer_scene_shift", False)),
+        "scene_shift_reason": str(progression.get("scene_shift_reason", "")).strip(),
+        "turns_in_current_scene": int(progression.get("turns_in_current_scene", 0) or 0),
+        "beat_maturity": int(progression.get("beat_maturity", 0) or 0),
+        "world_tension_summary": str(progression.get("world_tension_summary", "")).strip(),
+        "updated_at": (
+            str(progression.get("updated_at", "")).strip()
+            or str(presence.get("updated_at", "")).strip()
+            or str(scene.get("updated_at", "")).strip()
+        ),
+    }
+    merged = dict(derived)
+    merged.update(dict(session.get("scene_progress", {}) or {}))
+    return {key: value for key, value in merged.items() if value not in ("", [], False, 0, None)}
+
+
+def _canonical_relation_delta(session: dict[str, Any]) -> dict[str, Any]:
+    state = _session_state(session)
+    relations = dict(state.get("relations", {}) or {})
+    return dict(session.get("relation_delta", {}) or relations.get("delta", {}) or {})
+
+
+def _canonical_character_snapshots(session: dict[str, Any]) -> dict[str, Any]:
+    state = _session_state(session)
+    characters = dict(state.get("characters", {}) or {})
+    return dict(session.get("character_snapshots", {}) or characters.get("snapshots", {}) or {})
+
+
+def _canonical_event_signals(session: dict[str, Any]) -> dict[str, Any]:
+    state = _session_state(session)
+    return dict(session.get("event_signals", {}) or state.get("signals", {}) or {})
+
+
 def build_dialogue_opening_message(session: dict[str, Any]) -> str:
     mode = str(session.get("mode", "observe")).strip() or "observe"
     participants = [str(item).strip() for item in session.get("participants", []) if str(item).strip()]
@@ -239,7 +288,11 @@ def _compact_memory_context(memory_context: dict[str, Any]) -> dict[str, Any]:
             "archived_summary": compact_archived,
             "retrieved_memories": compact_hits,
             "scene_progress": {
-                inner_key: _trim_text(str(inner_value).strip(), 100)
+                inner_key: (
+                    list(inner_value)[:6]
+                    if isinstance(inner_value, list)
+                    else inner_value
+                )
                 for inner_key, inner_value in scene_progress.items()
                 if _has_meaningful_value(inner_value)
             },
@@ -457,8 +510,8 @@ def build_dialogue_scene_progress_messages(session: dict[str, Any]) -> list[dict
         "scene_card": dict(session.get("session_card", {}).get("scene_card", {}) or session.get("scene_card", {}) or {}),
         "session_memory_summary": dict(session.get("session_memory_summary", {}) or {}),
         "recent_transcript": recent,
-        "current_scene_progress": dict(session.get("scene_progress", {}) or {}),
-        "event_signals": dict(session.get("event_signals", {}) or session.get("state", {}).get("event_signals", {}) or {}),
+        "current_scene_progress": _canonical_scene_progress(session),
+        "event_signals": _canonical_event_signals(session),
     }
     system_prompt = "\n".join(
         [
@@ -467,10 +520,13 @@ def build_dialogue_scene_progress_messages(session: dict[str, Any]) -> list[dict
             "offstage_participants 里的人默认不应继续直接开口，除非最近文本明确写到他们回来、进门、现身、重新加入。",
             "如果最近内容已经从白天聊到傍晚、夜里、深夜等，time_hint 要跟着更新，而不是一直停在原时间。",
             "如果几个人已经离开原场所进入更私密的新地点，其他未同去角色不要继续被视作同场。",
+            "atmosphere_summary 用一句很短的话概括当前氛围，比如“安静下来”“暧昧发僵”“雨夜压下来”。",
+            "beat_maturity 用 0-100 的整数表示这一拍推进到什么程度：刚起势偏低，已经聊出完整一拍则更高。",
+            "world_tension_summary 用一句话概括当前这局最该继续带着走的张力、冲突或悬念。",
             "event_signals 里如果出现 scene_transition / cast_enter / cast_exit / atmosphere_shift / time_change / environment_change / beat_complete，要把它们纳入判断。",
             "should_offer_scene_shift 只在这一幕已经聊出明显一拍、适合自然转场时返回 true。",
             "只返回 JSON 对象，不要解释。",
-            "格式：{\"present_participants\":[],\"offstage_participants\":[],\"time_hint\":\"\",\"location\":\"\",\"progression_note\":\"\",\"should_offer_scene_shift\":false,\"scene_shift_reason\":\"\"}",
+            "格式：{\"present_participants\":[],\"offstage_participants\":[],\"time_hint\":\"\",\"location\":\"\",\"atmosphere_summary\":\"\",\"progression_note\":\"\",\"beat_maturity\":0,\"world_tension_summary\":\"\",\"should_offer_scene_shift\":false,\"scene_shift_reason\":\"\"}",
         ]
     )
     return [
@@ -500,9 +556,9 @@ def build_dialogue_relation_state_messages(
             }
         )
     current_state = {
-        "relation_delta": dict(session.get("state", {}).get("relation_delta", {}) or {}),
-        "character_snapshots": dict(session.get("state", {}).get("character_snapshots", {}) or {}),
-        "event_signals": dict(session.get("state", {}).get("event_signals", {}) or {}),
+        "relation_delta": _canonical_relation_delta(session),
+        "character_snapshots": _canonical_character_snapshots(session),
+        "event_signals": _canonical_event_signals(session),
     }
     payload = {
         "participants": [str(item).strip() for item in list(session.get("participants", []) or []) if str(item).strip()],
@@ -578,12 +634,20 @@ def parse_dialogue_scene_progress(content: str, participants: list[str]) -> dict
 
     present = clean_names(parsed.get("present_participants", []))
     offstage = [name for name in clean_names(parsed.get("offstage_participants", [])) if name not in present]
+    try:
+        beat_maturity = max(0, min(100, int(parsed.get("beat_maturity", 0) or 0)))
+    except Exception:
+        beat_maturity = 0
+
     return {
         "present_participants": present,
         "offstage_participants": offstage,
         "time_hint": _trim_text(str(parsed.get("time_hint", "")).strip(), 40),
         "location": _trim_text(str(parsed.get("location", "")).strip(), 40),
+        "atmosphere_summary": _trim_text(str(parsed.get("atmosphere_summary", "")).strip(), 80),
         "progression_note": _trim_text(str(parsed.get("progression_note", "")).strip(), 120),
+        "beat_maturity": beat_maturity,
+        "world_tension_summary": _trim_text(str(parsed.get("world_tension_summary", "")).strip(), 120),
         "should_offer_scene_shift": bool(parsed.get("should_offer_scene_shift", False)),
         "scene_shift_reason": _trim_text(str(parsed.get("scene_shift_reason", "")).strip(), 120),
     }
@@ -636,10 +700,16 @@ def parse_dialogue_relation_state(content: str, participants: list[str]) -> dict
                 amount = 0
             if amount:
                 normalized[field] = max(-3, min(3, amount))
-        for field in ("last_event", "relation_change", "typical_interaction"):
+        for field in ("last_event", "relation_change", "typical_interaction", "last_actor", "last_target", "updated_at"):
             value = _trim_text(str(item.get(field, "")).strip(), 120)
             if value:
                 normalized[field] = value
+        try:
+            momentum = int(item.get("momentum", 0) or 0)
+        except Exception:
+            momentum = 0
+        if momentum:
+            normalized["momentum"] = max(0, min(10, momentum))
         evidence_lines = [
             _trim_text(str(line).strip(), 180)
             for line in list(item.get("evidence_lines", []) or [])

@@ -2964,11 +2964,13 @@ class WebRunServiceTests(unittest.TestCase):
                 {"speaker": "贾宝玉", "message": "我不是有意惹你心烦。", "ts": "2026-05-12T00:00:01Z"},
             ]
             raw_session["state"] = {
-                "memory_summary": {
-                    "summary": "两人前面已经因一句话生过闷气，但都还惦记对方。",
-                    "key_points": ["林黛玉嘴上轻冷，心里还在意。", "贾宝玉想解释，却总把话说得更乱。"],
-                    "compressed_turns": 18,
-                    "recent_turns_kept": 24,
+                "memory": {
+                    "summary": {
+                        "summary": "两人前面已经因一句话生过闷气，但都还惦记对方。",
+                        "key_points": ["林黛玉嘴上轻冷，心里还在意。", "贾宝玉想解释，却总把话说得更乱。"],
+                        "compressed_turns": 18,
+                        "recent_turns_kept": 24,
+                    }
                 }
             }
             service.dialogue._write_json(service.dialogue._session_file(run_id, session["session_id"]), raw_session)
@@ -3063,16 +3065,23 @@ class WebRunServiceTests(unittest.TestCase):
             raw_one = service.dialogue._read_json(service.dialogue._session_file(run_id, session_one["session_id"]))
             raw_two = service.dialogue._read_json(service.dialogue._session_file(run_id, session_two["session_id"]))
 
-            delta = raw_one.get("state", {}).get("relation_delta", {}).get("林黛玉_贾宝玉", {})
+            delta = raw_one.get("state", {}).get("relations", {}).get("delta", {}).get("林黛玉_贾宝玉", {})
             self.assertEqual(delta.get("trust"), 1)
             self.assertEqual(delta.get("affection"), 1)
             self.assertEqual(delta.get("hostility"), -1)
-            snapshot = raw_one.get("state", {}).get("character_snapshots", {}).get("贾宝玉", {})
+            self.assertEqual(delta.get("last_actor"), "贾宝玉")
+            self.assertEqual(delta.get("last_target"), "林黛玉")
+            self.assertGreaterEqual(int(delta.get("momentum", 0) or 0), 1)
+            snapshot = raw_one.get("state", {}).get("characters", {}).get("snapshots", {}).get("贾宝玉", {})
             self.assertEqual(snapshot.get("interaction_state"), "softening")
             self.assertEqual(snapshot.get("last_target"), "林黛玉")
+            self.assertEqual(snapshot.get("present_state"), "onstage")
+            self.assertTrue(bool(snapshot.get("updated_at", "")))
 
-            self.assertEqual(raw_two.get("state", {}).get("relation_delta", {}), {})
-            self.assertEqual(raw_two.get("state", {}).get("character_snapshots", {}), {})
+            self.assertEqual(raw_two.get("state", {}).get("relations", {}).get("delta", {}), {})
+            untouched_snapshot = raw_two.get("state", {}).get("characters", {}).get("snapshots", {}).get("贾宝玉", {})
+            self.assertEqual(untouched_snapshot.get("present_state"), "onstage")
+            self.assertFalse(bool(untouched_snapshot.get("interaction_state", "")))
             self.assertEqual(relation_path.read_text(encoding="utf-8"), original_relation_text)
 
     def test_build_turn_payload_includes_session_relation_delta_and_snapshots(self):
@@ -3111,24 +3120,28 @@ class WebRunServiceTests(unittest.TestCase):
             raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
             raw_session["state"] = {
                 **dict(raw_session.get("state", {}) or {}),
-                "relation_matrix": {
-                    "林黛玉_贾宝玉": {"trust": 8, "affection": 8, "hostility": 1, "ambiguity": 3}
+                "relations": {
+                    "matrix": {
+                        "林黛玉_贾宝玉": {"trust": 8, "affection": 8, "hostility": 1, "ambiguity": 3}
+                    },
+                    "delta": {
+                        "林黛玉_贾宝玉": {
+                            "trust": 1,
+                            "affection": 1,
+                            "last_event": "刚刚把话说软了下来。",
+                            "evidence_lines": ["贾宝玉->林黛玉: 谢谢你愿意陪我一起。"],
+                        }
+                    },
                 },
-                "relation_delta": {
-                    "林黛玉_贾宝玉": {
-                        "trust": 1,
-                        "affection": 1,
-                        "last_event": "刚刚把话说软了下来。",
-                        "evidence_lines": ["贾宝玉->林黛玉: 谢谢你愿意陪我一起。"],
-                    }
-                },
-                "character_snapshots": {
-                    "贾宝玉": {
-                        "mood": "放松",
-                        "interaction_state": "softening",
-                        "focus": "林黛玉",
-                        "last_target": "林黛玉",
-                        "last_message": "谢谢你愿意陪我一起。",
+                "characters": {
+                    "snapshots": {
+                        "贾宝玉": {
+                            "mood": "放松",
+                            "interaction_state": "softening",
+                            "focus": "林黛玉",
+                            "last_target": "林黛玉",
+                            "last_message": "谢谢你愿意陪我一起。",
+                        }
                     }
                 },
             }
@@ -3148,6 +3161,65 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertIn("session_delta", relation_excerpt)
             detail_map = {item["name"]: item for item in payload.get("persona_contexts", [])}
             self.assertEqual(detail_map["贾宝玉"]["session_snapshot"]["interaction_state"], "softening")
+            serialized = service.dialogue._serialize_session(run_id, raw_session)
+            overview = dict(serialized.get("runtime_state_overview", {}) or {})
+            self.assertTrue(bool(overview.get("relation_rows", [])))
+
+    def test_dialogue_session_state_uses_canonical_grouped_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            session = service.dialogue.create_session(
+                service._require_manifest(run_id),
+                mode="observe",
+                participants=["林黛玉", "贾宝玉"],
+            )
+            raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
+            state = dict(raw_session.get("state", {}) or {})
+
+            self.assertEqual(state.get("version"), 1)
+            self.assertIn("scene", state)
+            self.assertIn("presence", state)
+            self.assertIn("progression", state)
+            self.assertIn("relations", state)
+            self.assertIn("characters", state)
+            self.assertIn("signals", state)
+            self.assertIn("memory", state)
+            self.assertIn("atmosphere_summary", dict(state.get("scene", {}) or {}))
+            self.assertIn("matrix", dict(state.get("relations", {}) or {}))
+            self.assertIn("delta", dict(state.get("relations", {}) or {}))
+            self.assertIn("snapshots", dict(state.get("characters", {}) or {}))
+            self.assertIn("beat_maturity", dict(state.get("progression", {}) or {}))
+            self.assertIn("world_tension_summary", dict(state.get("progression", {}) or {}))
+            overview = dict(session.get("runtime_state_overview", {}) or {})
+            self.assertIn("present", overview)
+            self.assertIn("offstage", overview)
+            self.assertIn("pills", overview)
+            self.assertIn("character_rows", overview)
+            self.assertIn("relation_rows", overview)
+            self.assertIn("event_rows", overview)
+            self.assertIn("status_line", overview)
+            self.assertIn("next_hint", overview)
 
     def test_dialogue_relation_state_llm_can_lightly_refine_session_delta(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3214,11 +3286,11 @@ class WebRunServiceTests(unittest.TestCase):
                 )
 
             raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
-            delta = raw_session.get("state", {}).get("relation_delta", {}).get("林黛玉_贾宝玉", {})
+            delta = raw_session.get("state", {}).get("relations", {}).get("delta", {}).get("林黛玉_贾宝玉", {})
             self.assertEqual(delta.get("trust"), 2)
             self.assertEqual(delta.get("affection"), 1)
             self.assertIn("明显更松", str(delta.get("last_event", "")))
-            snapshot = raw_session.get("state", {}).get("character_snapshots", {}).get("贾宝玉", {})
+            snapshot = raw_session.get("state", {}).get("characters", {}).get("snapshots", {}).get("贾宝玉", {})
             self.assertEqual(snapshot.get("interaction_state"), "softening")
 
     def test_dialogue_event_signals_capture_scene_and_inline_action_categories(self):
@@ -3271,9 +3343,11 @@ class WebRunServiceTests(unittest.TestCase):
                 )
 
             raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
-            event_signals = dict(raw_session.get("state", {}).get("event_signals", {}) or {})
+            event_signals = dict(raw_session.get("state", {}).get("signals", {}) or {})
             recent = list(event_signals.get("recent", []) or [])
             kinds = {str(item.get("kind", "")).strip() for item in recent}
+            overview = dict(service.dialogue._serialize_session(run_id, raw_session).get("runtime_state_overview", {}) or {})
+            event_rows = list(overview.get("event_rows", []) or [])
 
             self.assertIn("time_change", kinds)
             self.assertIn("environment_change", kinds)
@@ -3281,6 +3355,7 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertIn("cast_exit", kinds)
             self.assertIn("micro_action", kinds)
             self.assertIn("atmosphere_shift", kinds)
+            self.assertTrue(event_rows)
 
             micro_action = next(item for item in recent if str(item.get("kind", "")).strip() == "micro_action")
             self.assertEqual(micro_action.get("actor"), "林黛玉")
@@ -5827,6 +5902,9 @@ class DialogueTurnBehaviorTests(unittest.TestCase):
             self.assertEqual(updated["scene_progress"]["time_hint"], "夜里")
             self.assertEqual(updated["scene_progress"]["present_participants"], ["林黛玉", "贾宝玉"])
             self.assertEqual(updated["scene_progress"]["offstage_participants"], ["薛宝钗"])
+            self.assertTrue(updated["scene_progress"]["atmosphere_summary"])
+            self.assertGreater(updated["scene_progress"]["beat_maturity"], 0)
+            self.assertTrue(updated["scene_progress"]["world_tension_summary"])
             self.assertIn("夜里", updated["session_memory_summary"]["scene_frame"])
             self.assertIn("薛宝钗", updated["session_memory_summary"]["cast"])
 
@@ -5901,6 +5979,8 @@ class DialogueTurnBehaviorTests(unittest.TestCase):
 
             self.assertTrue(updated["scene_progress"]["should_offer_scene_shift"])
             self.assertIn("下一幕", updated["scene_progress"]["scene_shift_reason"])
+            self.assertGreaterEqual(updated["scene_progress"]["beat_maturity"], 70)
+            self.assertTrue(updated["scene_progress"]["world_tension_summary"])
             self.assertIn("转场提示", updated["session_memory_summary"]["scene_frame"])
 
 
