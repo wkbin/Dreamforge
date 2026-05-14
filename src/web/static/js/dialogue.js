@@ -109,10 +109,13 @@ function buildDialogueMemorySnapshot(session) {
   const summaryRelation = String(summary.relation_drift || "").trim();
   const summaryPerspective = String(summary.perspective || "").trim();
   const summaryScene = String(summary.scene_frame || "").trim();
+  const summaryLocation = String(summary.current_location || "").trim();
+  const summaryCompanions = String(summary.current_companions || "").trim();
+  const summaryCommitments = String(summary.pending_commitments || "").trim();
   const summaryWorld = String(summary.world || "").trim();
   const summaryUpdated = String(summary.updated_at || "").trim();
 
-  if (summaryRecap || summaryCast || summaryRelation || summaryPerspective || summaryScene || summaryWorld) {
+  if (summaryRecap || summaryCast || summaryRelation || summaryPerspective || summaryScene || summaryLocation || summaryCompanions || summaryCommitments || summaryWorld) {
     return {
       modeLabel: summaryModeLabel || humanizeMode(summaryMode || session?.mode || session?.session_card?.mode || "observe"),
       recap: summaryRecap || "这局刚开场，回顾会在这里滚动更新。",
@@ -120,6 +123,9 @@ function buildDialogueMemorySnapshot(session) {
       relation: summaryRelation || "关系线会在这里滚动提示。",
       perspective: summaryPerspective || "你当前的入场方式会在这里提示。",
       scene: summaryScene || "当前这幕的地点、气氛与推进方向会在这里提醒你。",
+      location: summaryLocation || "当前落点会在这里提醒你。",
+      companions: summaryCompanions || "现在与你同场的人会在这里提醒你。",
+      commitments: summaryCommitments || "还没收口的承诺或待推进事项会在这里提醒你。",
       world: summaryWorld || "当前局势里的动作与情绪线会在这里提醒你。",
       updated: formatWeakTime(summaryUpdated) || formatWeakTime(session?.updated_at) || "刚刚更新",
     };
@@ -185,11 +191,29 @@ function buildDialogueMemorySnapshot(session) {
 
   let world = "当前局势里的动作与情绪线会在这里提醒你。";
   let scene = "当前这幕的地点、气氛与推进方向会在这里提醒你。";
+  let locationSummary = "";
+  let companions = cast;
+  let commitments = "";
   const sceneCard = session?.session_card?.scene_card || {};
   if (sceneCard && (sceneCard.title || sceneCard.location || sceneCard.atmosphere || sceneCard.scene_drive)) {
     const sceneBits = [sceneCard.title, sceneCard.location, sceneCard.atmosphere].filter(Boolean);
     const drive = trimInlineMessage(sceneCard.scene_drive || sceneCard.opening_situation || "");
     scene = sceneBits.length ? `挂载场景：${sceneBits.join(" / ")}${drive ? ` · ${drive}` : ""}` : drive || scene;
+  }
+  const overview = session?.runtime_state_overview || {};
+  const overviewLocation = trimInlineMessage(String(overview.current_location || "").trim());
+  const overviewCompanions = trimInlineMessage(String(overview.current_companions || "").trim());
+  const overviewCommitments = trimInlineMessage(String(overview.pending_commitments || "").trim());
+  if (overviewLocation) {
+    locationSummary = overviewLocation;
+  } else if (sceneCard?.location) {
+    locationSummary = trimInlineMessage(String(sceneCard.location || "").trim());
+  }
+  if (overviewCompanions) {
+    companions = overviewCompanions;
+  }
+  if (overviewCommitments) {
+    commitments = overviewCommitments;
   }
   if (lastWorld?.message) {
     world = trimInlineMessage(lastWorld.message);
@@ -204,6 +228,9 @@ function buildDialogueMemorySnapshot(session) {
     relation,
     perspective,
     scene,
+    location: locationSummary || "当前落点会在这里提醒你。",
+    companions: companions || "现在与你同场的人会在这里提醒你。",
+    commitments: commitments || "还没收口的承诺或待推进事项会在这里提醒你。",
     world,
     updated: formatWeakTime(session?.updated_at) || "刚刚更新",
   };
@@ -446,6 +473,9 @@ function renderDialogueMemory(session) {
   setText("dialogue-memory-relation", snapshot.relation, "");
   setText("dialogue-memory-perspective", snapshot.perspective, "");
   setText("dialogue-memory-scene", snapshot.scene, "");
+  setText("dialogue-memory-location", snapshot.location, "");
+  setText("dialogue-memory-companions", snapshot.companions, "");
+  setText("dialogue-memory-commitments", snapshot.commitments, "");
   setText("dialogue-memory-world", snapshot.world, "");
   setText("dialogue-memory-mode", `模式：${snapshot.modeLabel}`, "");
   const branchNote = el("dialogue-memory-branch");
@@ -566,6 +596,9 @@ function buildDialogueMemoryClipboardText(session) {
     `关系变化：${snapshot.relation}`,
     `你的位置：${snapshot.perspective}`,
     `场景框架：${snapshot.scene}`,
+    `当前地点：${snapshot.location}`,
+    `当前同行：${snapshot.companions}`,
+    `待完成承诺：${snapshot.commitments}`,
     `世界状态：${snapshot.world}`,
     `更新时间：${snapshot.updated}`,
   ].join("\n");

@@ -7,6 +7,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
+from src.web.manifest.compat import rewrite_run_root_paths
 from src.utils.file_utils import safe_filename
 
 PACKAGE_KIND = "zaomeng_web_run_package"
@@ -171,7 +172,7 @@ def rewrite_imported_run_manifest(
 ) -> dict[str, Any]:
     source_root = source_run_dir.resolve(strict=False)
     target_root = target_run_dir.resolve(strict=False)
-    rewritten = _replace_run_root_strings(manifest, source_root=source_root, target_root=target_root)
+    rewritten = rewrite_run_root_paths(manifest, source_root=source_root, target_root=target_root)
 
     rewritten["run_id"] = new_run_id
     rewritten["created_at"] = imported_at
@@ -264,37 +265,6 @@ def _read_package_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
     if str(payload.get("kind", "")).strip() != PACKAGE_KIND:
         raise ValueError("不是可识别的造梦小说包。")
     return payload
-
-
-def _replace_run_root_strings(
-    value: Any,
-    *,
-    source_root: Path,
-    target_root: Path,
-) -> Any:
-    if isinstance(value, dict):
-        return {key: _replace_run_root_strings(item, source_root=source_root, target_root=target_root) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_replace_run_root_strings(item, source_root=source_root, target_root=target_root) for item in value]
-    if isinstance(value, str):
-        return _rewrite_string_path(value, source_root=source_root, target_root=target_root)
-    return value
-
-
-def _rewrite_string_path(text: str, *, source_root: Path, target_root: Path) -> str:
-    raw = str(text or "")
-    candidates = {
-        str(source_root),
-        str(source_root).replace("\\", "/"),
-        str(source_root).replace("/", "\\"),
-    }
-    for candidate in sorted(candidates, key=len, reverse=True):
-        if candidate and raw.startswith(candidate):
-            suffix = raw[len(candidate) :].lstrip("\\/")
-            if not suffix:
-                return str(target_root)
-            return str(target_root / Path(*suffix.replace("\\", "/").split("/")))
-    return raw
 
 
 def _strip_export_only_paths(run_dir: Path) -> None:

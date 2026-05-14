@@ -9,6 +9,36 @@ let exportRunPackagePendingId = "";
 
 const APP_UPDATE_DISMISS_PREFIX = "zaomeng:update-dismissed:";
 const UI_BRIDGE_TOOLS = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
+const FLOW_FEEDBACK_TOOLS = window.__ZAOMENG_FLOW_FEEDBACK__ || {};
+
+function setFlowStatusMessage(statusId, options = {}) {
+  if (typeof FLOW_FEEDBACK_TOOLS.setFlowStatus === "function") {
+    FLOW_FEEDBACK_TOOLS.setFlowStatus(statusId, options);
+    return;
+  }
+  setStatus(statusId, String(options.message || "").trim());
+}
+
+function setButtonBusyState(target, pending, options = {}) {
+  if (typeof FLOW_FEEDBACK_TOOLS.setButtonBusy === "function") {
+    FLOW_FEEDBACK_TOOLS.setButtonBusy(target, pending, options);
+    return;
+  }
+  const node = typeof target === "string" ? el(target) : target;
+  if (!node) return;
+  node.disabled = Boolean(pending);
+  if (pending && options.busyText) {
+    node.textContent = String(options.busyText).trim();
+    return;
+  }
+  if (!pending && options.idleText) {
+    node.textContent = String(options.idleText).trim();
+  }
+}
+
+function setDistillFlowStatus(statusId, options = {}) {
+  setFlowStatusMessage(statusId, options);
+}
 
 function applyRunViewSafely(run, options = {}) {
   if (typeof window.__ZAOMENG_APPLY_RUN_VIEW__ === "function") {
@@ -335,7 +365,11 @@ async function handleCreateRunSubmit(event) {
   }
   runCreationPending = true;
   updateWorkflowState();
-  setStatus("form-status", "正在翻检正文，替你把人物请出来...");
+  setButtonBusyState("submit-button", true, { idleText: "开始唤醒人物", busyText: "蒸馏中..." });
+  setDistillFlowStatus("form-status", {
+    message: "正在翻检正文，替你把人物请出来...",
+    nextStep: "开始后你可以在书卷页继续看人物蒸馏和关系图进度。",
+  });
   try {
     const run = await apiJson(
       "/api/web/runs",
@@ -355,37 +389,59 @@ async function handleCreateRunSubmit(event) {
     );
     applyRunViewSafely(run);
     await loadRunsOverview();
-    setStatus("form-status", "人物整理已经开始，进度会在这里慢慢往前走。");
+    setDistillFlowStatus("form-status", {
+      message: "人物整理已经开始，进度会在这里慢慢往前走。",
+      nextStep: "接下来可以盯住书卷页，等人物先落稳几位。",
+    });
   } catch (error) {
     runCreationPending = false;
     stopRunPolling();
     updateWorkflowState();
-    setStatus("form-status", error.message || "这一轮人物整理没有成功。");
+    setDistillFlowStatus("form-status", {
+      message: error.message || "这一轮人物整理没有成功。",
+      impact: "这不会影响你已有书架和已经在聊的会话。",
+      nextStep: "可以调整正文片段或人物名单后再试。",
+    });
+  } finally {
+    setButtonBusyState("submit-button", false, { idleText: "开始唤醒人物", busyText: "蒸馏中..." });
   }
 }
 
 async function handleRedistill() {
   if (!currentRunId) {
-    setStatus("redistill-status", "先让这一卷成形，再继续补入人物。");
+    setDistillFlowStatus("redistill-status", {
+      message: "先让这一卷成形，再继续补入人物。",
+      nextStep: "先选中一卷书后，这里才能继续增量蒸馏。",
+    });
     return;
   }
   const characters = charactersOf("redistill-characters");
   const file = el("redistill-novel-file")?.files?.[0];
   const selectedSegment = !file ? getSelectedRedistillSegment() : null;
   if (!characters.length) {
-    setStatus("redistill-status", "写下想继续补入的人物名字。");
+    setDistillFlowStatus("redistill-status", {
+      message: "写下想继续补入的人物名字。",
+      nextStep: "已有角色可以直接补稳，新角色也可以顺手补进来。",
+    });
     return;
   }
   runCreationPending = true;
   updateWorkflowState();
-  setStatus(
-    "redistill-status",
-    file
-      ? "正在换入新的书段，并继续整理人物..."
-      : selectedSegment
-        ? "正在切到推荐片段，并继续补稳这一位角色..."
-        : "正在沿着这卷书继续往下整理..."
-  );
+  setButtonBusyState("redistill-button", true, { idleText: "继续整理", busyText: "继续蒸馏中..." });
+  setDistillFlowStatus("redistill-status", file
+    ? {
+        message: "正在换入新的书段，并继续整理人物...",
+        nextStep: "这一轮会沿着新书段增量补稳人物，不会把已有成果推倒重来。",
+      }
+    : selectedSegment
+      ? {
+          message: "正在切到推荐片段，并继续补稳这一位角色...",
+          nextStep: "这次会优先补强当前命中的角色窗口。",
+        }
+      : {
+          message: "正在沿着这卷书继续往下整理...",
+          nextStep: "这一轮会在已有人物基础上继续补稳，不会重头开始。",
+        });
   try {
     const run = await apiJson(
       `/api/web/runs/${currentRunId}/redistill`,
@@ -409,26 +465,41 @@ async function handleRedistill() {
     }
     resetRedistillRecommendationState();
     updateRedistillFileView();
-    setStatus(
-      "redistill-status",
-      file
-        ? "新的书段已经接入，这一轮增量整理开始了。"
-        : selectedSegment
-          ? "推荐片段已经接入，这一轮增量整理开始了。"
-          : "新的整理已经开始，人物会陆续补进来。"
-    );
+    setDistillFlowStatus("redistill-status", file
+      ? {
+          message: "新的书段已经接入，这一轮增量整理开始了。",
+          nextStep: "你可以回到书卷页继续看人物和图谱怎么往前长。",
+        }
+      : selectedSegment
+        ? {
+            message: "推荐片段已经接入，这一轮增量整理开始了。",
+            nextStep: "这位角色会优先吃到这一段证据补料。",
+          }
+        : {
+            message: "新的整理已经开始，人物会陆续补进来。",
+            nextStep: "接下来适合继续盯住这卷的进度变化。",
+          });
   } catch (error) {
     runCreationPending = false;
     stopRunPolling();
     updateWorkflowState();
-    setStatus("redistill-status", error.message || "这次继续整理没有接上。");
+    setDistillFlowStatus("redistill-status", {
+      message: error.message || "这次继续整理没有接上。",
+      impact: "这不会影响这卷已落下的人物、校对结果和当前聊天。",
+      nextStep: "可以换一段更贴近角色的正文，或稍后再试。",
+    });
+  } finally {
+    setButtonBusyState("redistill-button", false, { idleText: "继续整理", busyText: "继续蒸馏中..." });
   }
 }
 
 async function handleRedistillRecommend() {
   const character = getRedistillRecommendationTarget();
   if (!currentRunId || !character) {
-    setStatus("redistill-status", "先只选中一位已有角色，再让我替你找更适合的正文片段。");
+    setDistillFlowStatus("redistill-status", {
+      message: "先只选中一位已有角色，再让我替你找更适合的正文片段。",
+      nextStep: "推荐片段更适合做单角色补强，不适合多人一起混找。",
+    });
     return;
   }
   redistillSuggestionState.loading = true;
@@ -437,7 +508,11 @@ async function handleRedistillRecommend() {
   redistillSuggestionState.items = [];
   redistillSuggestionState.selectedSegmentId = "";
   renderRedistillRecommendationState(character);
-  setStatus("redistill-status", `正在替「${character}」翻当前书段，挑适合补稳的正文片段...`);
+  setButtonBusyState("redistill-recommend-button", true, { idleText: "推荐片段", busyText: "推荐中..." });
+  setDistillFlowStatus("redistill-status", {
+    message: `正在替「${character}」翻当前书段，挑适合补稳的正文片段...`,
+    nextStep: "挑完后你可以直接点用推荐片段继续增量蒸馏。",
+  });
   try {
     const payload = await apiJson(
       `/api/web/runs/${currentRunId}/redistill/recommend`,
@@ -456,18 +531,28 @@ async function handleRedistillRecommend() {
     redistillSuggestionState.items = Array.isArray(payload?.segments) ? payload.segments : [];
     redistillSuggestionState.selectedSegmentId = "";
     renderRedistillRecommendationState(character);
-    setStatus(
-      "redistill-status",
+    setDistillFlowStatus("redistill-status",
       redistillSuggestionState.items.length
-        ? `已经为「${character}」挑出 ${redistillSuggestionState.items.length} 段更适合补料的正文。`
-        : `当前书段里暂时没找到更适合「${character}」的推荐窗口。`
-    );
+        ? {
+            message: `已经为「${character}」挑出 ${redistillSuggestionState.items.length} 段更适合补料的正文。`,
+            nextStep: "选中其中一段后，就可以直接继续这位角色的增量蒸馏。",
+          }
+        : {
+            message: `当前书段里暂时没找到更适合「${character}」的推荐窗口。`,
+            nextStep: "可以改用新书段，或直接沿用当前正文继续蒸馏。",
+          });
   } catch (error) {
     redistillSuggestionState.loading = false;
     redistillSuggestionState.items = [];
     redistillSuggestionState.selectedSegmentId = "";
     renderRedistillRecommendationState(character);
-    setStatus("redistill-status", error.message || "这次推荐片段没有接上。");
+    setDistillFlowStatus("redistill-status", {
+      message: error.message || "这次推荐片段没有接上。",
+      impact: "这不会影响这卷继续聊天或直接继续增量蒸馏。",
+      nextStep: "可以稍后重试，或直接手动换入更贴近角色的正文。",
+    });
+  } finally {
+    setButtonBusyState("redistill-recommend-button", false, { idleText: "推荐片段", busyText: "推荐中..." });
   }
 }
 
@@ -489,10 +574,7 @@ async function handleStopRun() {
   if (!window.confirm(`确定先停下《${runNovelTitle(currentRun)}》这一轮蒸馏吗？`)) {
     return;
   }
-  const stopButton = el("detail-stop-run-button");
-  if (stopButton) {
-    stopButton.disabled = true;
-  }
+  setButtonBusyState("detail-stop-run-button", true, { idleText: "停止蒸馏", busyText: "正在停止..." });
   setText("detail-action-note", "正在收束当前步骤，很快就会停下来。", "");
   toggle("detail-action-note", true);
   try {
@@ -504,24 +586,37 @@ async function handleStopRun() {
       "停止蒸馏失败。"
     );
     applyRunViewSafely(run, { preserveDialogue: true });
+    setDistillFlowStatus("bookshelf-status", {
+      message: `《${runNovelTitle(run)}》已经收到停止请求，正在收住当前步骤。`,
+      nextStep: "收住后你可以继续蒸馏，或直接先去聊天和校对人物。",
+    });
   } catch (error) {
-    if (stopButton) {
-      stopButton.disabled = false;
-    }
+    setButtonBusyState("detail-stop-run-button", false, { idleText: "停止蒸馏", busyText: "正在停止..." });
     setText("detail-action-note", error.message || "这次停止没有成功。", "");
     toggle("detail-action-note", true);
+    setDistillFlowStatus("bookshelf-status", {
+      message: error.message || "这次停止没有成功。",
+      impact: "这不会影响这一轮继续运行和后续聊天。",
+      nextStep: "可以稍后再试停止，或继续观察当前进度。",
+    });
   }
 }
 
 function handleRedistillAdd() {
   setValue("redistill-characters", "");
-  setStatus("redistill-status", "写下新人物后，就可以继续整理。");
+  setDistillFlowStatus("redistill-status", {
+    message: "写下新人物后，就可以继续整理。",
+    nextStep: "这一档更适合把新人物顺手补进当前书卷。",
+  });
   updateRedistillPillState();
 }
 
 function handleRedistillRefresh() {
   setValue("redistill-characters", joinCharacters(getRunCharacterNames(currentRun)));
-  setStatus("redistill-status", "当前人物已经带回来了，可以直接重新整理。");
+  setDistillFlowStatus("redistill-status", {
+    message: "当前人物已经带回来了，可以直接重新整理。",
+    nextStep: "如果只是补薄弱角色，先只保留最需要补的那位会更稳。",
+  });
   updateRedistillPillState();
 }
 
@@ -2106,8 +2201,10 @@ function renderBuiltinNovelList(items) {
     startButton.type = "button";
     startButton.className = "primary-button";
     startButton.textContent = "复制到我的书架";
+    startButton.dataset.idleText = "复制到我的书架";
+    startButton.dataset.busyText = "复制中...";
     startButton.addEventListener("click", () => {
-      handleCloneBuiltinNovel(item.package_id, item.title || item.novel_id || "");
+      handleCloneBuiltinNovel(item.package_id, item.title || item.novel_id || "", startButton);
     });
     actions.appendChild(startButton);
 
@@ -2121,38 +2218,58 @@ function renderBuiltinNovelList(items) {
 }
 
 async function loadBuiltinNovels() {
-  setStatus("builtin-novel-status", "正在翻出内置书卷...");
+  setButtonBusyState("refresh-builtin-novels-button", true, { idleText: "刷新列表", busyText: "刷新中..." });
+  setFlowStatusMessage("builtin-novel-status", {
+    message: "正在翻出内置书卷...",
+    nextStep: "整理好后你可以直接复制一本到自己的书架。",
+  });
   try {
     const payload = await apiJson("/api/web/builtin-novels", {}, "内置小说列表载入失败。");
     const items = Array.isArray(payload.items) ? payload.items : [];
     renderBuiltinNovelList(items);
-    setStatus(
-      "builtin-novel-status",
-      items.length
-        ? `当前有 ${items.length} 卷可直接试玩的内置小说。`
-        : "内置目录里暂时还没有小说包，你可以先导出一卷再放进去。"
-    );
+    setFlowStatusMessage("builtin-novel-status", items.length
+      ? {
+          message: `当前有 ${items.length} 卷可直接试玩的内置小说。`,
+          nextStep: "选一卷复制到书架后，就可以直接开聊。",
+        }
+      : {
+          message: "内置目录里暂时还没有小说包。",
+          nextStep: "你可以先导出一卷，再放进内置目录。",
+        });
     return items;
   } catch (error) {
     renderBuiltinNovelList([]);
-    setStatus("builtin-novel-status", error.message || "内置小说列表暂时没有载入。");
+    setFlowStatusMessage("builtin-novel-status", {
+      message: error.message || "内置小说列表暂时没有载入。",
+      impact: "这不会影响你继续使用当前书架或聊天。",
+      nextStep: "可以稍后重试，或先从本地导入小说包。",
+    });
     throw error;
+  } finally {
+    setButtonBusyState("refresh-builtin-novels-button", false, { idleText: "刷新列表", busyText: "刷新中..." });
   }
 }
 
 async function handleOpenBuiltinNovelModal() {
   if (!modelSettings.configured) {
     openSettingsModal();
-    setStatus("builtin-novel-status", "先把故事声源接进来，再直接试玩内置小说。");
+    setFlowStatusMessage("builtin-novel-status", {
+      message: "先把故事声源接进来，再直接试玩内置小说。",
+      nextStep: "模型配置好后，这里就能直接试玩。",
+    });
     return;
   }
   openBuiltinNovelModal();
   await loadBuiltinNovels().catch(() => {});
 }
 
-async function handleCloneBuiltinNovel(packageId, title = "") {
+async function handleCloneBuiltinNovel(packageId, title = "", trigger = null) {
   const safeTitle = String(title || "").trim();
-  setStatus("builtin-novel-status", safeTitle ? `正在把《${safeTitle}》复制到你的书架...` : "正在复制这卷书...");
+  setButtonBusyState(trigger, true, { idleText: "复制到我的书架", busyText: "复制中..." });
+  setFlowStatusMessage("builtin-novel-status", {
+    message: safeTitle ? `正在把《${safeTitle}》复制到你的书架...` : "正在复制这卷书...",
+    nextStep: "复制完成后你就能直接进入这卷书。",
+  });
   try {
     const run = await apiJson(
       `/api/web/builtin-novels/${encodeURIComponent(packageId)}/clone`,
@@ -2164,9 +2281,18 @@ async function handleCloneBuiltinNovel(packageId, title = "") {
     closeBuiltinNovelModal();
     applyRunViewSafely(run);
     await loadRunsOverview();
-    setStatus("bookshelf-status", safeTitle ? `《${safeTitle}》已经落到你的书架里，可以直接开聊。` : "内置小说已经复制到你的书架里。");
+    setFlowStatusMessage("bookshelf-status", {
+      message: safeTitle ? `《${safeTitle}》已经落到你的书架里。` : "内置小说已经复制到你的书架里。",
+      nextStep: "现在可以直接开聊，或先看人物和关系整理情况。",
+    });
   } catch (error) {
-    setStatus("builtin-novel-status", error.message || "这卷内置小说暂时没有复制成功。");
+    setFlowStatusMessage("builtin-novel-status", {
+      message: error.message || "这卷内置小说暂时没有复制成功。",
+      impact: "这不会影响你现有书架和聊天。",
+      nextStep: "可以稍后再试，或先从本地导入小说包。",
+    });
+  } finally {
+    setButtonBusyState(trigger, false, { idleText: "复制到我的书架", busyText: "复制中..." });
   }
 }
 
@@ -2179,7 +2305,11 @@ async function handleImportRunPackage(event) {
   if (!(input instanceof HTMLInputElement)) return;
   const file = input.files?.[0];
   if (!file) return;
-  setStatus("bookshelf-status", `正在导入 ${file.name}...`);
+  setButtonBusyState("bookshelf-import-run-button", true, { idleText: "导入小说包", busyText: "导入中..." });
+  setFlowStatusMessage("bookshelf-status", {
+    message: `正在导入 ${file.name}...`,
+    nextStep: "导入完成后会自动落到你的书架里。",
+  });
   try {
     const run = await apiJson(
       "/api/web/runs/import",
@@ -2196,21 +2326,37 @@ async function handleImportRunPackage(event) {
     input.value = "";
     applyRunViewSafely(run);
     await loadRunsOverview();
-    setStatus("bookshelf-status", `《${runNovelTitle(run)}》已经导入到你的书架。`);
+    setFlowStatusMessage("bookshelf-status", {
+      message: `《${runNovelTitle(run)}》已经导入到你的书架。`,
+      nextStep: "现在可以直接开聊，或先校对人物信息。",
+    });
   } catch (error) {
     input.value = "";
-    setStatus("bookshelf-status", error.message || "这次导入没有接上。");
+    setFlowStatusMessage("bookshelf-status", {
+      message: error.message || "这次导入没有接上。",
+      impact: "这不会影响你当前已经在聊的会话或已有书卷。",
+      nextStep: "可以检查小说包是否完整后再试。",
+    });
+  } finally {
+    setButtonBusyState("bookshelf-import-run-button", false, { idleText: "导入小说包", busyText: "导入中..." });
   }
 }
 
 async function handleExportRunPackage() {
   if (!currentRunId) {
-    setStatus("bookshelf-status", "先选中一卷书，再导出小说包。");
+    setFlowStatusMessage("bookshelf-status", {
+      message: "先选中一卷书，再导出小说包。",
+      nextStep: "进入某一卷详情后，这里就可以直接导出。",
+    });
     return;
   }
   const run = currentRun || findRunById(currentRunId);
   if (String(run?.status || "").trim() === "running") {
-    setStatus("bookshelf-status", "这本书还在整理中，等这一轮结束后再导出。");
+    setFlowStatusMessage("bookshelf-status", {
+      message: "这本书还在整理中，等这一轮结束后再导出。",
+      impact: "这不会影响你继续看进度或直接聊天。",
+      nextStep: "等整理结束后再导出即可。",
+    });
     return;
   }
   const runId = String(currentRunId || "").trim();
@@ -2219,7 +2365,11 @@ async function handleExportRunPackage() {
   }
   const title = runNovelTitle(run);
   setRunPackageExportPending(runId, true);
-  setStatus("bookshelf-status", `正在打包《${title}》的小说包...`);
+  setButtonBusyState("detail-export-package-button", true, { idleText: "导出小说包", busyText: "导出中..." });
+  setFlowStatusMessage("bookshelf-status", {
+    message: `正在打包《${title}》的小说包...`,
+    nextStep: "打包完成后会自动开始下载。",
+  });
   try {
     const response = await fetch(`/api/web/runs/${encodeURIComponent(runId)}/export`);
     if (!response.ok) {
@@ -2229,11 +2379,19 @@ async function handleExportRunPackage() {
     const blob = await response.blob();
     const fallbackName = `${String(run?.novel_id || title || "zaomeng-run").trim() || "zaomeng-run"}.zaomeng-run.zip`;
     downloadBlobFile(blob, resolveDownloadFilename(response, fallbackName));
-    setStatus("bookshelf-status", `《${title}》的小说包已经准备好，正在开始下载。`);
+    setFlowStatusMessage("bookshelf-status", {
+      message: `《${title}》的小说包已经准备好，正在开始下载。`,
+      nextStep: "你可以把它导入到别的设备，或放进内置小说目录。",
+    });
   } catch (error) {
-    setStatus("bookshelf-status", error.message || "这次导出没有接上。");
+    setFlowStatusMessage("bookshelf-status", {
+      message: error.message || "这次导出没有接上。",
+      impact: "这不会影响这卷继续聊天或继续校对。",
+      nextStep: "可以稍后重试；如果书还在整理中，等结束后再导出更稳。",
+    });
   } finally {
     setRunPackageExportPending(runId, false);
+    setButtonBusyState("detail-export-package-button", false, { idleText: "导出小说包", busyText: "导出中..." });
   }
 }
 
@@ -2275,7 +2433,10 @@ function renderAppUpdateStatus(status) {
   appUpdateStatus = status || null;
   setText("app-update-current-version", status?.current_version || "-", "");
   setText("app-update-remote-version", status?.remote_version || "-", "");
-  setStatus("app-update-status", status?.message || "");
+  setFlowStatusMessage("app-update-status", {
+    message: status?.message || "",
+    nextStep: String(status?.status || "") === "completed" && status?.reload_required ? "页面很快会自动刷新。" : "",
+  });
   const confirmButton = el("confirm-app-update-button");
   const closeButton = el("close-app-update-button");
   const dismissButton = el("dismiss-app-update-button");
@@ -2308,7 +2469,11 @@ function scheduleAppUpdatePolling() {
         window.setTimeout(() => window.location.reload(), 900);
       }
     } catch (error) {
-      setStatus("app-update-status", error.message || "刚才那次更新状态暂时没取到。");
+      setFlowStatusMessage("app-update-status", {
+        message: error.message || "刚才那次更新状态暂时没取到。",
+        impact: "这不会影响你继续使用当前版本。",
+        nextStep: "稍后可以再手动检查一次更新。",
+      });
     }
   }, 1200);
 }
@@ -2331,9 +2496,11 @@ function dismissAppUpdateModal() {
 }
 
 async function handleConfirmAppUpdate() {
-  const confirmButton = el("confirm-app-update-button");
-  if (confirmButton) confirmButton.disabled = true;
-  setStatus("app-update-status", "正在替你接上更新...");
+  setButtonBusyState("confirm-app-update-button", true, { idleText: "现在更新", busyText: "更新中..." });
+  setFlowStatusMessage("app-update-status", {
+    message: "正在替你接上更新...",
+    nextStep: "更新完成后会自动刷新当前页面。",
+  });
   try {
     const status = await apiJson(
       "/api/web/settings/update",
@@ -2346,8 +2513,12 @@ async function handleConfirmAppUpdate() {
     openAppUpdateModal();
     scheduleAppUpdatePolling();
   } catch (error) {
-    if (confirmButton) confirmButton.disabled = false;
-    setStatus("app-update-status", error.message || "这次更新没有接上。");
+    setButtonBusyState("confirm-app-update-button", false, { idleText: "现在更新", busyText: "更新中..." });
+    setFlowStatusMessage("app-update-status", {
+      message: error.message || "这次更新没有接上。",
+      impact: "这不会影响你继续使用当前版本聊天。",
+      nextStep: "可以稍后再试更新。",
+    });
   }
 }
 

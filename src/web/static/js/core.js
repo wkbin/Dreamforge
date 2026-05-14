@@ -270,6 +270,43 @@ function setStatus(id, value = "") {
   node.textContent = value;
 }
 
+function joinStatusParts(parts = []) {
+  return (Array.isArray(parts) ? parts : [])
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function setFlowStatus(id, options = {}) {
+  const message = String(options.message || "").trim();
+  const impact = String(options.impact || "").trim();
+  const nextStep = String(options.nextStep || "").trim();
+  setStatus(id, joinStatusParts([message, impact, nextStep]));
+}
+
+function setButtonBusy(target, pending, options = {}) {
+  const node = typeof target === "string" ? el(target) : target;
+  if (!node) return;
+  const idleText = String(options.idleText || node.dataset.idleText || node.textContent || "").trim();
+  const busyText = String(options.busyText || node.dataset.busyText || idleText || "").trim();
+  if (!node.dataset.idleText) {
+    node.dataset.idleText = idleText;
+  }
+  if (!node.dataset.busyText) {
+    node.dataset.busyText = busyText;
+  }
+  node.disabled = Boolean(pending);
+  node.dataset.loading = pending ? "true" : "false";
+  node.classList.toggle("is-busy", Boolean(pending));
+  node.textContent = pending ? (busyText || idleText) : (node.dataset.idleText || idleText);
+}
+
+window.__ZAOMENG_FLOW_FEEDBACK__ = {
+  joinStatusParts,
+  setFlowStatus,
+  setButtonBusy,
+};
+
 function setValue(id, value = "") {
   const node = el(id);
   if (!node) return null;

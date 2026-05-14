@@ -412,8 +412,10 @@ def build_dialogue_suggestion_llm_messages(
         "优先服从 self-insert 的核心身份、故事位置、灵魂目标、气质底色、世界观、信念支点、说话方式、应激反应和 interaction_style。",
         "如果上下文允许多种接法，优先选更符合 user_persona 的那一种，而不是只做一个泛用接话。",
         "如果 mode=act，就按 controlled character 的 persona profile、speech_style、temperament 和典型说话习惯来写。",
-        "如果 mode=observe，就把这句话写成推动剧情的场景提示：让局势往前走，而不是复述、总结或劝说。",
+        "如果 mode=observe，就把这句话写成推动剧情的场景提示：让局势往前走，而不是复述、总结、劝说或规划。",
         "如果 scene_progress 显示这一拍已经成熟、适合转场，就优先写成自然的转场推进；如果还没到转场时机，就优先续当前这一拍的动作、情绪或张力。",
+        "如果 mode=observe，句子必须像“下一下已经发生了”的即时场景推进，而不是“要不要/不如/可以让他们/继续聊”这种调度口吻。",
+        "如果 user_persona.profile.anchor_lines 里有当前目标、未收线或最近冲突，就优先咬住这些锚点来推进，不要另起一条太泛的新线。",
         "offstage_participants 里的人不要被你无端写回来，除非这句提示本身就在明确推动他们重新入场。",
         "如果 scene_card 存在，优先服从它给出的地点、气氛、开场局面、明面目标、暗线张力与推进方向。",
         "只输出一句最终可发送的成品台词，不要解释上下文，不要总结历史，不要提供建议理由，不要写“作为/当前场景/我们可以/你可以/建议/回复：”这类分析话术。",
@@ -448,6 +450,7 @@ def build_dialogue_suggestion_llm_messages(
                 "门外忽然传来两下敲门声，屋里一下静了。",
                 "江澄先看见了他袖口上的血，话到嘴边忽然顿住。",
                 "魏无羡低头笑了一下，却没立刻接这句话。",
+                "回廊外的雨忽然更近了，像是有人已经走到了檐下。",
             ],
         },
         "bad_examples": [
@@ -455,6 +458,8 @@ def build_dialogue_suggestion_llm_messages(
             "当前场景是对方在生气，我们可以先安抚……",
             "建议回复：先道歉，再解释。",
             "你们继续聊下去吧。",
+            "要不先让他们把刚才那句接下去？",
+            "不如让场景自然推进到下一幕。",
         ],
         "retry_on_empty": retry_on_empty,
     }
@@ -796,6 +801,16 @@ def _looks_like_meta_suggestion(text: str) -> bool:
     if any(token in normalized for token in meta_tokens):
         return True
     if any(token in lowered for token in ("context", "suggestion", "reply:", "analysis")):
+        return True
+    generic_observe_wrappers = (
+        "要不先让他们",
+        "不如让他们",
+        "先让他们",
+        "继续聊下去",
+        "让他们把刚才那句接下去",
+        "让场景自然推进",
+    )
+    if any(token in normalized for token in generic_observe_wrappers):
         return True
     return False
 

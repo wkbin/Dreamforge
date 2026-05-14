@@ -298,28 +298,127 @@ class MarkdownSessionStore(SessionStore):
         archived_entries: Sequence[Dict[str, Any]],
         summary_char_limit: int,
     ) -> str:
-        snippets = [self._entry_to_memory_text(entry) for entry in archived_entries]
-        snippets = [item for item in snippets if item]
-        head = "；".join(snippets[:4])
-        tail = "；".join(snippets[-4:])
-        candidate = f"{previous_summary}；{head}；{tail}" if previous_summary else f"{head}；{tail}"
+        salient = self._select_salient_snippets(archived_entries, limit=4)
+        tail = self._select_recent_snippets(archived_entries, limit=4)
+        promises = self._select_bucket_snippets(archived_entries, self._is_promise_entry, limit=2)
+        conflicts = self._select_bucket_snippets(archived_entries, self._is_conflict_entry, limit=2)
+        actions = self._select_bucket_snippets(archived_entries, self._is_action_entry, limit=2)
+        sections: list[str] = []
+        if promises:
+            sections.append(f"未完事项：{'；'.join(self._dedupe_snippets(promises))}")
+        if conflicts:
+            sections.append(f"冲突张力：{'；'.join(self._dedupe_snippets(conflicts))}")
+        if actions:
+            sections.append(f"动作场记：{'；'.join(self._dedupe_snippets(actions))}")
+        ordered = self._dedupe_snippets([*sections, *salient, *tail])
+        candidate_body = "；".join(ordered[:8])
+        candidate = f"{previous_summary}；{candidate_body}" if previous_summary and candidate_body else previous_summary or candidate_body
         condensed = re.sub(r"(；){2,}", "；", candidate).strip("； ")
         if len(condensed) <= summary_char_limit:
             return condensed
         return f"{condensed[:summary_char_limit].rstrip()}..."
 
     def _extract_key_points(self, archived_entries: Sequence[Dict[str, Any]], *, limit: int) -> List[str]:
-        points: list[str] = []
-        for entry in archived_entries:
+        salient = self._select_salient_snippets(archived_entries, limit=limit)
+        recent = self._select_recent_snippets(archived_entries, limit=max(2, limit // 2))
+        return self._dedupe_snippets([*salient, *recent])[:limit]
+
+    def _select_salient_snippets(self, archived_entries: Sequence[Dict[str, Any]], *, limit: int) -> List[str]:
+        scored: list[tuple[int, int, str]] = []
+        for index, entry in enumerate(archived_entries):
             text = self._entry_to_memory_text(entry)
             if not text:
                 continue
-            normalized = text.strip()
-            if normalized and normalized not in points:
-                points.append(normalized)
-            if len(points) >= limit:
+            score = self._salient_entry_score(entry, text)
+            if score <= 0:
+                continue
+            scored.append((score, index, text.strip()))
+        scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return self._dedupe_snippets([text for _, _, text in scored[:limit]])
+
+    def _select_recent_snippets(self, archived_entries: Sequence[Dict[str, Any]], *, limit: int) -> List[str]:
+        recent: list[str] = []
+        for entry in archived_entries[-limit:]:
+            text = self._entry_to_memory_text(entry)
+            if text:
+                recent.append(text.strip())
+        return recent
+
+    def _select_bucket_snippets(
+        self,
+        archived_entries: Sequence[Dict[str, Any]],
+        predicate: Any,
+        *,
+        limit: int,
+    ) -> List[str]:
+        items: list[str] = []
+        for entry in reversed(archived_entries):
+            text = self._entry_to_memory_text(entry)
+            if not text or not predicate(text):
+                continue
+            items.append(text.strip())
+            if len(items) >= limit:
                 break
-        return points[:limit]
+        return list(reversed(items))
+
+    @staticmethod
+    def _dedupe_snippets(items: Sequence[str]) -> List[str]:
+        unique: list[str] = []
+        seen: set[str] = set()
+        for item in items:
+            normalized = _normalize_text(item)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            unique.append(item.strip())
+        return unique
+
+    @staticmethod
+    def _salient_entry_score(entry: Dict[str, Any], text: str) -> int:
+        normalized = _normalize_text(text)
+        if not normalized:
+            return 0
+        speaker = str(entry.get("speaker", "")).strip()
+        score = 1
+        if speaker in {"场景提示", "旁白"}:
+            score += 4
+        if MarkdownSessionStore._is_promise_entry(normalized):
+            score += 3
+        if MarkdownSessionStore._is_conflict_entry(normalized):
+            score += 4
+        if MarkdownSessionStore._is_action_entry(normalized):
+            score += 2
+        if MarkdownSessionStore._is_unresolved_entry(normalized):
+            score += 3
+        if "（" in normalized or "(" in normalized:
+            score += 1
+        if len(normalized) >= 24:
+            score += 1
+        return score
+
+    @staticmethod
+    def _is_promise_entry(text: str) -> bool:
+        normalized = _normalize_text(text)
+        keywords = ("会", "要", "答应", "一定", "明天", "今晚", "回头", "随后", "改天")
+        return any(keyword in normalized for keyword in keywords)
+
+    @staticmethod
+    def _is_conflict_entry(text: str) -> bool:
+        normalized = _normalize_text(text)
+        keywords = ("别", "不要", "不能", "不行", "争", "吵", "怒", "恨", "怨", "逼", "质问", "反驳")
+        return any(keyword in normalized for keyword in keywords)
+
+    @staticmethod
+    def _is_action_entry(text: str) -> bool:
+        normalized = _normalize_text(text)
+        keywords = ("转身", "抬头", "低头", "看向", "走近", "后退", "推门", "沉默", "笑", "叹", "顿住", "停住")
+        return any(keyword in normalized for keyword in keywords) or "（" in normalized or "(" in normalized
+
+    @staticmethod
+    def _is_unresolved_entry(text: str) -> bool:
+        normalized = _normalize_text(text)
+        keywords = ("还没", "尚未", "先", "稍后", "等我", "之后", "改日", "待会")
+        return any(keyword in normalized for keyword in keywords)
 
     def _embed_local(self, text: str) -> List[float]:
         vec = [0.0] * self._local_vector_dimensions
