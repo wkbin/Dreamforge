@@ -2289,11 +2289,68 @@ const OBSERVE_QUICK_REPLIES = [
 ];
 let currentDialogueMessageKind = "dialogue";
 
+function buildObserveQuickReplies(session = currentDialogueSession) {
+  const overview = session?.runtime_state_overview || {};
+  const present = Array.isArray(overview?.present) ? overview.present.filter(Boolean) : [];
+  const offstage = Array.isArray(overview?.offstage) ? overview.offstage.filter(Boolean) : [];
+  const shouldShift = Boolean(overview?.should_offer_scene_shift);
+  const nextHint = String(overview?.next_hint || "").trim();
+  const tension = String(overview?.tension || "").trim();
+  const eventRows = Array.isArray(overview?.event_rows) ? overview.event_rows : [];
+  const dynamic = [];
+
+  if (shouldShift) {
+    dynamic.push({
+      label: "转下一幕",
+      value: nextHint || "这一拍差不多收住了，场面顺势往下一幕转过去。",
+    });
+  }
+  if (offstage.length) {
+    dynamic.push({
+      label: `切回${String(offstage[0]).slice(0, 4)}`,
+      value: `${offstage[0]}那边也有了新的动静，镜头顺势切过去。`,
+    });
+  }
+  if (present.length >= 2) {
+    dynamic.push({
+      label: "只留他们",
+      value: `旁的人都暂时退开，只剩${present.slice(0, 2).join("和")}把这句话接下去。`,
+    });
+  }
+  if (tension) {
+    dynamic.push({
+      label: "顺着张力",
+      value: "这股气氛没有散，反而又往前逼近了一步。",
+    });
+  }
+  const lastEvent = eventRows.length ? eventRows[eventRows.length - 1] : null;
+  if (lastEvent?.copy) {
+    dynamic.push({
+      label: "顺着波动",
+      value: String(lastEvent.copy || "").trim(),
+    });
+  }
+
+  const merged = [];
+  const seen = new Set();
+  [...dynamic, ...OBSERVE_QUICK_REPLIES].forEach((item) => {
+    const label = String(item?.label || "").trim();
+    const value = String(item?.value || "").trim();
+    if (!label || !value) return;
+    const key = `${label}::${value}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push({ label, value });
+  });
+  return merged.slice(0, 6);
+}
+
 function buildComposerUiState() {
   const area = el("dialogue-message");
   const sendButton = el("prepare-turn-button");
   const suggestButton = el("suggest-turn-button");
   const mode = currentDialogueSession?.mode || currentDialogueSession?.session_card?.mode || "";
+  const nextHint = mode === "observe" ? String(currentDialogueSession?.runtime_state_overview?.next_hint || "").trim() : "";
   return {
     mode,
     kind: normalizeDialogueMessageKind(currentDialogueMessageKind),
@@ -2303,7 +2360,8 @@ function buildComposerUiState() {
     suggestHidden: Boolean(suggestButton?.classList.contains("hidden")),
     suggestDisabled: Boolean(suggestButton?.disabled),
     sendDisabled: Boolean(sendButton?.disabled),
-    quickReplies: mode === "observe" ? OBSERVE_QUICK_REPLIES : [],
+    quickReplies: mode === "observe" ? buildObserveQuickReplies(currentDialogueSession) : [],
+    quickHint: nextHint,
   };
 }
 
@@ -2406,17 +2464,29 @@ function setSuggestingState(waiting) {
 
 function renderObserveQuickReplies(session = currentDialogueSession) {
   const root = el("observe-quick-replies");
+  const hint = el("observe-quick-hint");
+  const hintRow = el("observe-quick-hint-row");
+  const hintSend = el("observe-quick-hint-send");
   if (!root) return;
   const mode = session?.mode || session?.session_card?.mode || "";
   if (mode !== "observe") {
     root.innerHTML = "";
     root.classList.add("hidden");
+    if (hintRow) hintRow.classList.add("hidden");
+    if (hint) {
+      hint.textContent = "";
+      hint.classList.add("hidden");
+    }
+    if (hintSend) {
+      hintSend.classList.add("hidden");
+      hintSend.removeAttribute("data-value");
+    }
     publishComposerUiState("composer-quick-replies-hidden");
     return;
   }
 
   root.innerHTML = "";
-  OBSERVE_QUICK_REPLIES.forEach((item) => {
+  buildObserveQuickReplies(session).forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "quick-reply-chip";
@@ -2428,7 +2498,30 @@ function renderObserveQuickReplies(session = currentDialogueSession) {
     root.appendChild(button);
   });
   root.classList.remove("hidden");
+  const nextHint = String(session?.runtime_state_overview?.next_hint || "").trim();
+  if (hint) {
+    hint.textContent = nextHint ? `顺手往下推：${nextHint}` : "";
+    hint.classList.toggle("hidden", !nextHint);
+  }
+  if (hintSend) {
+    hintSend.classList.toggle("hidden", !nextHint);
+    if (nextHint) {
+      hintSend.setAttribute("data-value", nextHint);
+    } else {
+      hintSend.removeAttribute("data-value");
+    }
+  }
+  if (hintRow) {
+    hintRow.classList.toggle("hidden", !nextHint);
+  }
   publishComposerUiState("composer-quick-replies-rendered");
+}
+
+async function applyQuickHint() {
+  const button = el("observe-quick-hint-send");
+  const value = String(button?.getAttribute("data-value") || "").trim();
+  if (!value) return;
+  await applyQuickReply(value);
 }
 
 async function applyQuickReply(value) {
@@ -2806,6 +2899,11 @@ function bindEvents() {
     if (typeof window.toggleDialogueMemory === "function") {
       window.toggleDialogueMemory();
     }
+  });
+  bind("observe-quick-hint-send", "click", () => {
+    applyQuickHint().catch((error) => {
+      setStatus("dialogue-session-status", error.message || "这句推进提示暂时没有送出去。");
+    });
   });
   bind("close-dialogue-memory-modal-button", "click", () => {
     if (typeof window.closeDialogueMemoryModal === "function") {

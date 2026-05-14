@@ -58,6 +58,7 @@
       );
       const placeholder = computed(() => String(composer.value.placeholder || ""));
       const quickReplies = computed(() => (Array.isArray(composer.value.quickReplies) ? composer.value.quickReplies : []));
+      const quickHint = computed(() => String(composer.value.quickHint || "").trim());
       const disabled = computed(() => Boolean(composer.value.disabled));
       const suggestHidden = computed(() => Boolean(composer.value.suggestHidden) || mode.value === "observe");
       const suggestDisabled = computed(() => Boolean(composer.value.suggestDisabled));
@@ -114,6 +115,7 @@
         draftKind,
         handleEnter,
         placeholder,
+        quickHint,
         quickReplies,
         quickReply,
         send,
@@ -137,6 +139,18 @@
             @click="quickReply(item.value)"
           >
             {{ item.label }}
+          </button>
+        </div>
+
+        <div v-if="quickHint" class="observe-quick-hint-row">
+          <p class="observe-quick-hint">顺手往下推：{{ quickHint }}</p>
+          <button
+            type="button"
+            class="soft-button"
+            :disabled="disabled"
+            @click="quickReply(quickHint)"
+          >
+            按提示推进
           </button>
         </div>
 
