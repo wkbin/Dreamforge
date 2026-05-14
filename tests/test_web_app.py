@@ -155,6 +155,197 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertGreaterEqual(len(payload["chain_suggestions"][0]["scenes"]), 2)
             self.assertTrue(str(payload["chain_suggestions"][0]["reason"]).strip())
 
+    def test_dialogue_scene_card_recommendation_stays_in_same_location_when_beat_is_early(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            current_scene = service.save_scene_card(
+                fields={
+                    "title": "雨夜回廊",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "雨声压着话头",
+                    "opening_situation": "两个人还站在檐下，谁都没把话说透。",
+                    "public_goal": "先试出彼此来意。",
+                    "hidden_tension": "有些旧话一碰就要翻出来。",
+                    "scene_drive": "让试探再压低一层。",
+                    "expected_rhythm": "慢热",
+                    "forbidden_topics": "旧账",
+                }
+            )
+            same_location = service.save_scene_card(
+                fields={
+                    "title": "回廊压低声气",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "静得能听见雨线擦过栏杆",
+                    "opening_situation": "两个人谁也没走，反而把声音压得更低。",
+                    "public_goal": "顺着刚才的话再往里探一步。",
+                    "hidden_tension": "谁先心软谁就先露了底。",
+                    "scene_drive": "让场面继续收紧，不急着换幕。",
+                    "expected_rhythm": "缓慢加压",
+                    "forbidden_topics": "外人",
+                }
+            )
+            service.save_scene_card(
+                fields={
+                    "title": "转入花厅",
+                    "time_hint": "夜深",
+                    "location": "花厅",
+                    "atmosphere": "人多却更安静",
+                    "opening_situation": "雨势更大，众人被催着转到花厅落座。",
+                    "public_goal": "先把场面稳住。",
+                    "hidden_tension": "真正要问的话还压在心口。",
+                    "scene_drive": "从试探转向更公开的拉扯。",
+                    "expected_rhythm": "三句一推进",
+                    "forbidden_topics": "旧案",
+                }
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "回廊里只剩雨声和一句没说完的话。"}],
+            ):
+                session = service.create_dialogue_session(
+                    run["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉"],
+                    scene_card_id=current_scene["card_id"],
+                )
+
+            service.dialogue.update_scene_progress_state(
+                run["run_id"],
+                session["session_id"],
+                {
+                    "location": "回廊",
+                    "time_hint": "深夜",
+                    "atmosphere_summary": "雨声压着话头，谁都没有退开",
+                    "beat_maturity": 22,
+                    "should_offer_scene_shift": False,
+                    "scene_shift_reason": "",
+                    "world_tension_summary": "两个人都还在试探，还没到换场的时候",
+                },
+            )
+
+            payload = service.recommend_dialogue_scene_card(run["run_id"], session_id=session["session_id"])
+
+            self.assertEqual(payload["recommended_card_id"], same_location["card_id"])
+
+    def test_dialogue_scene_card_recommendation_uses_runtime_shift_reason_in_transition_hint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            current_scene = service.save_scene_card(
+                fields={
+                    "title": "雨夜回廊",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "雨声压得人心发紧",
+                    "opening_situation": "两个人被雨隔在檐下，话已经逼到边上。",
+                    "public_goal": "先稳住表面客气。",
+                    "hidden_tension": "真正的问题已经快藏不住了。",
+                    "scene_drive": "让试探逼近摊牌。",
+                    "expected_rhythm": "慢热",
+                    "forbidden_topics": "前尘",
+                }
+            )
+            next_scene = service.save_scene_card(
+                fields={
+                    "title": "灯下入席",
+                    "time_hint": "夜深",
+                    "location": "花厅",
+                    "atmosphere": "灯火亮着，谁都更难回避彼此",
+                    "opening_situation": "雨脚催着众人换到花厅，落座后谁也没先碰茶。",
+                    "public_goal": "把表面话撑到头。",
+                    "hidden_tension": "下一句就可能把真正心思挑明。",
+                    "scene_drive": "让局面顺势从回避转向正面相对。",
+                    "expected_rhythm": "越聊越紧",
+                    "forbidden_topics": "闲话",
+                }
+            )
+            service.save_scene_card(
+                fields={
+                    "title": "回廊再压一拍",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "雨线更急，但还是没人挪步",
+                    "opening_situation": "两个人还站在原地，只把语气压得更轻。",
+                    "public_goal": "把上一句试探再咬紧一点。",
+                    "hidden_tension": "谁先退让谁就输了这口气。",
+                    "scene_drive": "继续在原地消磨彼此的耐心。",
+                    "expected_rhythm": "慢压",
+                    "forbidden_topics": "旁人",
+                }
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "雨已经大到不得不换个地方把话说完。"}],
+            ):
+                session = service.create_dialogue_session(
+                    run["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉"],
+                    scene_card_id=current_scene["card_id"],
+                )
+
+            service.dialogue.update_scene_progress_state(
+                run["run_id"],
+                session["session_id"],
+                {
+                    "location": "回廊",
+                    "time_hint": "深夜",
+                    "atmosphere_summary": "雨势更重，回避已经压不住了",
+                    "beat_maturity": 82,
+                    "should_offer_scene_shift": True,
+                    "scene_shift_reason": "雨势压得两人都没法再站在回廊里装作无事",
+                    "world_tension_summary": "再拖一两句，局面就会逼到必须正面开口",
+                },
+            )
+
+            payload = service.recommend_dialogue_scene_card(run["run_id"], session_id=session["session_id"])
+
+            self.assertEqual(payload["recommended_card_id"], next_scene["card_id"])
+            self.assertIn("雨势压得两人都没法再站在回廊里装作无事", payload["recommended_transition_message"])
+
     def test_dialogue_scene_history_tracks_initial_scene_and_switches(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)
