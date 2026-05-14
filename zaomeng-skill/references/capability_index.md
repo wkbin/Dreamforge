@@ -153,6 +153,10 @@ Optional helpers for the dialogue stage:
 - `tools/build_dialogue_suggestion_payload.py`
   - build one-line suggestion payloads for `act` / `insert` / `observe`
   - provide compact retry payloads for long-context fallback
+- `tools/build_scene_recommendation_payload.py`
+  - build next-scene recommendation bundles for the current dialogue state
+  - provide transition text, chain suggestions, and an auto-continue opening cue
+  - see `examples/scene_recommendation_context.example.json` for a starter context shape
 
 ## Read Order
 

@@ -114,6 +114,21 @@ The tool returns:
 - retry messages
 - parser contract for model output
 
+If the host wants the skill to help decide what the next beat should be, call:
+
+- `tools/build_scene_recommendation_payload.py --context-file <context.json>`
+
+The tool returns:
+
+- ranked next-scene candidates
+- a recommended transition message
+- scene chain suggestions for follow-up beats
+- a `recommended_auto_continue_message` the host can feed back into its dialogue engine immediately after switching scenes
+
+Recommended starter context:
+
+- `examples/scene_recommendation_context.example.json`
+
 ## Recommended Artifact Read Order
 
 1. `run_manifest.json`

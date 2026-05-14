@@ -1,5 +1,6 @@
 
 from .entrypoints import (
+    continue_dialogue_scene_opening_payload,
     create_dialogue_session_payload,
     reply_dialogue_turn_payload,
     suggest_dialogue_turn_payload,
@@ -31,6 +32,7 @@ __all__ = [
     "build_dialogue_opening_message",
     "build_dialogue_scene_progress_messages",
     "compact_dialogue_suggestion_payload",
+    "continue_dialogue_scene_opening_payload",
     "create_dialogue_session_payload",
     "friendly_dialogue_llm_error",
     "generate_dialogue_suggestion",

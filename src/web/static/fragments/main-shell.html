@@ -26,16 +26,55 @@
                 <strong>中途转场</strong>
                 <small>切一张场景卡，再补一句转场提示，就能把这一幕顺手推过去。</small>
               </div>
+              <p id="dialogue-live-scene-context" class="dialogue-live-scene-context hidden"></p>
+              <div id="dialogue-live-scene-shift-hint" class="dialogue-live-scene-shift-hint hidden">
+                <p id="dialogue-live-scene-shift-copy" class="dialogue-live-scene-shift-copy"></p>
+                <button id="dialogue-live-scene-shift-recommend" type="button" class="soft-button">顺手切到下一幕</button>
+              </div>
               <div class="dialogue-scene-switcher-row">
                 <button id="dialogue-live-scene-recommend" type="button" class="soft-button">推荐下一幕</button>
                 <select id="dialogue-live-scene-card"></select>
                 <button id="dialogue-live-scene-apply" type="button" class="soft-button">切换场景</button>
               </div>
+              <div id="dialogue-live-scene-recommendation" class="dialogue-live-scene-recommendation hidden"></div>
               <textarea id="dialogue-live-scene-transition" rows="2" placeholder="例如：雨势更大，众人不得不转入花厅。"></textarea>
               <p id="dialogue-live-scene-status" class="card-note"></p>
               <div id="dialogue-scene-chain-suggestions" class="dialogue-scene-chain-suggestions hidden"></div>
             </div>
             <div id="dialogue-scene-timeline" class="dialogue-scene-timeline hidden"></div>
+            <section id="dialogue-state-overview" class="dialogue-state-overview hidden">
+              <div class="dialogue-state-overview-head">
+                <strong>本局状态</strong>
+                <small>这一拍推进到哪、谁在场、气氛往哪边偏，都收在这里。</small>
+              </div>
+              <div id="dialogue-state-pills" class="dialogue-state-pills"></div>
+              <div class="dialogue-state-grid">
+                <article class="dialogue-state-card">
+                  <span>当前在场</span>
+                  <div id="dialogue-state-present" class="dialogue-state-chip-list"></div>
+                </article>
+                <article class="dialogue-state-card">
+                  <span>暂时离场</span>
+                  <div id="dialogue-state-offstage" class="dialogue-state-chip-list is-muted"></div>
+                </article>
+                <article class="dialogue-state-card">
+                  <span>局势张力</span>
+                  <p id="dialogue-state-tension">这一拍的情绪和冲突会收在这里。</p>
+                </article>
+                <article class="dialogue-state-card">
+                  <span>角色快照</span>
+                  <div id="dialogue-state-characters" class="dialogue-state-mini-list"></div>
+                </article>
+                <article class="dialogue-state-card">
+                  <span>关系漂移</span>
+                  <div id="dialogue-state-relations" class="dialogue-state-mini-list"></div>
+                </article>
+                <article class="dialogue-state-card">
+                  <span>最近波动</span>
+                  <div id="dialogue-state-events" class="dialogue-state-mini-list"></div>
+                </article>
+              </div>
+            </section>
             <div class="dialogue-memory-grid">
               <article class="dialogue-memory-card">
                 <span>场景回顾</span>
@@ -77,6 +116,10 @@
     <div class="composer-card">
       <div id="composer-vue-root" class="composer-vue-root hidden"></div>
       <div id="observe-quick-replies" class="quick-reply-row hidden"></div>
+      <div id="observe-quick-hint-row" class="observe-quick-hint-row hidden">
+        <p id="observe-quick-hint" class="observe-quick-hint hidden"></p>
+        <button id="observe-quick-hint-send" type="button" class="soft-button hidden">按提示推进</button>
+      </div>
       <div class="composer-main">
         <div id="dialogue-message-kind" class="composer-kind-toggle" role="group" aria-label="输入类型">
           <button type="button" class="kind-chip active" data-kind="dialogue">台词</button>

@@ -209,6 +209,226 @@ function buildDialogueMemorySnapshot(session) {
   };
 }
 
+function renderDialogueStatePills(root, items) {
+  if (!root) return;
+  root.innerHTML = "";
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const text = String(item?.text || "").trim();
+    if (!text) return;
+    const chip = document.createElement("span");
+    chip.className = `dialogue-state-pill${item?.faint ? " is-faint" : ""}`;
+    chip.textContent = text;
+    root.appendChild(chip);
+  });
+}
+
+function renderDialogueStateChipList(root, items, emptyText = "暂时还没有明显变化。") {
+  if (!root) return;
+  root.innerHTML = "";
+  const values = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!values.length) {
+    const chip = document.createElement("span");
+    chip.className = "dialogue-state-chip is-faint";
+    chip.textContent = emptyText;
+    root.appendChild(chip);
+    return;
+  }
+  values.forEach((value) => {
+    const chip = document.createElement("span");
+    chip.className = "dialogue-state-chip";
+    chip.textContent = String(value || "").trim();
+    root.appendChild(chip);
+  });
+}
+
+function renderDialogueStateMiniList(root, items, emptyText = "这一栏还没有收出明显变化。") {
+  if (!root) return;
+  root.innerHTML = "";
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!rows.length) {
+    const item = document.createElement("div");
+    item.className = "dialogue-state-mini-item";
+    const copy = document.createElement("p");
+    copy.textContent = emptyText;
+    item.appendChild(copy);
+    root.appendChild(item);
+    return;
+  }
+  rows.forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "dialogue-state-mini-item";
+    const title = document.createElement("strong");
+    title.textContent = String(row?.title || "").trim() || "未命名";
+    item.appendChild(title);
+    const copy = document.createElement("p");
+    copy.textContent = String(row?.copy || "").trim() || emptyText;
+    item.appendChild(copy);
+    root.appendChild(item);
+  });
+}
+
+function buildDialogueStateSnapshot(session) {
+  const overview = session?.runtime_state_overview || null;
+  if (overview && typeof overview === "object") {
+    return {
+      present: Array.isArray(overview.present) ? overview.present.filter(Boolean) : [],
+      offstage: Array.isArray(overview.offstage) ? overview.offstage.filter(Boolean) : [],
+      pills: Array.isArray(overview.pills) ? overview.pills.filter((item) => String(item?.text || "").trim()) : [],
+      tension: trimInlineMessage(String(overview.tension || "").trim()) || "这一拍的情绪和冲突会收在这里。",
+      characterRows: Array.isArray(overview.character_rows) ? overview.character_rows : [],
+      relationRows: Array.isArray(overview.relation_rows) ? overview.relation_rows : [],
+      eventRows: Array.isArray(overview.event_rows) ? overview.event_rows : [],
+      statusLine: trimInlineMessage(String(overview.status_line || "").trim()),
+      nextHint: trimInlineMessage(String(overview.next_hint || "").trim()),
+    };
+  }
+  const state = session?.state || {};
+  const scene = state?.scene || {};
+  const presence = state?.presence || {};
+  const progression = state?.progression || {};
+  const progress = session?.scene_progress || {};
+  const present = Array.isArray(progress?.present_participants) ? progress.present_participants : (presence?.present_participants || []);
+  const offstage = Array.isArray(progress?.offstage_participants) ? progress.offstage_participants : (presence?.offstage_participants || []);
+  const location = String(progress?.location || scene?.location || "").trim();
+  const timeHint = String(progress?.time_hint || scene?.time_hint || "").trim();
+  const atmosphere = trimInlineMessage(String(progress?.atmosphere_summary || scene?.atmosphere_summary || "").trim());
+  const beatMaturity = Number(progress?.beat_maturity || progression?.beat_maturity || 0) || 0;
+  const canShift = Boolean(progress?.should_offer_scene_shift ?? progression?.should_offer_scene_shift);
+  const shiftReason = trimInlineMessage(String(progress?.scene_shift_reason || progression?.scene_shift_reason || "").trim());
+  const tension = trimInlineMessage(
+    String(progress?.world_tension_summary || progression?.world_tension_summary || session?.session_memory_summary?.world || "").trim()
+  ) || "这一拍的情绪和冲突会收在这里。";
+  const characterSnapshots = session?.character_snapshots || state?.characters?.snapshots || {};
+  const relationDelta = session?.relation_delta || state?.relations?.delta || {};
+
+  const pills = [];
+  if (location) pills.push({ text: `地点 · ${location}` });
+  if (timeHint) pills.push({ text: `时间 · ${timeHint}` });
+  if (atmosphere) pills.push({ text: `氛围 · ${atmosphere}` });
+  if (beatMaturity > 0) pills.push({ text: `推进 ${Math.max(0, Math.min(100, Math.round(beatMaturity)))}/100` });
+  if (canShift) pills.push({ text: shiftReason ? `可转场 · ${shiftReason}` : "这一拍可以顺势转场" });
+
+  const characterRows = Object.entries(characterSnapshots)
+    .map(([name, snapshot]) => {
+      const item = snapshot || {};
+      const parts = [];
+      const presentState = String(item?.present_state || "").trim();
+      if (presentState === "onstage") parts.push("在场");
+      if (presentState === "offstage") parts.push("离场");
+      if (item?.mood) parts.push(String(item.mood).trim());
+      if (item?.interaction_state) parts.push(String(item.interaction_state).trim());
+      if (item?.focus) parts.push(`看向 ${String(item.focus).trim()}`);
+      if (item?.scene_location && String(item.scene_location).trim() !== location) {
+        parts.push(String(item.scene_location).trim());
+      }
+      return {
+        title: String(name || "").trim(),
+        copy: parts.filter(Boolean).join(" · "),
+        weight: presentState === "onstage" ? 0 : 1,
+      };
+    })
+    .filter((item) => item.title)
+    .sort((left, right) => {
+      if (left.weight !== right.weight) return left.weight - right.weight;
+      return left.title.localeCompare(right.title, "zh-Hans-CN");
+    })
+    .slice(0, 4)
+    .map(({ title, copy }) => ({ title, copy: copy || "这一拍还没有额外漂移。" }));
+
+  const relationRows = Object.entries(relationDelta)
+    .map(([pairKey, delta]) => {
+      const item = delta || {};
+      const metrics = [];
+      [["trust", "信任"], ["affection", "好感"], ["hostility", "敌意"], ["ambiguity", "摇摆"]].forEach(([field, label]) => {
+        const value = Number(item?.[field] || 0) || 0;
+        if (!value) return;
+        metrics.push(`${label}${value > 0 ? "+" : ""}${value}`);
+      });
+      const lastEvent = trimInlineMessage(String(item?.last_event || "").trim());
+      return {
+        title: String(pairKey || "").trim().replace(/_/g, " · "),
+        copy: metrics.length ? `${metrics.join(" / ")}${lastEvent ? ` · ${lastEvent}` : ""}` : (lastEvent || "这组关系本局有变化。"),
+      };
+    })
+    .filter((item) => item.title)
+    .slice(0, 3);
+
+  const eventKindLabel = {
+    scene_transition: "转场",
+    cast_enter: "入场",
+    cast_exit: "离场",
+    atmosphere_shift: "气氛变化",
+    time_change: "时间推进",
+    environment_change: "环境变化",
+    beat_complete: "一拍收束",
+    relationship_shift: "关系变化",
+    micro_action: "细微动作",
+  };
+  return {
+    present: Array.isArray(present) ? present.filter(Boolean) : [],
+    offstage: Array.isArray(offstage) ? offstage.filter(Boolean) : [],
+    pills,
+    tension,
+    characterRows,
+    relationRows,
+    eventRows: Array.isArray(session?.event_signals?.recent)
+      ? session.event_signals.recent.slice(-4).map((item) => ({
+          title: [
+            eventKindLabel[String(item?.kind || "").trim()] || String(item?.kind || "").trim(),
+            String(item?.actor || "").trim(),
+            String(item?.target || "").trim(),
+          ].filter(Boolean).join(" · ") || "事件",
+          copy: trimInlineMessage(String(item?.cue || "").trim()) || "这一拍有了新波动。",
+        }))
+      : [],
+    statusLine: "",
+    nextHint: "",
+  };
+}
+
+function renderDialogueStateOverview(session) {
+  const root = el("dialogue-state-overview");
+  if (!root || !session) return;
+  const snapshot = buildDialogueStateSnapshot(session);
+  const hasContent = Boolean(
+    snapshot.pills.length || snapshot.present.length || snapshot.offstage.length || snapshot.characterRows.length || snapshot.relationRows.length || snapshot.eventRows?.length || snapshot.tension
+  );
+  root.classList.toggle("hidden", !hasContent);
+  if (!hasContent) return;
+  renderDialogueStatePills(el("dialogue-state-pills"), snapshot.pills);
+  renderDialogueStateChipList(el("dialogue-state-present"), snapshot.present, "这会儿还没有明确在场名单。");
+  renderDialogueStateChipList(el("dialogue-state-offstage"), snapshot.offstage, "暂时没人明确离场。");
+  setText("dialogue-state-tension", snapshot.tension, "这一拍的情绪和冲突会收在这里。");
+  renderDialogueStateMiniList(el("dialogue-state-characters"), snapshot.characterRows, "角色快照会在聊出状态差后收进来。");
+  renderDialogueStateMiniList(el("dialogue-state-relations"), snapshot.relationRows, "关系要聊出明显变化，才会在这里留下痕迹。");
+  renderDialogueStateMiniList(el("dialogue-state-events"), snapshot.eventRows || [], "最近还没有收出更明确的事件波动。");
+}
+
+function buildDialogueSessionStatusLine(session) {
+  const snapshot = buildDialogueStateSnapshot(session);
+  if (snapshot.statusLine) {
+    return snapshot.statusLine;
+  }
+  const bits = [];
+  const pillTexts = Array.isArray(snapshot.pills)
+    ? snapshot.pills.map((item) => String(item?.text || "").trim()).filter(Boolean)
+    : [];
+  if (pillTexts.length) {
+    bits.push(pillTexts.slice(0, 3).join(" · "));
+  }
+  if (Array.isArray(snapshot.present) && snapshot.present.length) {
+    bits.push(`在场：${snapshot.present.slice(0, 3).join("、")}`);
+  }
+  if (Array.isArray(snapshot.offstage) && snapshot.offstage.length) {
+    bits.push(`离场：${snapshot.offstage.slice(0, 2).join("、")}`);
+  }
+  const tension = trimInlineMessage(snapshot.tension || "");
+  if (tension) {
+    bits.push(`张力：${tension}`);
+  }
+  return bits.filter(Boolean).join(" ｜ ");
+}
+
 function renderDialogueMemory(session) {
   const root = el("dialogue-memory");
   if (!root) return;
@@ -245,6 +465,7 @@ function renderDialogueMemory(session) {
   if (body) {
     body.classList.toggle("hidden", body.parentElement === root);
   }
+  renderDialogueStateOverview(session);
   renderDialogueSceneTimeline(session);
   if (typeof window.renderDialogueSceneSwitcher === "function") {
     window.renderDialogueSceneSwitcher(session);
@@ -339,6 +560,7 @@ function buildDialogueMemoryClipboardText(session) {
     `【本局记忆】`,
     `模式：${snapshot.modeLabel}`,
     `同席：${participantText}`,
+    `本局状态：${buildDialogueStateSnapshot(session).pills.map((item) => item.text).join(" / ") || "暂无"}`,
     `场景回顾：${snapshot.recap}`,
     `人物动向：${snapshot.cast}`,
     `关系变化：${snapshot.relation}`,
@@ -599,7 +821,7 @@ function latestSessionSnippetFromTranscript(items) {
 }
 
 async function maybeAutoRecommendNextScene(session) {
-  const progress = session?.scene_progress || {};
+  const progress = session?.runtime_state_overview || session?.scene_progress || {};
   const sessionId = String(session?.session_id || "").trim();
   if (!sessionId || !progress?.should_offer_scene_shift) return;
   const button = el("dialogue-live-scene-recommend");
@@ -608,10 +830,10 @@ async function maybeAutoRecommendNextScene(session) {
   if ((select?.options?.length || 0) < 3) return;
   const marker = [
     sessionId,
-    String(progress.updated_at || "").trim(),
+    String(progress.updated_at || session?.updated_at || "").trim(),
     String(progress.time_hint || "").trim(),
     String(progress.location || "").trim(),
-    String(progress.scene_shift_reason || "").trim(),
+    String(progress.scene_shift_reason || progress.next_hint || "").trim(),
   ].join("::");
   if (!marker || marker === lastAutoSceneRecommendationKey) return;
   lastAutoSceneRecommendationKey = marker;
@@ -646,7 +868,11 @@ async function renderDialogueSession(session) {
   if (typeof renderObserveQuickReplies === "function") {
     renderObserveQuickReplies(session);
   }
+  const statusLine = buildDialogueSessionStatusLine(session);
   setSessionBadge("对话中");
+  if (typeof setStatus === "function") {
+    setStatus("dialogue-session-status", statusLine || "这一幕已经铺好，你可以继续说下去。");
+  }
   renderDialogueMemory(session);
   renderDialogueTranscript(session);
   await loadRecentSessions();

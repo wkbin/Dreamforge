@@ -56,6 +56,47 @@ def create_dialogue_session_payload(
     return ingested
 
 
+def continue_dialogue_scene_opening_payload(
+    *,
+    run_id: str,
+    session: dict[str, Any],
+    manifest: dict[str, Any],
+    dialogue: Any,
+    build_dialogue_opening_message: Callable[[dict[str, Any]], str],
+    load_pending_turn_payload: Callable[[str, str], dict[str, Any]],
+    generate_dialogue_responses: Callable[[str, dict[str, Any]], list[dict[str, str]]],
+    friendly_dialogue_llm_error: Callable[[Exception], str],
+    evolve_relations_from_turn: Callable[[str, dict[str, Any], list[dict[str, str]]], None],
+    refresh_scene_progress: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    session_id = str(session.get("session_id", "")).strip()
+    if not session_id:
+        raise ValueError("Session not found.")
+    opening_message = build_dialogue_opening_message(session)
+    dialogue.prepare_turn(
+        manifest,
+        session_id=session_id,
+        message=opening_message,
+        speaker_override="场景提示",
+        transcript_message="",
+    )
+    pending_payload = load_pending_turn_payload(run_id, session_id)
+    try:
+        responses = generate_dialogue_responses(run_id, pending_payload)
+    except LLMRequestError as exc:
+        raise ValueError(friendly_dialogue_llm_error(exc)) from exc
+    evolve_relations_from_turn(run_id, pending_payload, responses)
+    ingested = dialogue.ingest_turn_responses(
+        run_id,
+        session_id=session_id,
+        responses=responses,
+        remember_turn_memory=True,
+    )
+    if callable(refresh_scene_progress):
+        ingested = refresh_scene_progress(run_id, ingested)
+    return ingested
+
+
 def reply_dialogue_turn_payload(
     *,
     run_id: str,

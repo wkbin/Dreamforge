@@ -10,6 +10,7 @@ from src.web.chat import (
     build_dialogue_suggestion_llm_messages,
     build_dialogue_opening_message,
     compact_dialogue_suggestion_payload,
+    continue_dialogue_scene_opening_payload,
     create_dialogue_session_payload,
     friendly_dialogue_llm_error,
     generate_dialogue_suggestion,
@@ -109,6 +110,7 @@ class DialogueServiceMixin:
         scene_card_id: str = "",
         scene_profile: dict[str, str] | None = None,
         transition_message: str = "",
+        auto_continue: bool = False,
     ) -> dict[str, Any]:
         self._ensure_run_exists(run_id)
         resolved_scene_profile = dict(scene_profile or {})
@@ -122,11 +124,26 @@ class DialogueServiceMixin:
                 **resolved_scene_profile,
                 "scene_card_id": str(card.get("card_id", "")).strip(),
             }
-        return self.dialogue.update_scene_card(
+        switched = self.dialogue.update_scene_card(
             run_id,
             session_id,
             scene_profile=resolved_scene_profile,
             transition_message=transition_message,
+        )
+        if not auto_continue:
+            return switched
+        manifest = self._require_manifest(run_id)
+        return continue_dialogue_scene_opening_payload(
+            run_id=run_id,
+            session=switched,
+            manifest=manifest,
+            dialogue=self.dialogue,
+            build_dialogue_opening_message=build_dialogue_opening_message,
+            load_pending_turn_payload=self._load_pending_turn_payload,
+            generate_dialogue_responses=self._generate_dialogue_responses,
+            friendly_dialogue_llm_error=friendly_dialogue_llm_error,
+            evolve_relations_from_turn=self._evolve_relations_from_turn,
+            refresh_scene_progress=self._refresh_dialogue_scene_progress,
         )
 
     def recommend_dialogue_scene_card(self, run_id: str, *, session_id: str) -> dict[str, Any]:
@@ -297,7 +314,7 @@ class DialogueServiceMixin:
             return {}
 
         payload = dict(session or {})
-        payload["scene_progress"] = dict(payload.get("scene_progress", {}) or payload.get("state", {}).get("scene_progress", {}) or {})
+        payload["scene_progress"] = self.dialogue._session_scene_progress(payload)
         attempts = (
             build_dialogue_scene_progress_messages(payload),
             [
@@ -356,10 +373,9 @@ class DialogueServiceMixin:
                 return
             session_path = self.dialogue._session_file(run_id, session_id)
             session = self.dialogue._read_json(session_path)
-            state = dict(session.get("state", {}) or {})
-            relation_delta = dict(state.get("relation_delta", {}) or {})
-            character_snapshots = dict(state.get("character_snapshots", {}) or {})
-            event_signals = dict(state.get("event_signals", {}) or self.dialogue._empty_event_signals_state())
+            relation_delta = self.dialogue._session_relation_delta(session)
+            character_snapshots = self.dialogue._session_character_snapshots(session)
+            event_signals = self.dialogue._session_event_signals(session)
             input_block = dict(pending_payload.get("input", {}) or {})
             speaker = str(input_block.get("speaker", "")).strip()
             participants = [str(item).strip() for item in input_block.get("participants", []) if str(item).strip()]
@@ -397,10 +413,18 @@ class DialogueServiceMixin:
                             continue
                         current[field] = int(current.get(field, 0) or 0) + int(amount)
                     current["last_event"] = message[:220]
+                    current["last_actor"] = responder
+                    current["last_target"] = target
                     evidence_lines = list(current.get("evidence_lines", []) or [])
                     evidence_lines.append(f"{responder}->{target}: {message}"[:220])
                     current["evidence_lines"] = evidence_lines[-10:]
                     current["updated_at"] = session.get("updated_at", "")
+                    current["momentum"] = max(
+                        abs(int(current.get("trust", 0) or 0)),
+                        abs(int(current.get("affection", 0) or 0)),
+                        abs(int(current.get("hostility", 0) or 0)),
+                        abs(int(current.get("ambiguity", 0) or 0)),
+                    )
                     relation_delta[key] = current
                     if any(int(current.get(field, 0) or 0) for field in ("trust", "affection", "hostility", "ambiguity")):
                         detected_events.append(
@@ -459,9 +483,9 @@ class DialogueServiceMixin:
                 detected_events,
             )
 
-            session.setdefault("state", {})["relation_delta"] = relation_delta
-            session.setdefault("state", {})["character_snapshots"] = character_snapshots
-            session.setdefault("state", {})["event_signals"] = event_signals
+            self.dialogue._set_session_relation_delta(session, relation_delta)
+            self.dialogue._set_session_character_snapshots(session, character_snapshots)
+            self.dialogue._set_session_event_signals(session, event_signals)
             session["updated_at"] = session.get("updated_at") or ""
             self.dialogue._write_json(session_path, session)
             store = self.dialogue._resolve_memory_store(run_id)
@@ -494,10 +518,8 @@ class DialogueServiceMixin:
             return {}
 
         payload = dict(session or {})
-        payload.setdefault("state", {})
-        payload["state"] = dict(payload.get("state", {}) or {})
-        payload["state"]["relation_delta"] = dict(relation_delta or {})
-        payload["state"]["character_snapshots"] = dict(character_snapshots or {})
+        self.dialogue._set_session_relation_delta(payload, relation_delta)
+        self.dialogue._set_session_character_snapshots(payload, character_snapshots)
         attempts = (
             build_dialogue_relation_state_messages(payload, pending_payload, responses),
             [
@@ -538,10 +560,15 @@ class DialogueServiceMixin:
                         current[field] = int(next_value.get(field, 0) or 0)
                     except Exception:
                         pass
-            for field in ("last_event", "relation_change", "typical_interaction"):
+            for field in ("last_event", "relation_change", "typical_interaction", "last_actor", "last_target", "updated_at"):
                 text = str(next_value.get(field, "")).strip()
                 if text:
                     current[field] = text
+            if "momentum" in next_value:
+                try:
+                    current["momentum"] = int(next_value.get("momentum", 0) or 0)
+                except Exception:
+                    pass
             evidence_lines = [
                 str(item).strip()
                 for item in list(next_value.get("evidence_lines", []) or [])

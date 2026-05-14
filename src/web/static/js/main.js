@@ -929,19 +929,40 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
   const shell = el("dialogue-scene-switcher");
   const select = el("dialogue-live-scene-card");
   const status = el("dialogue-live-scene-status");
+  const context = el("dialogue-live-scene-context");
   const recommendButton = el("dialogue-live-scene-recommend");
+  const shiftHint = el("dialogue-live-scene-shift-hint");
+  const shiftCopy = el("dialogue-live-scene-shift-copy");
+  const shiftRecommendButton = el("dialogue-live-scene-shift-recommend");
   if (!shell || !select) return;
   const hasSession = Boolean(session?.session_id) && Boolean(currentRunId);
   shell.classList.toggle("hidden", !hasSession);
   if (!hasSession) {
     select.innerHTML = "";
     if (status) status.textContent = "";
+    if (context) {
+      context.textContent = "";
+      context.classList.add("hidden");
+    }
     if (recommendButton) recommendButton.disabled = true;
+    if (shiftHint) shiftHint.classList.add("hidden");
+    if (shiftCopy) shiftCopy.textContent = "";
+    if (shiftRecommendButton) shiftRecommendButton.disabled = true;
+    renderDialogueSceneRecommendationSummary(null);
     renderDialogueSceneChainSuggestions([], "");
     return;
   }
   if (recommendButton) recommendButton.disabled = sceneCards.length < 2;
+  if (shiftRecommendButton) shiftRecommendButton.disabled = sceneCards.length < 2;
   const currentSceneId = String(session?.session_card?.scene_card_id || "").trim();
+  const overview = session?.runtime_state_overview || {};
+  const shouldShift = Boolean(overview?.should_offer_scene_shift);
+  const shiftReason = String(overview?.scene_shift_reason || "").trim();
+  const nextHint = String(overview?.next_hint || "").trim();
+  const timeHint = String(overview?.time_hint || "").trim();
+  const location = String(overview?.location || "").trim();
+  const present = Array.isArray(overview?.present) ? overview.present.filter(Boolean).slice(0, 3) : [];
+  const offstage = Array.isArray(overview?.offstage) ? overview.offstage.filter(Boolean).slice(0, 2) : [];
   const previous = select.value || currentSceneId;
   select.innerHTML = "";
   const blank = document.createElement("option");
@@ -961,58 +982,96 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
   } else {
     select.value = currentSceneId;
   }
-  if (status && !String(status.textContent || "").trim()) {
-    status.textContent = currentSceneId ? "当前会话已经挂载场景卡，你可以随时切到另一幕。" : "当前会话还没挂场景卡，也可以直接在这里接入一张。";
+  if (shiftHint) {
+    shiftHint.classList.toggle("hidden", !shouldShift);
   }
+  if (shiftCopy) {
+    shiftCopy.textContent = shouldShift
+      ? (shiftReason || nextHint || "这一拍差不多收住了，可以顺势切到下一幕。")
+      : "";
+  }
+  if (context) {
+    const parts = [];
+    if (location) parts.push(`地点：${location}`);
+    if (timeHint) parts.push(`时间：${timeHint}`);
+    if (present.length) parts.push(`在场：${present.join("、")}`);
+    if (offstage.length) parts.push(`离场：${offstage.join("、")}`);
+    context.textContent = parts.join(" · ");
+    context.classList.toggle("hidden", parts.length === 0);
+  }
+  if (status && !String(status.textContent || "").trim()) {
+    if (shouldShift) {
+      status.textContent = "这一拍已经接近收束，可以顺势切一张场景卡。";
+    } else {
+      status.textContent = currentSceneId ? "当前会话已经挂载场景卡，你可以随时切到另一幕。" : "当前会话还没挂场景卡，也可以直接在这里接入一张。";
+    }
+  }
+  renderDialogueSceneRecommendationSummary(session);
   renderDialogueSceneChainSuggestions(currentDialogueSceneChainSuggestions, session?.session_id || "");
 }
 
 async function handleApplyDialogueSceneCard(event) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   if (!currentRunId || !currentDialogueSessionId) return;
+  await applySelectedDialogueSceneCard();
+}
+
+async function applySelectedDialogueSceneCard(options = {}) {
+  if (!currentRunId || !currentDialogueSessionId) return null;
   const select = el("dialogue-live-scene-card");
   const transition = trimmedValue("dialogue-live-scene-transition", "");
   const status = el("dialogue-live-scene-status");
   const button = el("dialogue-live-scene-apply");
   const sceneCardId = String(select?.value || "").trim();
+  const waitingText = String(options?.waitingText || "正在把这一幕转过去...").trim() || "正在把这一幕转过去...";
+  const successText = String(options?.successText || "新的场景已经接上了。").trim() || "新的场景已经接上了。";
+  const autoContinue = Boolean(options?.autoContinue);
   if (!sceneCardId) {
     if (status) status.textContent = "先挑一张要切进去的场景卡。";
-    return;
+    return null;
   }
   if (button) button.disabled = true;
-  if (status) status.textContent = "正在把这一幕转过去...";
+  if (status) status.textContent = waitingText;
   try {
     const payload = await window.__ZAOMENG_WEBUI_API__.switchDialogueSceneCard(currentRunId, currentDialogueSessionId, {
       scene_card_id: sceneCardId,
       scene_profile: currentSceneCard?.card_id === sceneCardId ? (currentSceneCard?.fields || {}) : {},
       transition_message: transition,
+      auto_continue: autoContinue,
     });
+    clearDialogueSceneRecommendationCache();
     if (el("dialogue-live-scene-transition")) {
       setValue("dialogue-live-scene-transition", "");
     }
-    if (status) status.textContent = "新的场景已经接上了。";
+    if (status) status.textContent = successText;
     await renderDialogueSession(payload);
+    return payload;
   } catch (error) {
     if (status) status.textContent = error.message || "切换场景失败。";
+    throw error;
   } finally {
     if (button) button.disabled = false;
   }
 }
 
-async function handleRecommendDialogueSceneCard(event) {
+async function handleRecommendDialogueSceneCard(event, options = {}) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   if (!currentRunId || !currentDialogueSessionId) return;
   const select = el("dialogue-live-scene-card");
   const status = el("dialogue-live-scene-status");
   const button = el("dialogue-live-scene-recommend");
+  const shiftButton = el("dialogue-live-scene-shift-recommend");
+  const autoApply = Boolean(options?.autoApply);
+  const force = Boolean(options?.force);
   if (!sceneCards.length) {
     if (status) status.textContent = "你还没有场景卡，先新建一张再来转场。";
     return;
   }
   if (button) button.disabled = true;
+  if (shiftButton) shiftButton.disabled = true;
   if (status) status.textContent = "正在按当前局势替你挑下一幕...";
   try {
-    const payload = await window.__ZAOMENG_WEBUI_API__.recommendDialogueSceneCard(currentRunId, currentDialogueSessionId);
+    const payload = await fetchDialogueSceneRecommendation({ force });
     const recommendedCardId = String(payload?.recommended_card_id || "").trim();
     const recommendedTransition = String(payload?.recommended_transition_message || "").trim();
     currentDialogueSceneChainSuggestions = Array.isArray(payload?.chain_suggestions) ? payload.chain_suggestions : [];
@@ -1030,13 +1089,23 @@ async function handleRecommendDialogueSceneCard(event) {
       setValue("dialogue-live-scene-transition", recommendedTransition);
     }
     if (status) {
-      status.textContent = reasons.length ? `已替你挑好下一幕：${reasons.join("，")}。` : "已替你挑好一张更接戏的场景卡。";
+      const sourceLabel = currentDialogueSceneRecommendationMeta?.fromCache ? "（已从缓存取回）" : "（刚更新）";
+      status.textContent = reasons.length ? `已替你挑好下一幕${sourceLabel}：${reasons.join("，")}。` : `已替你挑好一张更接戏的场景卡${sourceLabel}。`;
     }
+    renderDialogueSceneRecommendationSummary(currentDialogueSession);
     renderDialogueSceneChainSuggestions(currentDialogueSceneChainSuggestions, currentDialogueSessionId);
+    if (autoApply) {
+      await applySelectedDialogueSceneCard({
+        waitingText: "正在顺手把这一幕转到下一拍...",
+        successText: "已经顺手切到下一幕并接起新一拍了。",
+        autoContinue: true,
+      });
+    }
   } catch (error) {
     if (status) status.textContent = error.message || "下一幕推荐失败。";
   } finally {
     if (button) button.disabled = sceneCards.length < 2;
+    if (shiftButton) shiftButton.disabled = sceneCards.length < 2;
   }
 }
 
@@ -1077,9 +1146,11 @@ function renderDialogueSceneChainSuggestions(chains = [], sessionId = "") {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "soft-button";
-    button.textContent = "接这条线";
+    button.textContent = "接这条线并切幕";
     button.addEventListener("click", () => {
-      applyDialogueSceneChain(chain);
+      applyDialogueSceneChain(chain).catch((error) => {
+        setStatus("dialogue-live-scene-status", error.message || "这条线暂时没有接上。");
+      });
     });
     actions.appendChild(button);
     card.appendChild(actions);
@@ -1087,7 +1158,7 @@ function renderDialogueSceneChainSuggestions(chains = [], sessionId = "") {
   });
 }
 
-function applyDialogueSceneChain(chain = {}) {
+async function applyDialogueSceneChain(chain = {}) {
   const scenes = Array.isArray(chain?.scenes) ? chain.scenes : [];
   const first = scenes[0] || {};
   const sceneCardId = String(first?.card_id || "").trim();
@@ -1102,9 +1173,17 @@ function applyDialogueSceneChain(chain = {}) {
   if (status) {
     const tailTitles = scenes.slice(1).map((item) => String(item?.title || "").trim()).filter(Boolean);
     status.textContent = tailTitles.length
-      ? `已替你接上这条线，后面还可以顺势转到：${tailTitles.join("、")}。`
-      : "已替你接上这条线。";
+      ? `正在替你接上这条线，后面还可以顺势转到：${tailTitles.join("、")}。`
+      : "正在替你接上这条线。";
   }
+  const tailTitles = scenes.slice(1).map((item) => String(item?.title || "").trim()).filter(Boolean);
+  await applySelectedDialogueSceneCard({
+    waitingText: "正在按这条戏路切到下一幕...",
+    successText: tailTitles.length
+      ? `这条线已经接上了，后面还可以顺势转到：${tailTitles.join("、")}。`
+      : "这条线已经接上了。",
+    autoContinue: true,
+  });
   return true;
 }
 
@@ -2280,6 +2359,9 @@ const DIALOGUE_SUGGESTION_BUSY_LABEL = "…";
 const DIALOGUE_RETRY_FEEDBACK_DELAY_MS = 2200;
 const DIALOGUE_SEND_RETRY_MESSAGE = "这次声源有点慢，正在自动重试...";
 const DIALOGUE_SUGGEST_RETRY_MESSAGE = "这次生成有点慢，正在自动重试...";
+let currentDialogueSceneRecommendationCacheKey = "";
+let currentDialogueSceneRecommendationCachePayload = null;
+let currentDialogueSceneRecommendationMeta = null;
 const OBSERVE_QUICK_REPLIES = [
   { label: "……", value: "……" },
   { label: "继续聊", value: "继续聊。" },
@@ -2289,11 +2371,185 @@ const OBSERVE_QUICK_REPLIES = [
 ];
 let currentDialogueMessageKind = "dialogue";
 
+function buildDialogueSceneRecommendationCacheKey(session = currentDialogueSession) {
+  const target = session || {};
+  const overview = target?.runtime_state_overview || {};
+  return [
+    String(currentRunId || "").trim(),
+    String(target?.session_id || "").trim(),
+    String(target?.updated_at || "").trim(),
+    String(target?.session_card?.scene_card_id || "").trim(),
+    String(overview?.status_line || "").trim(),
+    String(overview?.next_hint || "").trim(),
+  ].join("::");
+}
+
+function clearDialogueSceneRecommendationCache() {
+  currentDialogueSceneRecommendationCacheKey = "";
+  currentDialogueSceneRecommendationCachePayload = null;
+  currentDialogueSceneRecommendationMeta = null;
+}
+
+async function fetchDialogueSceneRecommendation(options = {}) {
+  const force = Boolean(options?.force);
+  if (!currentRunId || !currentDialogueSessionId) {
+    return null;
+  }
+  const cacheKey = buildDialogueSceneRecommendationCacheKey(currentDialogueSession);
+  if (!force && cacheKey && cacheKey === currentDialogueSceneRecommendationCacheKey && currentDialogueSceneRecommendationCachePayload) {
+    currentDialogueSceneRecommendationMeta = {
+      sessionId: String(currentDialogueSessionId || "").trim(),
+      fromCache: true,
+      payload: currentDialogueSceneRecommendationCachePayload,
+    };
+    return currentDialogueSceneRecommendationCachePayload;
+  }
+  const payload = await window.__ZAOMENG_WEBUI_API__.recommendDialogueSceneCard(currentRunId, currentDialogueSessionId);
+  currentDialogueSceneRecommendationCacheKey = cacheKey;
+  currentDialogueSceneRecommendationCachePayload = payload;
+  currentDialogueSceneRecommendationMeta = {
+    sessionId: String(currentDialogueSessionId || "").trim(),
+    fromCache: false,
+    payload,
+  };
+  return payload;
+}
+
+function renderDialogueSceneRecommendationSummary(session = currentDialogueSession) {
+  const root = el("dialogue-live-scene-recommendation");
+  if (!root) return;
+  const sessionId = String(session?.session_id || "").trim();
+  const meta = currentDialogueSceneRecommendationMeta || null;
+  const payload = meta?.payload || null;
+  if (!sessionId || !payload || String(meta?.sessionId || "").trim() !== sessionId) {
+    root.innerHTML = "";
+    root.classList.add("hidden");
+    return;
+  }
+  const recommendedCardId = String(payload?.recommended_card_id || "").trim();
+  const topItem = Array.isArray(payload?.items) ? payload.items.find((item) => String(item?.card_id || "").trim() === recommendedCardId) || payload.items[0] : null;
+  if (!recommendedCardId || !topItem) {
+    root.innerHTML = "";
+    root.classList.add("hidden");
+    return;
+  }
+  const title = String(topItem?.preview?.title || topItem?.fields?.title || recommendedCardId).trim();
+  const location = String(topItem?.preview?.location || topItem?.fields?.location || "").trim();
+  const transition = String(payload?.recommended_transition_message || "").trim();
+  const autoContinueMessage = String(payload?.recommended_auto_continue_message || "").trim();
+  const reasons = Array.isArray(topItem?.recommendation?.reasons) ? topItem.recommendation.reasons.filter(Boolean).slice(0, 4) : [];
+  const firstChain = Array.isArray(payload?.chain_suggestions) ? payload.chain_suggestions[0] : null;
+  const chainReason = String(firstChain?.reason || "").trim();
+  const sourceLabel = meta?.fromCache ? "已缓存" : "刚更新";
+
+  root.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "dialogue-live-scene-recommendation-head";
+  const strong = document.createElement("strong");
+  strong.textContent = location ? `推荐：${title} · ${location}` : `推荐：${title}`;
+  const badge = document.createElement("span");
+  badge.textContent = sourceLabel;
+  head.appendChild(strong);
+  head.appendChild(badge);
+  root.appendChild(head);
+
+  if (reasons.length) {
+    const tags = document.createElement("div");
+    tags.className = "dialogue-live-scene-recommendation-tags";
+    reasons.forEach((reason) => {
+      const chip = document.createElement("span");
+      chip.textContent = String(reason || "").trim();
+      tags.appendChild(chip);
+    });
+    root.appendChild(tags);
+  }
+
+  if (transition) {
+    const transitionCopy = document.createElement("p");
+    transitionCopy.textContent = `转场起句：${transition}`;
+    root.appendChild(transitionCopy);
+  }
+
+  if (chainReason) {
+    const chainCopy = document.createElement("p");
+    chainCopy.textContent = `后续走势：${chainReason}`;
+    root.appendChild(chainCopy);
+  }
+
+  if (autoContinueMessage) {
+    const openingCopy = document.createElement("p");
+    openingCopy.textContent = `自动起拍提示：${autoContinueMessage}`;
+    root.appendChild(openingCopy);
+  }
+
+  const autoCopy = document.createElement("p");
+  autoCopy.textContent = "顺手切到下一幕会直接把新一拍接起来，不会停在空场。";
+  root.appendChild(autoCopy);
+  root.classList.remove("hidden");
+}
+
+function buildObserveQuickReplies(session = currentDialogueSession) {
+  const overview = session?.runtime_state_overview || {};
+  const present = Array.isArray(overview?.present) ? overview.present.filter(Boolean) : [];
+  const offstage = Array.isArray(overview?.offstage) ? overview.offstage.filter(Boolean) : [];
+  const shouldShift = Boolean(overview?.should_offer_scene_shift);
+  const nextHint = String(overview?.next_hint || "").trim();
+  const tension = String(overview?.tension || "").trim();
+  const eventRows = Array.isArray(overview?.event_rows) ? overview.event_rows : [];
+  const dynamic = [];
+
+  if (shouldShift) {
+    dynamic.push({
+      label: "转下一幕",
+      value: nextHint || "这一拍差不多收住了，场面顺势往下一幕转过去。",
+    });
+  }
+  if (offstage.length) {
+    dynamic.push({
+      label: `切回${String(offstage[0]).slice(0, 4)}`,
+      value: `${offstage[0]}那边也有了新的动静，镜头顺势切过去。`,
+    });
+  }
+  if (present.length >= 2) {
+    dynamic.push({
+      label: "只留他们",
+      value: `旁的人都暂时退开，只剩${present.slice(0, 2).join("和")}把这句话接下去。`,
+    });
+  }
+  if (tension) {
+    dynamic.push({
+      label: "顺着张力",
+      value: "这股气氛没有散，反而又往前逼近了一步。",
+    });
+  }
+  const lastEvent = eventRows.length ? eventRows[eventRows.length - 1] : null;
+  if (lastEvent?.copy) {
+    dynamic.push({
+      label: "顺着波动",
+      value: String(lastEvent.copy || "").trim(),
+    });
+  }
+
+  const merged = [];
+  const seen = new Set();
+  [...dynamic, ...OBSERVE_QUICK_REPLIES].forEach((item) => {
+    const label = String(item?.label || "").trim();
+    const value = String(item?.value || "").trim();
+    if (!label || !value) return;
+    const key = `${label}::${value}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push({ label, value });
+  });
+  return merged.slice(0, 6);
+}
+
 function buildComposerUiState() {
   const area = el("dialogue-message");
   const sendButton = el("prepare-turn-button");
   const suggestButton = el("suggest-turn-button");
   const mode = currentDialogueSession?.mode || currentDialogueSession?.session_card?.mode || "";
+  const nextHint = mode === "observe" ? String(currentDialogueSession?.runtime_state_overview?.next_hint || "").trim() : "";
   return {
     mode,
     kind: normalizeDialogueMessageKind(currentDialogueMessageKind),
@@ -2303,7 +2559,8 @@ function buildComposerUiState() {
     suggestHidden: Boolean(suggestButton?.classList.contains("hidden")),
     suggestDisabled: Boolean(suggestButton?.disabled),
     sendDisabled: Boolean(sendButton?.disabled),
-    quickReplies: mode === "observe" ? OBSERVE_QUICK_REPLIES : [],
+    quickReplies: mode === "observe" ? buildObserveQuickReplies(currentDialogueSession) : [],
+    quickHint: nextHint,
   };
 }
 
@@ -2406,17 +2663,29 @@ function setSuggestingState(waiting) {
 
 function renderObserveQuickReplies(session = currentDialogueSession) {
   const root = el("observe-quick-replies");
+  const hint = el("observe-quick-hint");
+  const hintRow = el("observe-quick-hint-row");
+  const hintSend = el("observe-quick-hint-send");
   if (!root) return;
   const mode = session?.mode || session?.session_card?.mode || "";
   if (mode !== "observe") {
     root.innerHTML = "";
     root.classList.add("hidden");
+    if (hintRow) hintRow.classList.add("hidden");
+    if (hint) {
+      hint.textContent = "";
+      hint.classList.add("hidden");
+    }
+    if (hintSend) {
+      hintSend.classList.add("hidden");
+      hintSend.removeAttribute("data-value");
+    }
     publishComposerUiState("composer-quick-replies-hidden");
     return;
   }
 
   root.innerHTML = "";
-  OBSERVE_QUICK_REPLIES.forEach((item) => {
+  buildObserveQuickReplies(session).forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "quick-reply-chip";
@@ -2428,7 +2697,30 @@ function renderObserveQuickReplies(session = currentDialogueSession) {
     root.appendChild(button);
   });
   root.classList.remove("hidden");
+  const nextHint = String(session?.runtime_state_overview?.next_hint || "").trim();
+  if (hint) {
+    hint.textContent = nextHint ? `顺手往下推：${nextHint}` : "";
+    hint.classList.toggle("hidden", !nextHint);
+  }
+  if (hintSend) {
+    hintSend.classList.toggle("hidden", !nextHint);
+    if (nextHint) {
+      hintSend.setAttribute("data-value", nextHint);
+    } else {
+      hintSend.removeAttribute("data-value");
+    }
+  }
+  if (hintRow) {
+    hintRow.classList.toggle("hidden", !nextHint);
+  }
   publishComposerUiState("composer-quick-replies-rendered");
+}
+
+async function applyQuickHint() {
+  const button = el("observe-quick-hint-send");
+  const value = String(button?.getAttribute("data-value") || "").trim();
+  if (!value) return;
+  await applyQuickReply(value);
 }
 
 async function applyQuickReply(value) {
@@ -2778,7 +3070,16 @@ function bindEvents() {
   bind("start-opening-preset-button", "click", handleStartOpeningPreset);
   bind("delete-opening-preset-button", "click", handleDeleteOpeningPreset);
   bind("recommend-scene-card-button", "click", handleRecommendSceneCard);
-  bind("dialogue-live-scene-recommend", "click", handleRecommendDialogueSceneCard);
+  bind("dialogue-live-scene-recommend", "click", (event) => {
+    handleRecommendDialogueSceneCard(event).catch((error) => {
+      setStatus("dialogue-live-scene-status", error.message || "下一幕推荐失败。");
+    });
+  });
+  bind("dialogue-live-scene-shift-recommend", "click", (event) => {
+    handleRecommendDialogueSceneCard(event, { autoApply: true }).catch((error) => {
+      setStatus("dialogue-live-scene-status", error.message || "顺手切幕失败。");
+    });
+  });
   bind("dialogue-live-scene-apply", "click", handleApplyDialogueSceneCard);
   bind("create-scene-card-button", "click", handleOpenNewSceneCard);
   bind("edit-scene-card-button", "click", handleEditCurrentSceneCard);
@@ -2806,6 +3107,11 @@ function bindEvents() {
     if (typeof window.toggleDialogueMemory === "function") {
       window.toggleDialogueMemory();
     }
+  });
+  bind("observe-quick-hint-send", "click", () => {
+    applyQuickHint().catch((error) => {
+      setStatus("dialogue-session-status", error.message || "这句推进提示暂时没有送出去。");
+    });
   });
   bind("close-dialogue-memory-modal-button", "click", () => {
     if (typeof window.closeDialogueMemoryModal === "function") {

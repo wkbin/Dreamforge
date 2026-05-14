@@ -201,6 +201,7 @@ class SwitchDialogueSceneCardRequest(BaseModel):
     scene_card_id: str = Field(default="")
     scene_profile: dict[str, str] = Field(default_factory=dict)
     transition_message: str = Field(default="")
+    auto_continue: bool = Field(default=False)
 
 
 class BranchDialogueSessionRequest(BaseModel):

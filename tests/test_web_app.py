@@ -151,9 +151,203 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertNotEqual(payload["recommended_card_id"], current_scene["card_id"])
             self.assertTrue(payload["items"][0]["recommendation"]["reasons"])
             self.assertTrue(str(payload.get("recommended_transition_message", "")).strip())
+            self.assertTrue(str(payload.get("recommended_auto_continue_message", "")).strip())
             self.assertTrue(payload["chain_suggestions"])
             self.assertGreaterEqual(len(payload["chain_suggestions"][0]["scenes"]), 2)
             self.assertTrue(str(payload["chain_suggestions"][0]["reason"]).strip())
+
+    def test_dialogue_scene_card_recommendation_stays_in_same_location_when_beat_is_early(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            current_scene = service.save_scene_card(
+                fields={
+                    "title": "雨夜回廊",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "雨声压着话头",
+                    "opening_situation": "两个人还站在檐下，谁都没把话说透。",
+                    "public_goal": "先试出彼此来意。",
+                    "hidden_tension": "有些旧话一碰就要翻出来。",
+                    "scene_drive": "让试探再压低一层。",
+                    "expected_rhythm": "慢热",
+                    "forbidden_topics": "旧账",
+                }
+            )
+            same_location = service.save_scene_card(
+                fields={
+                    "title": "回廊压低声气",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "静得能听见雨线擦过栏杆",
+                    "opening_situation": "两个人谁也没走，反而把声音压得更低。",
+                    "public_goal": "顺着刚才的话再往里探一步。",
+                    "hidden_tension": "谁先心软谁就先露了底。",
+                    "scene_drive": "让场面继续收紧，不急着换幕。",
+                    "expected_rhythm": "缓慢加压",
+                    "forbidden_topics": "外人",
+                }
+            )
+            service.save_scene_card(
+                fields={
+                    "title": "转入花厅",
+                    "time_hint": "夜深",
+                    "location": "花厅",
+                    "atmosphere": "人多却更安静",
+                    "opening_situation": "雨势更大，众人被催着转到花厅落座。",
+                    "public_goal": "先把场面稳住。",
+                    "hidden_tension": "真正要问的话还压在心口。",
+                    "scene_drive": "从试探转向更公开的拉扯。",
+                    "expected_rhythm": "三句一推进",
+                    "forbidden_topics": "旧案",
+                }
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "回廊里只剩雨声和一句没说完的话。"}],
+            ):
+                session = service.create_dialogue_session(
+                    run["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉"],
+                    scene_card_id=current_scene["card_id"],
+                )
+
+            service.dialogue.update_scene_progress_state(
+                run["run_id"],
+                session["session_id"],
+                {
+                    "location": "回廊",
+                    "time_hint": "深夜",
+                    "atmosphere_summary": "雨声压着话头，谁都没有退开",
+                    "beat_maturity": 22,
+                    "should_offer_scene_shift": False,
+                    "scene_shift_reason": "",
+                    "world_tension_summary": "两个人都还在试探，还没到换场的时候",
+                },
+            )
+
+            payload = service.recommend_dialogue_scene_card(run["run_id"], session_id=session["session_id"])
+
+            self.assertEqual(payload["recommended_card_id"], same_location["card_id"])
+            self.assertIn("生成一个自然开场", str(payload.get("recommended_auto_continue_message", "")).strip())
+
+    def test_dialogue_scene_card_recommendation_uses_runtime_shift_reason_in_transition_hint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            current_scene = service.save_scene_card(
+                fields={
+                    "title": "雨夜回廊",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "雨声压得人心发紧",
+                    "opening_situation": "两个人被雨隔在檐下，话已经逼到边上。",
+                    "public_goal": "先稳住表面客气。",
+                    "hidden_tension": "真正的问题已经快藏不住了。",
+                    "scene_drive": "让试探逼近摊牌。",
+                    "expected_rhythm": "慢热",
+                    "forbidden_topics": "前尘",
+                }
+            )
+            next_scene = service.save_scene_card(
+                fields={
+                    "title": "灯下入席",
+                    "time_hint": "夜深",
+                    "location": "花厅",
+                    "atmosphere": "灯火亮着，谁都更难回避彼此",
+                    "opening_situation": "雨脚催着众人换到花厅，落座后谁也没先碰茶。",
+                    "public_goal": "把表面话撑到头。",
+                    "hidden_tension": "下一句就可能把真正心思挑明。",
+                    "scene_drive": "让局面顺势从回避转向正面相对。",
+                    "expected_rhythm": "越聊越紧",
+                    "forbidden_topics": "闲话",
+                }
+            )
+            service.save_scene_card(
+                fields={
+                    "title": "回廊再压一拍",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "雨线更急，但还是没人挪步",
+                    "opening_situation": "两个人还站在原地，只把语气压得更轻。",
+                    "public_goal": "把上一句试探再咬紧一点。",
+                    "hidden_tension": "谁先退让谁就输了这口气。",
+                    "scene_drive": "继续在原地消磨彼此的耐心。",
+                    "expected_rhythm": "慢压",
+                    "forbidden_topics": "旁人",
+                }
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "雨已经大到不得不换个地方把话说完。"}],
+            ):
+                session = service.create_dialogue_session(
+                    run["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉"],
+                    scene_card_id=current_scene["card_id"],
+                )
+
+            service.dialogue.update_scene_progress_state(
+                run["run_id"],
+                session["session_id"],
+                {
+                    "location": "回廊",
+                    "time_hint": "深夜",
+                    "atmosphere_summary": "雨势更重，回避已经压不住了",
+                    "beat_maturity": 82,
+                    "should_offer_scene_shift": True,
+                    "scene_shift_reason": "雨势压得两人都没法再站在回廊里装作无事",
+                    "world_tension_summary": "再拖一两句，局面就会逼到必须正面开口",
+                },
+            )
+
+            payload = service.recommend_dialogue_scene_card(run["run_id"], session_id=session["session_id"])
+
+            self.assertEqual(payload["recommended_card_id"], next_scene["card_id"])
+            self.assertIn("雨势压得两人都没法再站在回廊里装作无事", payload["recommended_transition_message"])
+            self.assertTrue(str(payload.get("recommended_auto_continue_message", "")).strip())
 
     def test_dialogue_scene_history_tracks_initial_scene_and_switches(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -231,6 +425,86 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(history[1]["title"], "转入花厅")
             self.assertEqual(history[1]["transition_message"], "雨势更大，众人转入花厅。")
             self.assertEqual(history[1]["is_current"], "true")
+
+    def test_switch_dialogue_scene_card_can_auto_continue_new_scene(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            first_scene = service.save_scene_card(
+                fields={
+                    "title": "回廊夜谈",
+                    "time_hint": "深夜",
+                    "location": "回廊",
+                    "atmosphere": "安静发紧",
+                    "opening_situation": "两人隔着雨声说话。",
+                    "public_goal": "先探来意。",
+                    "hidden_tension": "旧事随时会被挑开。",
+                    "scene_drive": "把试探慢慢逼紧。",
+                    "expected_rhythm": "慢热",
+                    "forbidden_topics": "前尘",
+                }
+            )
+            second_scene = service.save_scene_card(
+                fields={
+                    "title": "转入花厅",
+                    "time_hint": "夜深",
+                    "location": "花厅",
+                    "atmosphere": "表面客套，暗地收紧",
+                    "opening_situation": "雨势更大，众人不得不转入花厅。",
+                    "public_goal": "先把场面稳住。",
+                    "hidden_tension": "真正要问的话终于躲不过去。",
+                    "scene_drive": "从试探推向摊牌。",
+                    "expected_rhythm": "三句一推进",
+                    "forbidden_topics": "旧账",
+                }
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run["run_id"],
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_responses",
+                side_effect=[
+                    [{"speaker": "场景提示", "message": "开场。"}],
+                    [{"speaker": "林黛玉", "message": "（她抬眼看了看门外雨势）进了花厅，也未见得就好说。"}],
+                ],
+            ):
+                session = service.create_dialogue_session(
+                    run["run_id"],
+                    mode="observe",
+                    participants=["林黛玉", "贾宝玉"],
+                    scene_card_id=first_scene["card_id"],
+                )
+                switched = service.switch_dialogue_scene_card(
+                    run["run_id"],
+                    session_id=session["session_id"],
+                    scene_card_id=second_scene["card_id"],
+                    transition_message="雨势更大，众人转入花厅。",
+                    auto_continue=True,
+                )
+
+            transcript = list(switched.get("transcript", []) or [])
+            self.assertEqual(switched["session_card"]["scene_card"]["title"], "转入花厅")
+            self.assertTrue(any("众人转入花厅" in str(item.get("message", "")) for item in transcript))
+            self.assertTrue(any(str(item.get("speaker", "")) == "林黛玉" for item in transcript))
+            self.assertEqual(switched.get("status"), "ready")
+            self.assertFalse(bool(switched.get("pending_turn")))
 
     def test_branch_dialogue_session_from_scene_creates_new_session(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2964,11 +3238,13 @@ class WebRunServiceTests(unittest.TestCase):
                 {"speaker": "贾宝玉", "message": "我不是有意惹你心烦。", "ts": "2026-05-12T00:00:01Z"},
             ]
             raw_session["state"] = {
-                "memory_summary": {
-                    "summary": "两人前面已经因一句话生过闷气，但都还惦记对方。",
-                    "key_points": ["林黛玉嘴上轻冷，心里还在意。", "贾宝玉想解释，却总把话说得更乱。"],
-                    "compressed_turns": 18,
-                    "recent_turns_kept": 24,
+                "memory": {
+                    "summary": {
+                        "summary": "两人前面已经因一句话生过闷气，但都还惦记对方。",
+                        "key_points": ["林黛玉嘴上轻冷，心里还在意。", "贾宝玉想解释，却总把话说得更乱。"],
+                        "compressed_turns": 18,
+                        "recent_turns_kept": 24,
+                    }
                 }
             }
             service.dialogue._write_json(service.dialogue._session_file(run_id, session["session_id"]), raw_session)
@@ -3063,16 +3339,23 @@ class WebRunServiceTests(unittest.TestCase):
             raw_one = service.dialogue._read_json(service.dialogue._session_file(run_id, session_one["session_id"]))
             raw_two = service.dialogue._read_json(service.dialogue._session_file(run_id, session_two["session_id"]))
 
-            delta = raw_one.get("state", {}).get("relation_delta", {}).get("林黛玉_贾宝玉", {})
+            delta = raw_one.get("state", {}).get("relations", {}).get("delta", {}).get("林黛玉_贾宝玉", {})
             self.assertEqual(delta.get("trust"), 1)
             self.assertEqual(delta.get("affection"), 1)
             self.assertEqual(delta.get("hostility"), -1)
-            snapshot = raw_one.get("state", {}).get("character_snapshots", {}).get("贾宝玉", {})
+            self.assertEqual(delta.get("last_actor"), "贾宝玉")
+            self.assertEqual(delta.get("last_target"), "林黛玉")
+            self.assertGreaterEqual(int(delta.get("momentum", 0) or 0), 1)
+            snapshot = raw_one.get("state", {}).get("characters", {}).get("snapshots", {}).get("贾宝玉", {})
             self.assertEqual(snapshot.get("interaction_state"), "softening")
             self.assertEqual(snapshot.get("last_target"), "林黛玉")
+            self.assertEqual(snapshot.get("present_state"), "onstage")
+            self.assertTrue(bool(snapshot.get("updated_at", "")))
 
-            self.assertEqual(raw_two.get("state", {}).get("relation_delta", {}), {})
-            self.assertEqual(raw_two.get("state", {}).get("character_snapshots", {}), {})
+            self.assertEqual(raw_two.get("state", {}).get("relations", {}).get("delta", {}), {})
+            untouched_snapshot = raw_two.get("state", {}).get("characters", {}).get("snapshots", {}).get("贾宝玉", {})
+            self.assertEqual(untouched_snapshot.get("present_state"), "onstage")
+            self.assertFalse(bool(untouched_snapshot.get("interaction_state", "")))
             self.assertEqual(relation_path.read_text(encoding="utf-8"), original_relation_text)
 
     def test_build_turn_payload_includes_session_relation_delta_and_snapshots(self):
@@ -3111,24 +3394,28 @@ class WebRunServiceTests(unittest.TestCase):
             raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
             raw_session["state"] = {
                 **dict(raw_session.get("state", {}) or {}),
-                "relation_matrix": {
-                    "林黛玉_贾宝玉": {"trust": 8, "affection": 8, "hostility": 1, "ambiguity": 3}
+                "relations": {
+                    "matrix": {
+                        "林黛玉_贾宝玉": {"trust": 8, "affection": 8, "hostility": 1, "ambiguity": 3}
+                    },
+                    "delta": {
+                        "林黛玉_贾宝玉": {
+                            "trust": 1,
+                            "affection": 1,
+                            "last_event": "刚刚把话说软了下来。",
+                            "evidence_lines": ["贾宝玉->林黛玉: 谢谢你愿意陪我一起。"],
+                        }
+                    },
                 },
-                "relation_delta": {
-                    "林黛玉_贾宝玉": {
-                        "trust": 1,
-                        "affection": 1,
-                        "last_event": "刚刚把话说软了下来。",
-                        "evidence_lines": ["贾宝玉->林黛玉: 谢谢你愿意陪我一起。"],
-                    }
-                },
-                "character_snapshots": {
-                    "贾宝玉": {
-                        "mood": "放松",
-                        "interaction_state": "softening",
-                        "focus": "林黛玉",
-                        "last_target": "林黛玉",
-                        "last_message": "谢谢你愿意陪我一起。",
+                "characters": {
+                    "snapshots": {
+                        "贾宝玉": {
+                            "mood": "放松",
+                            "interaction_state": "softening",
+                            "focus": "林黛玉",
+                            "last_target": "林黛玉",
+                            "last_message": "谢谢你愿意陪我一起。",
+                        }
                     }
                 },
             }
@@ -3148,6 +3435,65 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertIn("session_delta", relation_excerpt)
             detail_map = {item["name"]: item for item in payload.get("persona_contexts", [])}
             self.assertEqual(detail_map["贾宝玉"]["session_snapshot"]["interaction_state"], "softening")
+            serialized = service.dialogue._serialize_session(run_id, raw_session)
+            overview = dict(serialized.get("runtime_state_overview", {}) or {})
+            self.assertTrue(bool(overview.get("relation_rows", [])))
+
+    def test_dialogue_session_state_uses_canonical_grouped_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+
+            session = service.dialogue.create_session(
+                service._require_manifest(run_id),
+                mode="observe",
+                participants=["林黛玉", "贾宝玉"],
+            )
+            raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
+            state = dict(raw_session.get("state", {}) or {})
+
+            self.assertEqual(state.get("version"), 1)
+            self.assertIn("scene", state)
+            self.assertIn("presence", state)
+            self.assertIn("progression", state)
+            self.assertIn("relations", state)
+            self.assertIn("characters", state)
+            self.assertIn("signals", state)
+            self.assertIn("memory", state)
+            self.assertIn("atmosphere_summary", dict(state.get("scene", {}) or {}))
+            self.assertIn("matrix", dict(state.get("relations", {}) or {}))
+            self.assertIn("delta", dict(state.get("relations", {}) or {}))
+            self.assertIn("snapshots", dict(state.get("characters", {}) or {}))
+            self.assertIn("beat_maturity", dict(state.get("progression", {}) or {}))
+            self.assertIn("world_tension_summary", dict(state.get("progression", {}) or {}))
+            overview = dict(session.get("runtime_state_overview", {}) or {})
+            self.assertIn("present", overview)
+            self.assertIn("offstage", overview)
+            self.assertIn("pills", overview)
+            self.assertIn("character_rows", overview)
+            self.assertIn("relation_rows", overview)
+            self.assertIn("event_rows", overview)
+            self.assertIn("status_line", overview)
+            self.assertIn("next_hint", overview)
 
     def test_dialogue_relation_state_llm_can_lightly_refine_session_delta(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3214,11 +3560,11 @@ class WebRunServiceTests(unittest.TestCase):
                 )
 
             raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
-            delta = raw_session.get("state", {}).get("relation_delta", {}).get("林黛玉_贾宝玉", {})
+            delta = raw_session.get("state", {}).get("relations", {}).get("delta", {}).get("林黛玉_贾宝玉", {})
             self.assertEqual(delta.get("trust"), 2)
             self.assertEqual(delta.get("affection"), 1)
             self.assertIn("明显更松", str(delta.get("last_event", "")))
-            snapshot = raw_session.get("state", {}).get("character_snapshots", {}).get("贾宝玉", {})
+            snapshot = raw_session.get("state", {}).get("characters", {}).get("snapshots", {}).get("贾宝玉", {})
             self.assertEqual(snapshot.get("interaction_state"), "softening")
 
     def test_dialogue_event_signals_capture_scene_and_inline_action_categories(self):
@@ -3271,9 +3617,11 @@ class WebRunServiceTests(unittest.TestCase):
                 )
 
             raw_session = service.dialogue._read_json(service.dialogue._session_file(run_id, session["session_id"]))
-            event_signals = dict(raw_session.get("state", {}).get("event_signals", {}) or {})
+            event_signals = dict(raw_session.get("state", {}).get("signals", {}) or {})
             recent = list(event_signals.get("recent", []) or [])
             kinds = {str(item.get("kind", "")).strip() for item in recent}
+            overview = dict(service.dialogue._serialize_session(run_id, raw_session).get("runtime_state_overview", {}) or {})
+            event_rows = list(overview.get("event_rows", []) or [])
 
             self.assertIn("time_change", kinds)
             self.assertIn("environment_change", kinds)
@@ -3281,6 +3629,7 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertIn("cast_exit", kinds)
             self.assertIn("micro_action", kinds)
             self.assertIn("atmosphere_shift", kinds)
+            self.assertTrue(event_rows)
 
             micro_action = next(item for item in recent if str(item.get("kind", "")).strip() == "micro_action")
             self.assertEqual(micro_action.get("actor"), "林黛玉")
@@ -3614,6 +3963,111 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertEqual(payload["user_persona"]["profile"]["goal"], "push_plot_forward")
             self.assertIn("introduce a new action", payload["user_persona"]["profile"]["preferred_moves"])
             self.assertIn("pushes the plot forward", payload["instructions"]["response_style"])
+
+    def test_build_suggestion_payload_observe_mode_carries_scene_shift_pressure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            service.save_model_settings(
+                provider="openai-compatible",
+                model="deepseek-chat",
+                base_url="https://example.com/v1",
+                api_key="sk-test",
+            )
+            run = service.create_run(
+                novel_name="hongloumeng.txt",
+                novel_content_base64=base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                characters=["林黛玉", "贾宝玉"],
+            )
+            run_id = run["run_id"]
+            for name in ("林黛玉", "贾宝玉"):
+                service.ingest_character_result(
+                    run_id,
+                    character=name,
+                    content_base64=base64.b64encode(
+                        f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                    ).decode("ascii"),
+                )
+            manifest = service._require_manifest(run_id)
+            session = service.dialogue.create_session(
+                manifest,
+                mode="observe",
+                participants=["林黛玉", "贾宝玉"],
+                controlled_character="",
+                self_profile={},
+            )
+            service.dialogue.update_scene_progress_state(
+                run_id,
+                session["session_id"],
+                {
+                    "location": "回廊",
+                    "time_hint": "夜深",
+                    "beat_maturity": 85,
+                    "should_offer_scene_shift": True,
+                    "scene_shift_reason": "雨势更大，再站在回廊里已经接不下去了",
+                    "world_tension_summary": "两个人都知道下一句就该把局面带进新的地方",
+                },
+            )
+
+            payload = service.dialogue.build_suggestion_payload(
+                manifest,
+                session_id=session["session_id"],
+                seed_text="",
+            )
+
+            self.assertIn("turn the scene into its next beat naturally", payload["user_persona"]["profile"]["preferred_moves"])
+            self.assertEqual(payload["user_persona"]["profile"]["scene_shift_reason"], "雨势更大，再站在回廊里已经接不下去了")
+            self.assertIn("naturally turns this scene into its next beat", payload["host_prompt_brief"])
+            self.assertIn("Current transition pressure", payload["host_prompt_brief"])
+
+    def test_build_dialogue_suggestion_messages_use_scene_progress_for_observe_mode(self):
+        payload = {
+            "mode": "observe",
+            "input": {
+                "speaker": "User",
+                "message": "",
+                "participants": ["林黛玉", "贾宝玉"],
+            },
+            "persona_contexts": [],
+            "user_persona": {
+                "mode": "observe",
+                "speaker": "User",
+                "source": "observer_hint",
+                "must_follow": "Write as a scene observer giving a short in-world nudge.",
+                "profile": {
+                    "goal": "push_plot_forward",
+                    "preferred_moves": ["turn the scene into its next beat naturally"],
+                },
+            },
+            "relation_context": {"relations_excerpt": ""},
+            "history": [],
+            "memory_context": {"scene_progress": {"offstage_participants": ["薛宝钗"]}},
+            "scene_progress": {
+                "time_hint": "夜深",
+                "location": "回廊",
+                "offstage_participants": ["薛宝钗"],
+                "should_offer_scene_shift": True,
+                "scene_shift_reason": "这幕已经够满，可以顺势切到花厅",
+            },
+            "instructions": {
+                "generation_goal": "Draft one short, natural, directly sendable next user line that fits the current scene, relationships, and persona voices.",
+                "mode_rule": "Draft the user's next line as a short scene-steering utterance.",
+                "speaker_rule": "Treat the user message as a scene steering hint.",
+                "response_style": "Prefer one short scene-driving prompt that pushes the plot forward immediately.",
+                "scene_rule": "Keep the scene anchored.",
+            },
+            "host_action": {
+                "expected_output": {"suggestion": "一句可直接发送的话"},
+                "output_rule": "Keep it short, in-scene, directly sendable, and never explanatory.",
+            },
+            "host_prompt_brief": "Help the user guide 林黛玉, 贾宝玉 with one short prompt that naturally turns this scene into its next beat.",
+            "scene_card": {},
+        }
+
+        messages = WebRunService._build_dialogue_suggestion_llm_messages(payload)
+
+        self.assertIn("scene_progress", messages[1]["content"])
+        self.assertIn("这一拍已经成熟、适合转场", messages[0]["content"])
+        self.assertIn("offstage_participants", messages[0]["content"])
 
 
 @unittest.skipIf(TestClient is None or create_app is None, "fastapi test dependencies unavailable")
@@ -5827,6 +6281,9 @@ class DialogueTurnBehaviorTests(unittest.TestCase):
             self.assertEqual(updated["scene_progress"]["time_hint"], "夜里")
             self.assertEqual(updated["scene_progress"]["present_participants"], ["林黛玉", "贾宝玉"])
             self.assertEqual(updated["scene_progress"]["offstage_participants"], ["薛宝钗"])
+            self.assertTrue(updated["scene_progress"]["atmosphere_summary"])
+            self.assertGreater(updated["scene_progress"]["beat_maturity"], 0)
+            self.assertTrue(updated["scene_progress"]["world_tension_summary"])
             self.assertIn("夜里", updated["session_memory_summary"]["scene_frame"])
             self.assertIn("薛宝钗", updated["session_memory_summary"]["cast"])
 
@@ -5901,6 +6358,8 @@ class DialogueTurnBehaviorTests(unittest.TestCase):
 
             self.assertTrue(updated["scene_progress"]["should_offer_scene_shift"])
             self.assertIn("下一幕", updated["scene_progress"]["scene_shift_reason"])
+            self.assertGreaterEqual(updated["scene_progress"]["beat_maturity"], 70)
+            self.assertTrue(updated["scene_progress"]["world_tension_summary"])
             self.assertIn("转场提示", updated["session_memory_summary"]["scene_frame"])
 
 

@@ -10,6 +10,7 @@ This example shows one complete host-side flow:
 6. generate / merge the relationship result and export the graph
 7. verify workflow completeness
 8. hand off to host-driven dialogue
+9. optionally ask the packaged scene helper to recommend the next beat during dialogue
 
 ## 1. Initialize The Run
 
@@ -162,6 +163,22 @@ At this point, the host already has everything needed to enter `act`, `insert`, 
 - `run_manifest.json`
 
 The host now drives the dialogue directly with its own LLM.
+
+If the host wants packaged help choosing the next beat for the current session, it can also call:
+
+```bash
+python tools/build_scene_recommendation_payload.py --context-file runtime/scene_recommendation_context.json --output runtime/scene_recommendation_bundle.json
+```
+
+You can bootstrap that context shape from:
+
+- `examples/scene_recommendation_context.example.json`
+
+The host can then:
+
+- apply `payload.recommended_card_id`
+- surface `payload.recommended_transition_message`
+- feed `payload.recommended_auto_continue_message` back into its dialogue engine to auto-open the next beat immediately
 
 ## Recommended UI / Agent Surfacing
 

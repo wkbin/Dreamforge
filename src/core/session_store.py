@@ -91,12 +91,12 @@ class MarkdownSessionStore(SessionStore):
         to_archive = history[:-recent_turns]
         keep = history[-recent_turns:]
         state = session.setdefault("state", {})
-        memory_summary = dict(state.get("memory_summary", {}) or {})
+        memory_summary = dict(dict(state.get("memory", {}) or {}).get("summary", {}) or {})
         previous_summary = _normalize_text(memory_summary.get("summary", ""))
         compressed = self._build_memory_summary(previous_summary, to_archive, summary_limit)
         key_points = self._extract_key_points(to_archive, limit=8)
 
-        state["memory_summary"] = {
+        state.setdefault("memory", {})["summary"] = {
             "summary": compressed,
             "key_points": key_points,
             "compressed_turns": len(to_archive),
@@ -199,8 +199,8 @@ class MarkdownSessionStore(SessionStore):
             "session_id": session_id,
             "novel_id": session.get("novel_id"),
             "updated_at": session.get("updated_at"),
-            "relation_matrix": session.get("state", {}).get("relation_matrix", {}),
-            "relation_delta": session.get("state", {}).get("relation_delta", {}),
+            "relation_matrix": dict(dict(session.get("state", {}).get("relations", {}) or {}).get("matrix", {}) or {}),
+            "relation_delta": dict(dict(session.get("state", {}).get("relations", {}) or {}).get("delta", {}) or {}),
         }
         save_markdown_data(
             self._relation_snapshot_path(session_id),
