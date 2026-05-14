@@ -1011,49 +1011,63 @@ function renderDialogueSceneSwitcher(session = currentDialogueSession) {
 async function handleApplyDialogueSceneCard(event) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   if (!currentRunId || !currentDialogueSessionId) return;
+  await applySelectedDialogueSceneCard();
+}
+
+async function applySelectedDialogueSceneCard(options = {}) {
+  if (!currentRunId || !currentDialogueSessionId) return null;
   const select = el("dialogue-live-scene-card");
   const transition = trimmedValue("dialogue-live-scene-transition", "");
   const status = el("dialogue-live-scene-status");
   const button = el("dialogue-live-scene-apply");
   const sceneCardId = String(select?.value || "").trim();
+  const waitingText = String(options?.waitingText || "正在把这一幕转过去...").trim() || "正在把这一幕转过去...";
+  const successText = String(options?.successText || "新的场景已经接上了。").trim() || "新的场景已经接上了。";
   if (!sceneCardId) {
     if (status) status.textContent = "先挑一张要切进去的场景卡。";
-    return;
+    return null;
   }
   if (button) button.disabled = true;
-  if (status) status.textContent = "正在把这一幕转过去...";
+  if (status) status.textContent = waitingText;
   try {
     const payload = await window.__ZAOMENG_WEBUI_API__.switchDialogueSceneCard(currentRunId, currentDialogueSessionId, {
       scene_card_id: sceneCardId,
       scene_profile: currentSceneCard?.card_id === sceneCardId ? (currentSceneCard?.fields || {}) : {},
       transition_message: transition,
     });
+    clearDialogueSceneRecommendationCache();
     if (el("dialogue-live-scene-transition")) {
       setValue("dialogue-live-scene-transition", "");
     }
-    if (status) status.textContent = "新的场景已经接上了。";
+    if (status) status.textContent = successText;
     await renderDialogueSession(payload);
+    return payload;
   } catch (error) {
     if (status) status.textContent = error.message || "切换场景失败。";
+    throw error;
   } finally {
     if (button) button.disabled = false;
   }
 }
 
-async function handleRecommendDialogueSceneCard(event) {
+async function handleRecommendDialogueSceneCard(event, options = {}) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   if (!currentRunId || !currentDialogueSessionId) return;
   const select = el("dialogue-live-scene-card");
   const status = el("dialogue-live-scene-status");
   const button = el("dialogue-live-scene-recommend");
+  const shiftButton = el("dialogue-live-scene-shift-recommend");
+  const autoApply = Boolean(options?.autoApply);
+  const force = Boolean(options?.force);
   if (!sceneCards.length) {
     if (status) status.textContent = "你还没有场景卡，先新建一张再来转场。";
     return;
   }
   if (button) button.disabled = true;
+  if (shiftButton) shiftButton.disabled = true;
   if (status) status.textContent = "正在按当前局势替你挑下一幕...";
   try {
-    const payload = await window.__ZAOMENG_WEBUI_API__.recommendDialogueSceneCard(currentRunId, currentDialogueSessionId);
+    const payload = await fetchDialogueSceneRecommendation({ force });
     const recommendedCardId = String(payload?.recommended_card_id || "").trim();
     const recommendedTransition = String(payload?.recommended_transition_message || "").trim();
     currentDialogueSceneChainSuggestions = Array.isArray(payload?.chain_suggestions) ? payload.chain_suggestions : [];
@@ -1074,10 +1088,17 @@ async function handleRecommendDialogueSceneCard(event) {
       status.textContent = reasons.length ? `已替你挑好下一幕：${reasons.join("，")}。` : "已替你挑好一张更接戏的场景卡。";
     }
     renderDialogueSceneChainSuggestions(currentDialogueSceneChainSuggestions, currentDialogueSessionId);
+    if (autoApply) {
+      await applySelectedDialogueSceneCard({
+        waitingText: "正在顺手把这一幕转到下一拍...",
+        successText: "已经顺手切到下一幕了。",
+      });
+    }
   } catch (error) {
     if (status) status.textContent = error.message || "下一幕推荐失败。";
   } finally {
     if (button) button.disabled = sceneCards.length < 2;
+    if (shiftButton) shiftButton.disabled = sceneCards.length < 2;
   }
 }
 
@@ -1118,9 +1139,11 @@ function renderDialogueSceneChainSuggestions(chains = [], sessionId = "") {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "soft-button";
-    button.textContent = "接这条线";
+    button.textContent = "接这条线并切幕";
     button.addEventListener("click", () => {
-      applyDialogueSceneChain(chain);
+      applyDialogueSceneChain(chain).catch((error) => {
+        setStatus("dialogue-live-scene-status", error.message || "这条线暂时没有接上。");
+      });
     });
     actions.appendChild(button);
     card.appendChild(actions);
@@ -1128,7 +1151,7 @@ function renderDialogueSceneChainSuggestions(chains = [], sessionId = "") {
   });
 }
 
-function applyDialogueSceneChain(chain = {}) {
+async function applyDialogueSceneChain(chain = {}) {
   const scenes = Array.isArray(chain?.scenes) ? chain.scenes : [];
   const first = scenes[0] || {};
   const sceneCardId = String(first?.card_id || "").trim();
@@ -1143,9 +1166,16 @@ function applyDialogueSceneChain(chain = {}) {
   if (status) {
     const tailTitles = scenes.slice(1).map((item) => String(item?.title || "").trim()).filter(Boolean);
     status.textContent = tailTitles.length
-      ? `已替你接上这条线，后面还可以顺势转到：${tailTitles.join("、")}。`
-      : "已替你接上这条线。";
+      ? `正在替你接上这条线，后面还可以顺势转到：${tailTitles.join("、")}。`
+      : "正在替你接上这条线。";
   }
+  const tailTitles = scenes.slice(1).map((item) => String(item?.title || "").trim()).filter(Boolean);
+  await applySelectedDialogueSceneCard({
+    waitingText: "正在按这条戏路切到下一幕...",
+    successText: tailTitles.length
+      ? `这条线已经接上了，后面还可以顺势转到：${tailTitles.join("、")}。`
+      : "这条线已经接上了。",
+  });
   return true;
 }
 
@@ -2321,6 +2351,8 @@ const DIALOGUE_SUGGESTION_BUSY_LABEL = "…";
 const DIALOGUE_RETRY_FEEDBACK_DELAY_MS = 2200;
 const DIALOGUE_SEND_RETRY_MESSAGE = "这次声源有点慢，正在自动重试...";
 const DIALOGUE_SUGGEST_RETRY_MESSAGE = "这次生成有点慢，正在自动重试...";
+let currentDialogueSceneRecommendationCacheKey = "";
+let currentDialogueSceneRecommendationCachePayload = null;
 const OBSERVE_QUICK_REPLIES = [
   { label: "……", value: "……" },
   { label: "继续聊", value: "继续聊。" },
@@ -2329,6 +2361,39 @@ const OBSERVE_QUICK_REPLIES = [
   { label: "再逼近点", value: "这句话落下去以后，气氛反而更近了一步。" },
 ];
 let currentDialogueMessageKind = "dialogue";
+
+function buildDialogueSceneRecommendationCacheKey(session = currentDialogueSession) {
+  const target = session || {};
+  const overview = target?.runtime_state_overview || {};
+  return [
+    String(currentRunId || "").trim(),
+    String(target?.session_id || "").trim(),
+    String(target?.updated_at || "").trim(),
+    String(target?.session_card?.scene_card_id || "").trim(),
+    String(overview?.status_line || "").trim(),
+    String(overview?.next_hint || "").trim(),
+  ].join("::");
+}
+
+function clearDialogueSceneRecommendationCache() {
+  currentDialogueSceneRecommendationCacheKey = "";
+  currentDialogueSceneRecommendationCachePayload = null;
+}
+
+async function fetchDialogueSceneRecommendation(options = {}) {
+  const force = Boolean(options?.force);
+  if (!currentRunId || !currentDialogueSessionId) {
+    return null;
+  }
+  const cacheKey = buildDialogueSceneRecommendationCacheKey(currentDialogueSession);
+  if (!force && cacheKey && cacheKey === currentDialogueSceneRecommendationCacheKey && currentDialogueSceneRecommendationCachePayload) {
+    return currentDialogueSceneRecommendationCachePayload;
+  }
+  const payload = await window.__ZAOMENG_WEBUI_API__.recommendDialogueSceneCard(currentRunId, currentDialogueSessionId);
+  currentDialogueSceneRecommendationCacheKey = cacheKey;
+  currentDialogueSceneRecommendationCachePayload = payload;
+  return payload;
+}
 
 function buildObserveQuickReplies(session = currentDialogueSession) {
   const overview = session?.runtime_state_overview || {};
@@ -2912,8 +2977,16 @@ function bindEvents() {
   bind("start-opening-preset-button", "click", handleStartOpeningPreset);
   bind("delete-opening-preset-button", "click", handleDeleteOpeningPreset);
   bind("recommend-scene-card-button", "click", handleRecommendSceneCard);
-  bind("dialogue-live-scene-recommend", "click", handleRecommendDialogueSceneCard);
-  bind("dialogue-live-scene-shift-recommend", "click", handleRecommendDialogueSceneCard);
+  bind("dialogue-live-scene-recommend", "click", (event) => {
+    handleRecommendDialogueSceneCard(event).catch((error) => {
+      setStatus("dialogue-live-scene-status", error.message || "下一幕推荐失败。");
+    });
+  });
+  bind("dialogue-live-scene-shift-recommend", "click", (event) => {
+    handleRecommendDialogueSceneCard(event, { autoApply: true }).catch((error) => {
+      setStatus("dialogue-live-scene-status", error.message || "顺手切幕失败。");
+    });
+  });
   bind("dialogue-live-scene-apply", "click", handleApplyDialogueSceneCard);
   bind("create-scene-card-button", "click", handleOpenNewSceneCard);
   bind("edit-scene-card-button", "click", handleEditCurrentSceneCard);
