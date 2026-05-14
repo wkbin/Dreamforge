@@ -332,7 +332,7 @@ fi
 
 run_webui() {
   env ZAOMENG_WEB_BUILTIN_NOVELS_ROOT="\${BUILTIN_NOVELS_ROOT}" \
-    exec "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\${STORAGE_ROOT}" "\$@"
+    "\${PYTHON_BIN}" "\${INSTALL_ROOT}/scripts/run_webui.py" --storage-root "\${STORAGE_ROOT}" "\$@"
 }
 
 current_version() {
