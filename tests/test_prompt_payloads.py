@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from src.skill_support.prompt_payloads import build_distill_prompt_payload, build_relation_prompt_payload
+from src.skill_support.scene_recommendations import build_scene_recommendation_bundle
 
 
 class PromptPayloadTests(unittest.TestCase):
@@ -142,6 +143,91 @@ class PromptPayloadTests(unittest.TestCase):
         self.assertEqual(payload["request"]["excerpt_focus"]["missing_characters"], ["齐夏"])
         self.assertTrue(payload["meta"]["warnings"])
         self.assertIn("未匹配到任何目标角色", payload["meta"]["warnings"][0])
+
+    def test_build_scene_recommendation_bundle_prefers_shifted_scene_when_current_beat_is_mature(self):
+        bundle = build_scene_recommendation_bundle(
+            {
+                "mode": "observe",
+                "participants": ["魏无羡", "蓝忘机", "江澄"],
+                "current_scene_card_id": "scene-garden",
+                "current_scene": {
+                    "title": "园中僵持",
+                    "location": "后园",
+                    "time_hint": "傍晚",
+                    "atmosphere": "气氛发紧",
+                },
+                "runtime_state_overview": {
+                    "location": "后园",
+                    "time_hint": "傍晚",
+                    "beat_maturity": 78,
+                    "should_offer_scene_shift": True,
+                    "scene_shift_reason": "这边该说的话已经说到头了",
+                    "tension": "僵着的一口气",
+                },
+                "transcript": [
+                    {"message": "魏无羡笑意收了，没再接话。"},
+                    {"message": "江澄看了他一眼，气口越发僵。"},
+                ],
+                "scene_cards": [
+                    {
+                        "card_id": "scene-garden",
+                        "fields": {
+                            "title": "园中僵持",
+                            "location": "后园",
+                            "time_hint": "傍晚",
+                            "atmosphere": "气氛发紧",
+                            "opening_situation": "几个人都还站在原地，谁也不肯先退。",
+                            "scene_drive": "继续僵住，看谁先摊牌",
+                        },
+                    },
+                    {
+                        "card_id": "scene-hall",
+                        "fields": {
+                            "title": "回厅再坐",
+                            "location": "前厅",
+                            "time_hint": "入夜",
+                            "atmosphere": "表面平静，底下还压着火",
+                            "opening_situation": "人都重新入席，话题却没人肯先挑明。",
+                            "scene_drive": "借换场把话逼到桌面上",
+                        },
+                    },
+                ],
+            }
+        )
+
+        payload = bundle["payload"]
+        self.assertEqual(bundle["kind"], "dialogue_scene_recommendation_bundle")
+        self.assertEqual(payload["recommended_card_id"], "scene-hall")
+        self.assertIn("后园", payload["recommended_transition_message"])
+        self.assertTrue(payload["recommended_auto_continue_message"])
+
+    def test_build_scene_recommendation_bundle_uses_self_insert_identity_for_opening_hint(self):
+        bundle = build_scene_recommendation_bundle(
+            {
+                "mode": "insert",
+                "participants": ["林黛玉", "贾宝玉"],
+                "self_profile": {
+                    "display_name": "沈拂衣",
+                    "scene_identity": "初到贾府的借宿客",
+                },
+                "scene_cards": [
+                    {
+                        "card_id": "scene-arrival",
+                        "fields": {
+                            "title": "初见偏厅",
+                            "location": "偏厅",
+                            "atmosphere": "初见微妙",
+                            "opening_situation": "你刚被丫鬟领进门，众人的目光都落过来。",
+                            "scene_drive": "先试探来意，再看彼此反应",
+                        },
+                    }
+                ],
+            }
+        )
+
+        opening = bundle["payload"]["recommended_auto_continue_message"]
+        self.assertIn("沈拂衣", opening)
+        self.assertIn("初到贾府的借宿客", opening)
 
 
 if __name__ == "__main__":

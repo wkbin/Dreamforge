@@ -1,0 +1,95 @@
+{
+  "mode": "observe",
+  "participants": ["林黛玉", "贾宝玉", "薛宝钗"],
+  "current_scene_card_id": "scene-garden-evening",
+  "current_scene": {
+    "title": "园中晚坐",
+    "time_hint": "傍晚",
+    "location": "沁芳桥边",
+    "atmosphere": "话里都还留着分寸",
+    "opening_situation": "三人刚把一桩旧事说到半明半暗，谁也没先彻底挑破。",
+    "public_goal": "先把表面体面撑住。",
+    "hidden_tension": "再往下说，就会碰到真正不愿提起的话。",
+    "scene_drive": "让这口气慢慢收紧，再看该不该换场。"
+  },
+  "runtime_state_overview": {
+    "location": "沁芳桥边",
+    "time_hint": "傍晚",
+    "atmosphere": "表面还是平静，底下已经发紧",
+    "beat_maturity": 78,
+    "should_offer_scene_shift": true,
+    "scene_shift_reason": "这一拍已经说到边上，再留在原地只会空转，不如顺势换到下一幕。",
+    "tension": "几个人都知道下一句会更难接",
+    "next_hint": "不如借天色和走动，把人带进更适合把话说开的地方。",
+    "event_rows": [
+      {
+        "title": "气氛变化",
+        "copy": "笑意还在，真正的话头却已经沉下去了。"
+      }
+    ]
+  },
+  "transcript": [
+    {"speaker": "林黛玉", "message": "话既说到这儿，再绕也没什么意思了。"},
+    {"speaker": "贾宝玉", "message": "我不是要逼你，只是有些话总不能一直搁着。"},
+    {"speaker": "薛宝钗", "message": "桥边风凉，真要说开，不如先回去坐下。"}
+  ],
+  "scene_cards": [
+    {
+      "card_id": "scene-garden-evening",
+      "fields": {
+        "title": "园中晚坐",
+        "time_hint": "傍晚",
+        "location": "沁芳桥边",
+        "atmosphere": "话里都还留着分寸",
+        "opening_situation": "三人还站在桥边，谁也没先走。",
+        "public_goal": "先把局面维持住。",
+        "hidden_tension": "真正的话已经快藏不住了。",
+        "scene_drive": "继续原地试探。",
+        "expected_rhythm": "慢压"
+      },
+      "preview": {
+        "title": "园中晚坐",
+        "location": "沁芳桥边",
+        "atmosphere": "话里都还留着分寸"
+      }
+    },
+    {
+      "card_id": "scene-hall-night",
+      "fields": {
+        "title": "回厅夜坐",
+        "time_hint": "入夜",
+        "location": "花厅",
+        "atmosphere": "灯下更难回避彼此",
+        "opening_situation": "众人重新落座，谁也没急着碰茶。",
+        "public_goal": "把表面话撑到头。",
+        "hidden_tension": "下一句就可能把真正心思挑明。",
+        "scene_drive": "借换场把话逼到桌面上。",
+        "expected_rhythm": "越聊越紧"
+      },
+      "preview": {
+        "title": "回厅夜坐",
+        "location": "花厅",
+        "atmosphere": "灯下更难回避彼此"
+      }
+    },
+    {
+      "card_id": "scene-corridor-private",
+      "fields": {
+        "title": "回廊私话",
+        "time_hint": "夜里",
+        "location": "回廊",
+        "atmosphere": "两个人终于能把声音压低",
+        "opening_situation": "人群散开后，只剩两个人还没把那句话说完。",
+        "public_goal": "试着把真正想问的话说出口。",
+        "hidden_tension": "谁先软下来，谁就先露底。",
+        "scene_drive": "让关系从多人局转到双人拉扯。",
+        "expected_rhythm": "缓慢逼近"
+      },
+      "preview": {
+        "title": "回廊私话",
+        "location": "回廊",
+        "atmosphere": "两个人终于能把声音压低"
+      }
+    }
+  ]
+}

@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+from src.skill_support.scene_recommendations import recommend_scene_cards_base
+
 
 SCENE_CARD_FIELDS = (
     "title",
@@ -42,12 +44,6 @@ SCENE_CARD_FIELD_LABELS = {
     "expected_rhythm": "节奏手感",
     "forbidden_topics": "不想碰的话头",
 }
-
-_GROUP_SCENE_TOKENS = ("众人", "席间", "满座", "同席", "众目", "围坐", "宴", "厅", "堂", "多人")
-_DUO_SCENE_TOKENS = ("二人", "对坐", "独处", "檐下", "私谈", "夜谈", "回廊", "亭中", "单独")
-_INSERT_SCENE_TOKENS = ("来客", "访客", "外客", "误入", "新到", "初来", "借住", "入席", "登门")
-_PLOT_PUSH_TOKENS = ("试探", "摊牌", "转折", "打断", "逼问", "推", "揭", "撞破", "失手", "变局")
-
 
 def blank_scene_card_fields() -> dict[str, str]:
     return {field: "" for field in SCENE_CARD_FIELDS}
@@ -230,39 +226,7 @@ def recommend_scene_cards(
     mode: str,
     participants: list[str] | None = None,
 ) -> dict[str, Any]:
-    normalized_mode = str(mode or "observe").strip() or "observe"
-    participant_list = [str(item).strip() for item in (participants or []) if str(item).strip()]
-    scored_items: list[dict[str, Any]] = []
-    for item in cards:
-        score, reasons = _score_scene_card(
-            dict(item.get("fields", {}) or {}),
-            mode=normalized_mode,
-            participants=participant_list,
-        )
-        scored_items.append(
-            {
-                **item,
-                "recommendation": {
-                    "score": score,
-                    "reasons": reasons,
-                },
-            }
-        )
-    scored_items.sort(
-        key=lambda item: (
-            int(item.get("recommendation", {}).get("score", 0) or 0),
-            str(item.get("updated_at", "")),
-            str(item.get("card_id", "")),
-        ),
-        reverse=True,
-    )
-    recommended_card_id = str(scored_items[0].get("card_id", "")).strip() if scored_items else ""
-    return {
-        "mode": normalized_mode,
-        "participants": participant_list,
-        "recommended_card_id": recommended_card_id,
-        "items": scored_items,
-    }
+    return recommend_scene_cards_base(cards, mode=mode, participants=participants)
 
 
 def _extract_json_object(text: str) -> dict[str, Any] | None:
@@ -290,74 +254,6 @@ def _load_card_meta(card_dir: Path) -> dict[str, Any]:
     if not meta_path.exists():
         return {}
     return json.loads(meta_path.read_text(encoding="utf-8"))
-
-
-def _score_scene_card(
-    fields: dict[str, Any],
-    *,
-    mode: str,
-    participants: list[str],
-) -> tuple[int, list[str]]:
-    normalized = normalize_scene_card_fields(fields)
-    combined_text = "\n".join(str(normalized.get(field, "")).strip() for field in SCENE_CARD_FIELDS)
-    participant_count = len(participants)
-    score = 0
-    reasons: list[str] = []
-
-    if normalized["scene_drive"]:
-        score += 3
-        reasons.append("推进方向明确")
-    if normalized["opening_situation"]:
-        score += 2
-        reasons.append("开场局面具体")
-    if normalized["atmosphere"]:
-        score += 1
-        reasons.append("气氛落点清楚")
-
-    if participant_count >= 3:
-        hit = _count_hits(combined_text, _GROUP_SCENE_TOKENS)
-        if hit:
-            score += 3 + min(2, hit - 1)
-            reasons.append("更像多人同席场")
-    elif participant_count == 2:
-        hit = _count_hits(combined_text, _DUO_SCENE_TOKENS)
-        if hit:
-            score += 3 + min(1, hit - 1)
-            reasons.append("更适合双人拉扯")
-
-    if mode == "insert":
-        hit = _count_hits(combined_text, _INSERT_SCENE_TOKENS)
-        if hit:
-            score += 4 + min(1, hit - 1)
-            reasons.append("适合来客/自我入场")
-    elif mode == "observe":
-        hit = _count_hits(combined_text, _PLOT_PUSH_TOKENS)
-        if hit:
-            score += 3 + min(2, hit - 1)
-            reasons.append("更利于旁观推动剧情")
-    elif mode == "act":
-        duo_hit = _count_hits(combined_text, _DUO_SCENE_TOKENS)
-        if duo_hit:
-            score += 2
-            reasons.append("留有角色正面接戏空间")
-
-    if normalized["public_goal"]:
-        score += 1
-    if normalized["hidden_tension"]:
-        score += 1
-    if normalized["expected_rhythm"]:
-        score += 1
-
-    if not reasons:
-        reasons.append("信息比较完整，能直接开场")
-    return score, reasons[:3]
-
-
-def _count_hits(text: str, tokens: tuple[str, ...]) -> int:
-    compact = str(text or "").strip()
-    if not compact:
-        return 0
-    return sum(1 for token in tokens if token and token in compact)
 
 
 def _load_scene_card_fields(

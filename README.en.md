@@ -131,6 +131,7 @@ The current Web UI already supports:
 - persona review pages with key-field completion, evidence-gap checks, and secondary-field tuning
 - creating, editing, selecting, and reusing scene cards, self cards, and opening presets
 - automatic next-scene recommendation during chat, with in-session scene switching
+- automatic next-beat surfacing when a scene matures, including a transition line, follow-up chain, and auto-opening cue
 - session restore, recent-session resume, group chat continuation, and direct workbench entry into a scene
 - dialogue context compression that trims persona / relation context around active participants and injects session memory summaries
 - viewing transcripts, continuing group chat, and deleting recent sessions in the same interface
@@ -207,6 +208,7 @@ You can now layer these helpers before or during a session:
 - self cards: prepare your identity, tone, motive, and in-scene role for `insert`
 - opening presets: bundle mode, participants, scene card, and self card into a reusable starting setup
 - automatic scene recommendation: while a session is running, the system can suggest a more suitable next scene card
+- transition assist flow: besides recommending the next scene, it can also provide a transition line, a follow-up scene chain, and an auto-opening cue for the next beat
 
 ## Usage 🛠️
 

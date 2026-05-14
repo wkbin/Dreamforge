@@ -151,6 +151,14 @@ Host mode interpretation:
 - `insert`: the user enters the scene as themselves
 - `observe`: the user watches the cast continue the scene
 
+If the host also wants next-beat recommendation, scene-shift text, and auto-opening hints, it can additionally call:
+
+- `python tools/build_scene_recommendation_payload.py --context-file <context.json>`
+
+Reference example:
+
+- `examples/scene_recommendation_context.example.json`
+
 ## Installation
 
 ### OpenClaw
@@ -182,6 +190,7 @@ python tools/build_prompt_payload.py --mode distill|relation --novel <path> [--c
 python tools/materialize_persona_bundle.py --profile-file <character-dir/PROFILE.generated.md>
 python tools/export_relation_graph.py --relations-file <relation-result.md>
 python tools/verify_host_workflow.py --characters-root <characters/<novel_id>> [--relations-file <relation-result.md>]
+python tools/build_scene_recommendation_payload.py --context-file <context.json>
 ```
 
 ```bash

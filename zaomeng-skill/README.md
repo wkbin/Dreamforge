@@ -151,6 +151,14 @@
 - `insert`：用户以自己身份进入场景
 - `observe`：用户只观察角色推进群聊
 
+如果宿主想把“下一幕推荐 + 自动转场 + 自动起拍”也接进来，可以额外调用：
+
+- `python tools/build_scene_recommendation_payload.py --context-file <context.json>`
+
+可直接参考：
+
+- `examples/scene_recommendation_context.example.json`
+
 ## 安装方式
 
 ### OpenClaw
@@ -182,6 +190,7 @@ python tools/build_prompt_payload.py --mode distill|relation --novel <路径> [-
 python tools/materialize_persona_bundle.py --profile-file <角色目录/PROFILE.generated.md>
 python tools/export_relation_graph.py --relations-file <关系结果.md>
 python tools/verify_host_workflow.py --characters-root <characters/<novel_id>> [--relations-file <关系结果.md>]
+python tools/build_scene_recommendation_payload.py --context-file <context.json>
 ```
 
 ```bash

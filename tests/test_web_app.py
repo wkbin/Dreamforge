@@ -151,6 +151,7 @@ class WebRunServiceTests(unittest.TestCase):
             self.assertNotEqual(payload["recommended_card_id"], current_scene["card_id"])
             self.assertTrue(payload["items"][0]["recommendation"]["reasons"])
             self.assertTrue(str(payload.get("recommended_transition_message", "")).strip())
+            self.assertTrue(str(payload.get("recommended_auto_continue_message", "")).strip())
             self.assertTrue(payload["chain_suggestions"])
             self.assertGreaterEqual(len(payload["chain_suggestions"][0]["scenes"]), 2)
             self.assertTrue(str(payload["chain_suggestions"][0]["reason"]).strip())
@@ -249,6 +250,7 @@ class WebRunServiceTests(unittest.TestCase):
             payload = service.recommend_dialogue_scene_card(run["run_id"], session_id=session["session_id"])
 
             self.assertEqual(payload["recommended_card_id"], same_location["card_id"])
+            self.assertIn("生成一个自然开场", str(payload.get("recommended_auto_continue_message", "")).strip())
 
     def test_dialogue_scene_card_recommendation_uses_runtime_shift_reason_in_transition_hint(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -345,6 +347,7 @@ class WebRunServiceTests(unittest.TestCase):
 
             self.assertEqual(payload["recommended_card_id"], next_scene["card_id"])
             self.assertIn("雨势压得两人都没法再站在回廊里装作无事", payload["recommended_transition_message"])
+            self.assertTrue(str(payload.get("recommended_auto_continue_message", "")).strip())
 
     def test_dialogue_scene_history_tracks_initial_scene_and_switches(self):
         with tempfile.TemporaryDirectory() as tmp:

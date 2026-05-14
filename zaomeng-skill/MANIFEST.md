@@ -19,6 +19,7 @@
 - `tools/materialize_persona_bundle.py`
 - `tools/export_relation_graph.py`
 - `tools/verify_host_workflow.py`
+- `tools/build_scene_recommendation_payload.py`
 
 ## Prompt 模板
 
@@ -42,6 +43,7 @@
 - `examples/sample_character_profile.md`
 - `examples/sample_relations.md`
 - `examples/test-prompts.json`
+- `examples/scene_recommendation_context.example.json`
 - `examples/host_workflow_example.md`
 
 ## 打包目标

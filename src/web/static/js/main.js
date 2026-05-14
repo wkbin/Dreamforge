@@ -2436,6 +2436,7 @@ function renderDialogueSceneRecommendationSummary(session = currentDialogueSessi
   const title = String(topItem?.preview?.title || topItem?.fields?.title || recommendedCardId).trim();
   const location = String(topItem?.preview?.location || topItem?.fields?.location || "").trim();
   const transition = String(payload?.recommended_transition_message || "").trim();
+  const autoContinueMessage = String(payload?.recommended_auto_continue_message || "").trim();
   const reasons = Array.isArray(topItem?.recommendation?.reasons) ? topItem.recommendation.reasons.filter(Boolean).slice(0, 4) : [];
   const firstChain = Array.isArray(payload?.chain_suggestions) ? payload.chain_suggestions[0] : null;
   const chainReason = String(firstChain?.reason || "").trim();
@@ -2473,6 +2474,12 @@ function renderDialogueSceneRecommendationSummary(session = currentDialogueSessi
     const chainCopy = document.createElement("p");
     chainCopy.textContent = `后续走势：${chainReason}`;
     root.appendChild(chainCopy);
+  }
+
+  if (autoContinueMessage) {
+    const openingCopy = document.createElement("p");
+    openingCopy.textContent = `自动起拍提示：${autoContinueMessage}`;
+    root.appendChild(openingCopy);
   }
 
   const autoCopy = document.createElement("p");

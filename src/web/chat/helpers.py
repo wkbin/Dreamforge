@@ -5,6 +5,7 @@ import json
 from typing import Any, Callable
 
 from src.core.exceptions import LLMRequestError
+from src.skill_support.scene_recommendations import build_scene_opening_message
 
 
 def _session_state(session: dict[str, Any]) -> dict[str, Any]:
@@ -57,40 +58,12 @@ def _canonical_event_signals(session: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_dialogue_opening_message(session: dict[str, Any]) -> str:
-    mode = str(session.get("mode", "observe")).strip() or "observe"
-    participants = [str(item).strip() for item in session.get("participants", []) if str(item).strip()]
-    cast = "、".join(participants) or "当前角色"
-    scene_card = dict(session.get("scene_card", {}) or {})
-    scene_title = str(scene_card.get("title", "")).strip()
-    location = str(scene_card.get("location", "")).strip()
-    atmosphere = str(scene_card.get("atmosphere", "")).strip()
-    opening = str(scene_card.get("opening_situation", "")).strip()
-    drive = str(scene_card.get("scene_drive", "")).strip()
-    scene_prefix_bits = [bit for bit in (scene_title, location, atmosphere) if bit]
-    scene_prefix = f"场景设定：{' / '.join(scene_prefix_bits)}。" if scene_prefix_bits else ""
-    opening_suffix = f" 开场局面是：{opening}。" if opening else ""
-    drive_suffix = f" 推进方向优先朝这边走：{drive}。" if drive else ""
-    if mode == "act":
-        controlled = str(session.get("controlled_character", "")).strip() or "该角色"
-        return (
-            f"{scene_prefix}请先为 {controlled} 与 {cast} 生成一个自然开场。"
-            f"{opening_suffix}{drive_suffix}"
-            "先给 1 条简短的场景提示或旁白，再让其他角色先接出第一轮对话，不要等待用户补充。"
-        )
-    if mode == "insert":
-        self_profile = dict(session.get("self_insert", {}) or {})
-        display_name = str(self_profile.get("display_name", "")).strip() or "我"
-        scene_identity = str(self_profile.get("scene_identity", "")).strip() or str(self_profile.get("core_identity", "")).strip()
-        identity_suffix = f"，身份是{scene_identity}" if scene_identity else ""
-        return (
-            f"{scene_prefix}请先为 {display_name}{identity_suffix} 与 {cast} 生成一个自然开场。"
-            f"{opening_suffix}{drive_suffix}"
-            "先给 1 条简短的场景提示或旁白，再让角色们先开口，对这个进入场景的人作出第一轮反应。"
-        )
-    return (
-        f"{scene_prefix}请先为 {cast} 生成一个自然开场。"
-        f"{opening_suffix}{drive_suffix}"
-        "先给 1 条简短的场景提示或旁白，再让角色们开始第一轮对话，让场景自己动起来。"
+    return build_scene_opening_message(
+        mode=str(session.get("mode", "observe")).strip() or "observe",
+        participants=[str(item).strip() for item in session.get("participants", []) if str(item).strip()],
+        scene_card=dict(session.get("scene_card", {}) or {}),
+        controlled_character=str(session.get("controlled_character", "")).strip(),
+        self_profile=dict(session.get("self_insert", {}) or {}),
     )
 
 

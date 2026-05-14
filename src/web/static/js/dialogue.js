@@ -821,7 +821,7 @@ function latestSessionSnippetFromTranscript(items) {
 }
 
 async function maybeAutoRecommendNextScene(session) {
-  const progress = session?.scene_progress || {};
+  const progress = session?.runtime_state_overview || session?.scene_progress || {};
   const sessionId = String(session?.session_id || "").trim();
   if (!sessionId || !progress?.should_offer_scene_shift) return;
   const button = el("dialogue-live-scene-recommend");
@@ -830,10 +830,10 @@ async function maybeAutoRecommendNextScene(session) {
   if ((select?.options?.length || 0) < 3) return;
   const marker = [
     sessionId,
-    String(progress.updated_at || "").trim(),
+    String(progress.updated_at || session?.updated_at || "").trim(),
     String(progress.time_hint || "").trim(),
     String(progress.location || "").trim(),
-    String(progress.scene_shift_reason || "").trim(),
+    String(progress.scene_shift_reason || progress.next_hint || "").trim(),
   ].join("::");
   if (!marker || marker === lastAutoSceneRecommendationKey) return;
   lastAutoSceneRecommendationKey = marker;

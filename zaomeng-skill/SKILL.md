@@ -30,7 +30,7 @@ metadata:
 
 ## 2. 宿主能力契约
 
-宿主侧只需要理解四个标准能力，以及三组对话 helper：
+宿主侧只需要理解四个标准能力，以及四组对话 helper：
 
 | 能力 | 入口 | 作用 | 标准成功标记 |
 | --- | --- | --- | --- |
@@ -46,6 +46,7 @@ metadata:
 | `self_card` | `tools/manage_self_card.py` | 创建 / 保存 / 读取 / 删除 self-insert 角色卡，并生成随机角色卡 prompt payload |
 | `persona_autofill` | `tools/build_persona_autofill_payload.py` | 为人物校对单字段生成宿主可调用的补全 payload，并解析模型返回 |
 | `dialogue_suggestion` | `tools/build_dialogue_suggestion_payload.py` | 为 `act` / `insert` / `observe` 生成自动回复建议 payload，并提供压缩重试版本 |
+| `scene_recommendation` | `tools/build_scene_recommendation_payload.py` | 为当前会话生成下一幕场景推荐、转场提示、多拍链路建议，以及可直接用于自动起拍的 opening cue |
 
 所有能力都应该满足：
 
@@ -233,11 +234,16 @@ python tools/verify_host_workflow.py --characters-root <characters/<novel_id>> -
 - `run_manifest.json`
 - `references/output_schema.md`、`references/style_differ.md`、`references/logic_constraint.md`
 
-如果宿主需要角色卡、人物字段补全或对话建议 helper，可直接调用：
+如果宿主需要角色卡、人物字段补全、对话建议或下一幕推荐 helper，可直接调用：
 
 - `python tools/manage_self_card.py --mode blank|list|get|save|delete|build-random-payload|parse-random-response`
 - `python tools/build_persona_autofill_payload.py --persona-dir <角色目录> --field <字段名> --strategy auto|model_knowledge`
 - `python tools/build_dialogue_suggestion_payload.py --context-file <context.json>`
+- `python tools/build_scene_recommendation_payload.py --context-file <context.json>`
+
+其中 `scene_recommendation` 的上下文字段可直接参考：
+
+- `examples/scene_recommendation_context.example.json`
 
 宿主结束提示建议直接说清楚：
 

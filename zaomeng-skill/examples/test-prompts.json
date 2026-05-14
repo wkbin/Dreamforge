@@ -53,6 +53,25 @@
           "needs_revision_on_repeat_mismatch"
         ]
       }
+    },
+    {
+      "id": "scene-recommend-01",
+      "task": "scene_recommendation",
+      "input": "请根据当前会话状态推荐下一幕场景，并给出转场起句与自动起拍提示。",
+      "expect": {
+        "required_keys": [
+          "recommended_card_id",
+          "recommended_transition_message",
+          "recommended_auto_continue_message",
+          "chain_suggestions",
+          "items"
+        ],
+        "validation": [
+          "scene_progress_alignment",
+          "transition_quality",
+          "opening_cue_available"
+        ]
+      }
     }
   ]
 }

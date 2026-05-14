@@ -36,16 +36,19 @@ class InstallSkillTests(unittest.TestCase):
             self.assertTrue((dst / "tools" / "build_prompt_payload.py").exists())
             self.assertTrue((dst / "tools" / "build_persona_autofill_payload.py").exists())
             self.assertTrue((dst / "tools" / "build_dialogue_suggestion_payload.py").exists())
+            self.assertTrue((dst / "tools" / "build_scene_recommendation_payload.py").exists())
             self.assertTrue((dst / "tools" / "manage_self_card.py").exists())
             self.assertTrue((dst / "tools" / "export_relation_graph.py").exists())
             self.assertTrue((dst / "tools" / "init_host_run.py").exists())
             self.assertTrue((dst / "tools" / "materialize_persona_bundle.py").exists())
             self.assertTrue((dst / "tools" / "update_run_progress.py").exists())
             self.assertTrue((dst / "tools" / "verify_host_workflow.py").exists())
+            self.assertTrue((dst / "examples" / "scene_recommendation_context.example.json").exists())
             self.assertTrue((dst / "tools" / "_skill_support" / "novel_preparation.py").exists())
             self.assertTrue((dst / "tools" / "_skill_support" / "persona_bundle.py").exists())
             self.assertTrue((dst / "tools" / "_skill_support" / "persona_review.py").exists())
             self.assertTrue((dst / "tools" / "_skill_support" / "dialogue_payloads.py").exists())
+            self.assertTrue((dst / "tools" / "_skill_support" / "scene_recommendations.py").exists())
             self.assertTrue((dst / "tools" / "_skill_support" / "workflow_completion.py").exists())
             self.assertFalse((dst / "runtime").exists())
 
@@ -366,6 +369,88 @@ class InstallSkillTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Unsupported dialogue suggestion mode", result.stderr)
+
+    def test_installed_scene_recommendation_tool_builds_bundle(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        packaged_src = repo_root / "zaomeng-skill"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dst = copy_skill_bundle(packaged_src, tmp_root, "zaomeng-skill")
+            context_path = tmp_root / "scene_context.json"
+            context_path.write_text(
+                json.dumps(
+                    {
+                        "mode": "observe",
+                        "participants": ["魏无羡", "蓝忘机", "江澄"],
+                        "current_scene_card_id": "garden",
+                        "current_scene": {
+                            "title": "后园僵持",
+                            "location": "后园",
+                            "time_hint": "傍晚",
+                            "atmosphere": "气氛发紧",
+                        },
+                        "runtime_state_overview": {
+                            "location": "后园",
+                            "time_hint": "傍晚",
+                            "beat_maturity": 82,
+                            "should_offer_scene_shift": True,
+                            "scene_shift_reason": "这边该说的话已经说尽了",
+                        },
+                        "transcript": [
+                            {"message": "魏无羡没再笑。"},
+                            {"message": "江澄也没继续留人。"},
+                        ],
+                        "scene_cards": [
+                            {
+                                "card_id": "garden",
+                                "fields": {
+                                    "title": "后园僵持",
+                                    "location": "后园",
+                                    "time_hint": "傍晚",
+                                    "atmosphere": "气氛发紧",
+                                    "opening_situation": "人都站着没动。",
+                                    "scene_drive": "继续僵持",
+                                },
+                            },
+                            {
+                                "card_id": "hall",
+                                "fields": {
+                                    "title": "回厅再坐",
+                                    "location": "前厅",
+                                    "time_hint": "入夜",
+                                    "atmosphere": "表面平静，底下仍压着话头",
+                                    "opening_situation": "人重新入席，谁都没先开口。",
+                                    "scene_drive": "借换场逼近摊牌",
+                                },
+                            },
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            bundle_path = tmp_root / "scene_bundle.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(dst / "tools" / "build_scene_recommendation_payload.py"),
+                    "--context-file",
+                    str(context_path),
+                    "--output",
+                    str(bundle_path),
+                ],
+                cwd=dst,
+                check=True,
+                capture_output=True,
+            )
+
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertEqual(bundle["kind"], "dialogue_scene_recommendation_bundle")
+            self.assertEqual(bundle["payload"]["recommended_card_id"], "hall")
+            self.assertTrue(bundle["payload"]["recommended_transition_message"])
+            self.assertTrue(bundle["payload"]["recommended_auto_continue_message"])
 
     def test_installed_prepare_excerpt_tool_runs_without_repo_src(self):
         repo_root = Path(__file__).resolve().parents[1]
