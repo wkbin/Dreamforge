@@ -9,16 +9,15 @@ metadata:
   hostMode: llm-first
   releaseTag: v2026.05.11
 ---
-
 # zaomeng-skill
 
-| 项目 | 内容 |
-| --- | --- |
-| 名称 | `zaomeng-skill` |
-| 类型 | ClawHub / Host-managed skill |
-| 核心模式 | LLM-first |
-| 适用场景 | 人物蒸馏、人物包物化、关系图谱导出、角色 `act` / `insert` / `observe` |
-| 宿主职责 | 调用宿主 LLM，负责最终生成与对话推进 |
+| 项目       | 内容                                                                                                     |
+| ---------- | -------------------------------------------------------------------------------------------------------- |
+| 名称       | `zaomeng-skill`                                                                                        |
+| 类型       | ClawHub / Host-managed skill                                                                             |
+| 核心模式   | LLM-first                                                                                                |
+| 适用场景   | 人物蒸馏、人物包物化、关系图谱导出、角色 `act` / `insert` / `observe`                              |
+| 宿主职责   | 调用宿主 LLM，负责最终生成与对话推进                                                                     |
 | skill 职责 | 准备 prompt payload、物化人物包、导出图谱、校验产物、维护运行状态，并提供角色卡/人物补全/对话建议 helper |
 
 ## 1. 定位
@@ -32,19 +31,19 @@ metadata:
 
 宿主侧只需要理解四个标准能力，以及四组对话 helper：
 
-| 能力 | 入口 | 作用 | 标准成功标记 |
-| --- | --- | --- | --- |
-| `distill` | `tools/build_prompt_payload.py --mode distill` | 生成蒸馏 payload，等待宿主 LLM 产出 `PROFILE.generated.md` | capability status `status=ready, success=true` |
-| `materialize` | `tools/materialize_persona_bundle.py` | 把 `PROFILE.generated.md` 物化为完整人物包 | `ARTIFACT_STATUS.generated.json` + capability status |
-| `export_graph` | `tools/export_relation_graph.py` | 导出人物关系图谱 HTML / Mermaid / SVG | `<relations>.status.json` + capability status |
-| `verify_workflow` | `tools/verify_host_workflow.py` | 校验整条宿主工作流产物是否完整 | capability status `status=complete, success=true` |
+| 能力                | 入口                                             | 作用                                                         | 标准成功标记                                           |
+| ------------------- | ------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------ |
+| `distill`         | `tools/build_prompt_payload.py --mode distill` | 生成蒸馏 payload，等待宿主 LLM 产出 `PROFILE.generated.md` | capability status `status=ready, success=true`       |
+| `materialize`     | `tools/materialize_persona_bundle.py`          | 把 `PROFILE.generated.md` 物化为完整人物包                 | `ARTIFACT_STATUS.generated.json` + capability status |
+| `export_graph`    | `tools/export_relation_graph.py`               | 导出人物关系图谱 HTML / Mermaid / SVG                        | `<relations>.status.json` + capability status        |
+| `verify_workflow` | `tools/verify_host_workflow.py`                | 校验整条宿主工作流产物是否完整                               | capability status `status=complete, success=true`    |
 
 对话 helper：
 
-| helper | 入口 | 作用 |
-| --- | --- | --- |
-| `self_card` | `tools/manage_self_card.py` | 创建 / 保存 / 读取 / 删除 self-insert 角色卡，并生成随机角色卡 prompt payload |
-| `persona_autofill` | `tools/build_persona_autofill_payload.py` | 为人物校对单字段生成宿主可调用的补全 payload，并解析模型返回 |
+| helper                  | 入口                                           | 作用                                                                               |
+| ----------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `self_card`           | `tools/manage_self_card.py`                  | 创建 / 保存 / 读取 / 删除 self-insert 角色卡，并生成随机角色卡 prompt payload      |
+| `persona_autofill`    | `tools/build_persona_autofill_payload.py`    | 为人物校对单字段生成宿主可调用的补全 payload，并解析模型返回                       |
 | `dialogue_suggestion` | `tools/build_dialogue_suggestion_payload.py` | 为 `act` / `insert` / `observe` 生成自动回复建议 payload，并提供压缩重试版本 |
 | `scene_recommendation` | `tools/build_scene_recommendation_payload.py` | 为当前会话生成下一幕场景推荐、转场提示、多拍链路建议，以及可直接用于自动起拍的 opening cue |
 
@@ -96,43 +95,6 @@ python tools/init_host_run.py --novel <路径> --characters A,B,C --output <run_
 - 最终 workflow 校验结果
 - 增量蒸馏上下文（`update_mode`、已有档案数量、已有档案目录）
 - 分批执行概览（`progress.chunking`、`summary.chunking`）
-
-## 4. 标准进度阶段
-
-宿主侧统一使用这些阶段名：
-
-- `characters_locked`
-- `distill_payload_ready`
-- `relation_payload_ready`
-- `chunk_started`
-- `chunk_completed`
-- `merge_started`
-- `merge_completed`
-- `character_started`
-- `character_completed`
-- `graph_export_started`
-- `graph_export_completed`
-- `workflow_verified`
-
-如果宿主要主动播报当前角色和进度，直接调用：
-
-```bash
-python tools/update_run_progress.py --run-manifest <run_manifest.json> --stage character_started --character 林黛玉 --message "正在蒸馏林黛玉"
-```
-
-如果是长篇自动分批流程，也可以写入当前块进度：
-
-```bash
-python tools/update_run_progress.py --run-manifest <run_manifest.json> --stage chunk_started --message "正在执行第 1 块" --chunk-capability distill --chunk-mode chunked --chunk-count 6 --current-chunk 1 --chunk-label 前段-1 --chunk-status running --merge-required --merge-status pending
-```
-
-写入后，宿主可直接从 `run_manifest.json` 读取：
-
-- `progress.chunking.distill.current_chunk`
-- `progress.chunking.distill.chunk_count`
-- `progress.chunking.distill.current_label`
-- `summary.chunking.distill`
-
 ## 5. 标准流程
 
 1. 初始化 `run_manifest.json`

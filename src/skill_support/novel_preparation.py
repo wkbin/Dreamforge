@@ -3,12 +3,17 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from pathlib import Path
 from typing import Any
 
 from src.utils.text_parser import load_novel_text, split_sentences
+
+_ALIAS_REGISTRY_CACHE: dict[str, "_AliasRegistry"] = {}
+
+_DEFAULT_ALIAS_FILE = Path(__file__).resolve().parent.parent.parent / "zaomeng-skill" / "character_aliases.json"
 
 MIXED_EXCERPT_MIN_CHARS = 3_000
 MIXED_EXCERPT_MIN_SENTENCES = 40
@@ -56,18 +61,102 @@ CHARACTER_VARIANT_MAP = str.maketrans(
 MATCH_IGNORED_PATTERN = re.compile(r"[\s\u3000\u00b7\u2027\u30fb'\"`~!@#$%^&*()_+\-=\[\]{}\\|;:,.<>/?，。！？：；、“”‘’《》【】（）]")
 
 
+class _AliasRegistry:
+    __slots__ = ("canonical_to_spec", "alias_to_canonical")
+
+    def __init__(self, canonical_to_spec: dict[str, str], alias_to_canonical: dict[str, str]):
+        self.canonical_to_spec = canonical_to_spec
+        self.alias_to_canonical = alias_to_canonical
+
+    @property
+    def empty(self) -> bool:
+        return not self.canonical_to_spec
+
+
+_EMPTY_REGISTRY = _AliasRegistry({}, {})
+
+
+def _load_alias_registry(alias_file: str | Path | None = None) -> _AliasRegistry:
+    path = Path(alias_file) if alias_file else _DEFAULT_ALIAS_FILE
+    cache_key = str(path)
+    if cache_key in _ALIAS_REGISTRY_CACHE:
+        return _ALIAS_REGISTRY_CACHE[cache_key]
+
+    if not path.exists():
+        _ALIAS_REGISTRY_CACHE[cache_key] = _EMPTY_REGISTRY
+        return _EMPTY_REGISTRY
+
+    try:
+        data = json.loads(path.read_text("utf-8"))
+    except (json.JSONDecodeError, OSError):
+        _ALIAS_REGISTRY_CACHE[cache_key] = _EMPTY_REGISTRY
+        return _EMPTY_REGISTRY
+
+    canonical_to_spec: dict[str, str] = {}
+    alias_to_canonical: dict[str, str] = {}
+    for canonical, aliases in data.items():
+        if canonical.startswith("_") or not isinstance(aliases, list):
+            continue
+        all_names = [canonical] + [str(a).strip() for a in aliases if str(a).strip()]
+        canonical_to_spec[canonical] = "|".join(all_names)
+        for name in all_names:
+            alias_to_canonical[name] = canonical
+
+    registry = _AliasRegistry(canonical_to_spec, alias_to_canonical)
+    _ALIAS_REGISTRY_CACHE[cache_key] = registry
+    return registry
+
+
+def _resolve_character_aliases(
+    characters: list[str] | None,
+    registry: _AliasRegistry,
+) -> list[str] | None:
+    if not characters or registry.empty:
+        return characters
+    resolved: list[str] = []
+    for name in characters:
+        clean = str(name or "").strip()
+        if not clean:
+            resolved.append(clean)
+            continue
+        if "|" in clean:
+            resolved.append(clean)
+            continue
+        if clean in registry.canonical_to_spec:
+            resolved.append(registry.canonical_to_spec[clean])
+            continue
+        if clean in registry.alias_to_canonical:
+            canonical = registry.alias_to_canonical[clean]
+            resolved.append(registry.canonical_to_spec[canonical])
+            continue
+        resolved.append(clean)
+    return resolved
+
+
+def _canonical_name(character_spec: str) -> str:
+    clean = str(character_spec or "").strip()
+    return clean.split("|", 1)[0].strip()
+
+
+def _split_aliases(character_spec: str) -> list[str]:
+    parts = [a.strip() for a in str(character_spec or "").split("|")]
+    return [a for a in parts if a]
+
+
 def prepare_novel_excerpt(
     text: str,
     *,
     max_sentences: int = 80,
     max_chars: int = 12_000,
     characters: list[str] | None = None,
+    alias_file: str | Path | None = None,
 ) -> str:
     return build_excerpt_payload_from_text(
         text,
         max_sentences=max_sentences,
         max_chars=max_chars,
         characters=characters,
+        alias_file=alias_file,
     )["excerpt"]
 
 
@@ -77,7 +166,10 @@ def build_excerpt_payload_from_text(
     max_sentences: int = 80,
     max_chars: int = 12_000,
     characters: list[str] | None = None,
+    alias_file: str | Path | None = None,
 ) -> dict[str, Any]:
+    registry = _load_alias_registry(alias_file)
+    characters = _resolve_character_aliases(characters, registry)
     clean = str(text or "").strip()
     if not clean:
         return {
@@ -119,12 +211,14 @@ def load_prepared_novel_excerpt(
     max_sentences: int = 80,
     max_chars: int = 12_000,
     characters: list[str] | None = None,
+    alias_file: str | Path | None = None,
 ) -> str:
     return prepare_novel_excerpt(
         load_novel_text(str(novel_path)),
         max_sentences=max_sentences,
         max_chars=max_chars,
         characters=characters,
+        alias_file=alias_file,
     )
 
 
@@ -134,6 +228,7 @@ def build_excerpt_payload(
     max_sentences: int = 80,
     max_chars: int = 12_000,
     characters: list[str] | None = None,
+    alias_file: str | Path | None = None,
 ) -> dict[str, object]:
     path = Path(novel_path)
     excerpt_payload = build_excerpt_payload_from_text(
@@ -141,6 +236,7 @@ def build_excerpt_payload(
         max_sentences=max_sentences,
         max_chars=max_chars,
         characters=characters,
+        alias_file=alias_file,
     )
     return {
         "source_path": str(path),
@@ -174,10 +270,12 @@ def _normalize_match_text(text: str) -> str:
 
 
 def _sentence_mentions_character(sentence: str, character: str) -> bool:
-    normalized_character = _normalize_match_text(character)
-    if not normalized_character:
-        return False
-    return normalized_character in _normalize_match_text(sentence)
+    normalized_sentence = _normalize_match_text(sentence)
+    for alias in _split_aliases(character):
+        normalized_alias = _normalize_match_text(alias)
+        if normalized_alias and normalized_alias in normalized_sentence:
+            return True
+    return False
 
 
 def _leading_excerpt(sentences: list[str], *, max_sentences: int, max_chars: int) -> str:
