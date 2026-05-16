@@ -101,6 +101,9 @@ def _load_alias_registry(alias_file: str | Path | None = None) -> _AliasRegistry
         canonical_to_spec[canonical] = "|".join(all_names)
         for name in all_names:
             alias_to_canonical[name] = canonical
+            normalized = _normalize_match_text(name)
+            if normalized and normalized not in alias_to_canonical:
+                alias_to_canonical[normalized] = canonical
 
     registry = _AliasRegistry(canonical_to_spec, alias_to_canonical)
     _ALIAS_REGISTRY_CACHE[cache_key] = registry
@@ -128,6 +131,14 @@ def _resolve_character_aliases(
         if clean in registry.alias_to_canonical:
             canonical = registry.alias_to_canonical[clean]
             resolved.append(registry.canonical_to_spec[canonical])
+            continue
+        normalized = _normalize_match_text(clean)
+        if normalized and normalized in registry.alias_to_canonical:
+            canonical = registry.alias_to_canonical[normalized]
+            resolved.append(registry.canonical_to_spec[canonical])
+            continue
+        if normalized and normalized in registry.canonical_to_spec:
+            resolved.append(registry.canonical_to_spec[normalized])
             continue
         resolved.append(clean)
     return resolved
@@ -172,11 +183,13 @@ def build_excerpt_payload_from_text(
     characters = _resolve_character_aliases(characters, registry)
     clean = str(text or "").strip()
     if not clean:
+        requested = _normalize_characters(characters)
+        canonical = [_canonical_name(c) for c in requested]
         return {
             "excerpt": "",
-            "requested_characters": _normalize_characters(characters),
+            "requested_characters": canonical,
             "matched_characters": [],
-            "missing_characters": _normalize_characters(characters),
+            "missing_characters": canonical,
             "excerpt_strategy": "empty",
             "excerpt_stages": _empty_stage_blocks(),
         }
@@ -194,12 +207,13 @@ def build_excerpt_payload_from_text(
             return payload
 
     selected_indices = _select_leading_indices(sentences, max_sentences=max_sentences, max_chars=max_chars)
+    canonical_requested = [_canonical_name(c) for c in requested]
     return _build_excerpt_result(
         sentences,
         selected_indices,
-        requested_characters=requested,
+        requested_characters=canonical_requested,
         matched_characters=[],
-        missing_characters=requested,
+        missing_characters=canonical_requested,
         excerpt_strategy="leading_sentences",
         max_chars=max_chars,
     )
@@ -257,9 +271,12 @@ def _normalize_characters(characters: list[str] | None) -> list[str]:
     seen: set[str] = set()
     for item in list(characters or []):
         name = str(item or "").strip()
-        if not name or name in seen:
+        if not name:
             continue
-        seen.add(name)
+        canonical = _canonical_name(name)
+        if canonical in seen:
+            continue
+        seen.add(canonical)
         ordered.append(name)
     return ordered
 
@@ -311,19 +328,25 @@ def _character_focused_excerpt(
     max_sentences: int,
     max_chars: int,
 ) -> dict[str, Any]:
-    character_hits: dict[str, list[int]] = {name: [] for name in characters}
+    canonical_to_spec = {_canonical_name(name): name for name in characters}
+    character_hits: dict[str, list[int]] = {canon: [] for canon in canonical_to_spec}
+    all_hit_indices: list[int] = []
+    seen_hits: set[int] = set()
 
     for idx, sentence in enumerate(sentences):
-        for name in characters:
-            if _sentence_mentions_character(sentence, name):
-                character_hits[name].append(idx)
+        for canon, spec in canonical_to_spec.items():
+            if _sentence_mentions_character(sentence, spec):
+                character_hits[canon].append(idx)
+                if idx not in seen_hits:
+                    seen_hits.add(idx)
+                    all_hit_indices.append(idx)
 
-    matched = [name for name, hits in character_hits.items() if hits]
-    missing = [name for name in characters if not character_hits[name]]
+    matched = [canon for canon, hits in character_hits.items() if hits]
+    missing = [canon for canon in canonical_to_spec if not character_hits[canon]]
     if not matched:
         return {
             "excerpt": "",
-            "requested_characters": characters,
+            "requested_characters": list(canonical_to_spec.keys()),
             "matched_characters": [],
             "missing_characters": missing,
             "excerpt_strategy": "leading_sentences",
@@ -366,6 +389,7 @@ def _character_focused_excerpt(
             selected_indices,
             character_hits=character_hits,
             matched_characters=matched,
+            character_specs=list(characters),
             max_sentences=max_sentences,
             max_chars=max_chars,
         )
@@ -373,7 +397,7 @@ def _character_focused_excerpt(
     return _build_excerpt_result(
         sentences,
         selected_indices,
-        requested_characters=characters,
+        requested_characters=list(canonical_to_spec.keys()),
         matched_characters=matched,
         missing_characters=missing,
         excerpt_strategy="character_windows_mixed" if augmented else "character_windows",
@@ -403,6 +427,7 @@ def _augment_character_excerpt_indices(
     *,
     character_hits: dict[str, list[int]],
     matched_characters: list[str],
+    character_specs: list[str] | None = None,
     max_sentences: int,
     max_chars: int,
 ) -> list[int]:
@@ -448,11 +473,12 @@ def _augment_character_excerpt_indices(
     if enough():
         return ordered
 
-    add_candidates(_dialogue_candidate_indices(sentences, matched_characters), radius=0)
+    spec_list = character_specs if character_specs else matched_characters
+    add_candidates(_dialogue_candidate_indices(sentences, spec_list), radius=0)
     if enough():
         return ordered
 
-    add_candidates(_thought_or_evaluation_indices(sentences, matched_characters), radius=0)
+    add_candidates(_thought_or_evaluation_indices(sentences, spec_list), radius=0)
     return ordered
 
 
@@ -603,7 +629,13 @@ def _build_representative_hit_plan(
     *,
     center_budget: int,
 ) -> list[int]:
-    per_character = {name: _spread_sample_indices(character_hits.get(name, []), sample_cap=3) for name in matched_characters}
+    per_character = {
+        name: _spread_sample_indices(
+            character_hits.get(name, []),
+            sample_cap=max(1, min(len(sorted(set(character_hits.get(name, [])))), center_budget)),
+        )
+        for name in matched_characters
+    }
     ordered_centers: list[int] = []
     seen: set[int] = set()
 

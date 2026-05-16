@@ -109,6 +109,9 @@ def _load_alias_registry(alias_file: str | Path | None = None) -> _AliasRegistry
         canonical_to_spec[canonical] = "|".join(all_names)
         for name in all_names:
             alias_to_canonical[name] = canonical
+            normalized = _normalize_match_text(name)
+            if normalized and normalized not in alias_to_canonical:
+                alias_to_canonical[normalized] = canonical
 
     registry = _AliasRegistry(canonical_to_spec, alias_to_canonical)
     _ALIAS_REGISTRY_CACHE[cache_key] = registry
@@ -136,6 +139,14 @@ def _resolve_character_aliases(
         if clean in registry.alias_to_canonical:
             canonical = registry.alias_to_canonical[clean]
             resolved.append(registry.canonical_to_spec[canonical])
+            continue
+        normalized = _normalize_match_text(clean)
+        if normalized and normalized in registry.alias_to_canonical:
+            canonical = registry.alias_to_canonical[normalized]
+            resolved.append(registry.canonical_to_spec[canonical])
+            continue
+        if normalized and normalized in registry.canonical_to_spec:
+            resolved.append(registry.canonical_to_spec[normalized])
             continue
         resolved.append(clean)
     return resolved
