@@ -20,10 +20,12 @@ dist/
 Thumbs.db
 .idea/
 .vscode/
+.claude/
 
 # Local runtime/config artifacts
 config.yaml
 data/
 logs/
+outputs/
 clawhub-zaomeng-skill/runtime/data/
 .tools/

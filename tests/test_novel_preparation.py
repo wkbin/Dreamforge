@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.skill_support.novel_preparation import (
     build_excerpt_payload,
+    build_excerpt_payload_from_text,
     load_prepared_novel_excerpt,
     prepare_novel_excerpt,
 )
@@ -157,6 +158,83 @@ class NovelPreparationTests(unittest.TestCase):
         self.assertIn("魏无羡笑道", payload["excerpt"])
         self.assertIn("江澄心想此事绝不简单", payload["excerpt"])
         self.assertIn("结尾余波未散", payload["excerpt"])
+
+
+class AliasKnowledgeBaseTests(unittest.TestCase):
+    def setUp(self):
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "zaomeng-skill" / "tools"))
+        from _skill_support.novel_preparation import (
+            _load_alias_registry,
+            _resolve_character_aliases,
+            _ALIAS_REGISTRY_CACHE,
+        )
+        self._load_alias_registry = _load_alias_registry
+        self._resolve_character_aliases = _resolve_character_aliases
+        self._cache = _ALIAS_REGISTRY_CACHE
+        self._cache.clear()
+
+    def tearDown(self):
+        self._cache.clear()
+
+    def _alias_file(self):
+        return Path(__file__).resolve().parent.parent / "zaomeng-skill" / "character_aliases.json"
+
+    def test_canonical_name_resolves_all_aliases(self):
+        reg = self._load_alias_registry(self._alias_file())
+        result = self._resolve_character_aliases(["孙悟空"], reg)
+        self.assertEqual(len(result), 1)
+        self.assertIn("齐天大圣", result[0])
+        self.assertIn("孙行者", result[0])
+        self.assertIn("孙猴子", result[0])
+
+    def test_alias_reverse_lookup(self):
+        reg = self._load_alias_registry(self._alias_file())
+        result = self._resolve_character_aliases(["齐天大圣"], reg)
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result[0].startswith("孙悟空|"))
+
+    def test_unknown_name_passes_through(self):
+        reg = self._load_alias_registry(self._alias_file())
+        result = self._resolve_character_aliases(["张三丰"], reg)
+        self.assertEqual(result, ["张三丰"])
+
+    def test_manual_pipe_not_overridden(self):
+        reg = self._load_alias_registry(self._alias_file())
+        result = self._resolve_character_aliases(["李四|李老四"], reg)
+        self.assertEqual(result, ["李四|李老四"])
+
+    def test_missing_file_graceful_degradation(self):
+        reg = self._load_alias_registry("/nonexistent/path/aliases.json")
+        self.assertTrue(reg.empty)
+        result = self._resolve_character_aliases(["孙悟空"], reg)
+        self.assertEqual(result, ["孙悟空"])
+
+    def test_alias_matching_in_excerpt(self):
+        text = "那齐天大圣一个筋斗翻了十万八千里。唐僧在后面叫道悟空快回来。孙行者笑道师父莫急。"
+        payload = build_excerpt_payload_from_text(
+            text,
+            characters=["孙悟空"],
+            max_sentences=10,
+            max_chars=500,
+            alias_file=self._alias_file(),
+        )
+        matched = payload["matched_characters"]
+        self.assertTrue(any("孙悟空" in m for m in matched))
+        self.assertIn("齐天大圣", payload["excerpt"])
+
+    def test_reverse_alias_matching_in_excerpt(self):
+        text = "猪八戒扛着钉耙走在前面。天蓬元帅当年何等威风。"
+        payload = build_excerpt_payload_from_text(
+            text,
+            characters=["天蓬元帅"],
+            max_sentences=10,
+            max_chars=500,
+            alias_file=self._alias_file(),
+        )
+        matched = payload["matched_characters"]
+        self.assertTrue(any("猪八戒" in m for m in matched))
+        self.assertIn("猪八戒", payload["excerpt"])
 
 
 if __name__ == "__main__":
