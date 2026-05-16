@@ -236,6 +236,45 @@ class AliasKnowledgeBaseTests(unittest.TestCase):
         self.assertTrue(any("猪八戒" in m for m in matched))
         self.assertIn("猪八戒", payload["excerpt"])
 
+    def test_punctuated_alias_resolves_to_canonical_name(self):
+        text = "那齐天大圣翻身而去。"
+        payload = build_excerpt_payload_from_text(
+            text,
+            characters=["齐天·大圣"],
+            max_sentences=10,
+            max_chars=500,
+            alias_file=self._alias_file(),
+        )
+        self.assertEqual(payload["requested_characters"], ["孙悟空"])
+        self.assertEqual(payload["matched_characters"], ["孙悟空"])
+        self.assertEqual(payload["missing_characters"], [])
+
+    def test_duplicate_alias_inputs_dedupe_by_canonical_name(self):
+        text = "旁白继续，没有任何目标角色。"
+        payload = build_excerpt_payload_from_text(
+            text,
+            characters=["孙悟空", "齐天大圣"],
+            max_sentences=10,
+            max_chars=500,
+            alias_file=self._alias_file(),
+        )
+        self.assertEqual(payload["requested_characters"], ["孙悟空"])
+        self.assertEqual(payload["matched_characters"], [])
+        self.assertEqual(payload["missing_characters"], ["孙悟空"])
+
+    def test_empty_text_returns_canonical_requested_and_missing(self):
+        payload = build_excerpt_payload_from_text(
+            "",
+            characters=["齐天大圣"],
+            max_sentences=10,
+            max_chars=500,
+            alias_file=self._alias_file(),
+        )
+        self.assertEqual(payload["requested_characters"], ["孙悟空"])
+        self.assertEqual(payload["matched_characters"], [])
+        self.assertEqual(payload["missing_characters"], ["孙悟空"])
+        self.assertEqual(payload["excerpt_strategy"], "empty")
+
 
 if __name__ == "__main__":
     unittest.main()

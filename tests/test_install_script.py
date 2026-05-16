@@ -56,6 +56,9 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('BUILTIN_NOVELS_ROOT="\\${INSTALL_ROOT}/builtin_novels"', script_text)
         self.assertIn('env ZAOMENG_WEB_BUILTIN_NOVELS_ROOT="\\${BUILTIN_NOVELS_ROOT}"', script_text)
         self.assertIn('run_webui()', script_text)
+        self.assertIn('run_webui() {', script_text)
+        self.assertIn('"\\${PYTHON_BIN}" "\\${INSTALL_ROOT}/scripts/run_webui.py"', script_text)
+        self.assertNotIn('env ZAOMENG_WEB_BUILTIN_NOVELS_ROOT="\\${BUILTIN_NOVELS_ROOT}"     exec "\\${PYTHON_BIN}"', script_text)
 
 
 if __name__ == "__main__":
