@@ -191,6 +191,7 @@ class SaveSelfCardRequest(BaseModel):
 class PrepareDialogueTurnRequest(BaseModel):
     message: str = Field(..., min_length=1)
     message_kind: str = Field(default="dialogue")
+    suppress_transcript_message: bool = Field(default=False)
 
 
 class SuggestDialogueTurnRequest(BaseModel):

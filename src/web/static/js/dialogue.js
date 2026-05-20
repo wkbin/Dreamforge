@@ -898,6 +898,9 @@ async function renderDialogueSession(session) {
   if (typeof syncSuggestButtonVisibility === "function") {
     syncSuggestButtonVisibility(session);
   }
+  if (typeof window.syncDialogueMessageKindVisibility === "function") {
+    window.syncDialogueMessageKindVisibility(session);
+  }
   if (typeof renderObserveQuickReplies === "function") {
     renderObserveQuickReplies(session);
   }

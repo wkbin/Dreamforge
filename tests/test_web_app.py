@@ -5793,6 +5793,76 @@ class WebAppRouteTests(unittest.TestCase):
             self.assertEqual(payload["status"], "ready")
             self.assertEqual(payload["transcript"][-1]["speaker"], "林黛玉")
 
+    def test_dialogue_reply_route_can_suppress_transcript_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = WebRunService(tmp)
+            app = create_app(service)
+            client = TestClient(app)
+            client.put(
+                "/api/web/settings/model",
+                json={
+                    "provider": "openai-compatible",
+                    "model": "deepseek-chat",
+                    "base_url": "https://example.com/v1",
+                    "api_key": "sk-test",
+                },
+            )
+            create_response = client.post(
+                "/api/web/runs",
+                json={
+                    "novel_name": "hongloumeng.txt",
+                    "novel_content_base64": base64.b64encode("林黛玉见了贾宝玉。".encode("utf-8")).decode("ascii"),
+                    "characters": ["林黛玉", "贾宝玉"],
+                },
+            )
+            run = create_response.json()
+            for name in ("林黛玉", "贾宝玉"):
+                client.post(
+                    f"/api/web/runs/{run['run_id']}/ingest/character",
+                    json={
+                        "character": name,
+                        "content_base64": base64.b64encode(
+                            f"- name: {name}\n- novel_id: hongloumeng\n- core_identity: 人物\n".encode("utf-8")
+                        ).decode("ascii"),
+                    },
+                )
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "场景提示", "message": "开场。"}],
+            ):
+                session_response = client.post(
+                    f"/api/web/runs/{run['run_id']}/dialogue/sessions",
+                    json={
+                        "mode": "observe",
+                        "participants": ["林黛玉", "贾宝玉"],
+                        "controlled_character": "",
+                        "self_profile": {},
+                    },
+                )
+            session = session_response.json()
+
+            with patch.object(
+                WebRunService,
+                "_generate_dialogue_responses",
+                return_value=[{"speaker": "贾宝玉", "message": "那我先接一句。"}],
+            ):
+                reply_response = client.post(
+                    f"/api/web/runs/{run['run_id']}/dialogue/sessions/{session['session_id']}/reply",
+                    json={
+                        "message": "继续聊。",
+                        "message_kind": "narration",
+                        "suppress_transcript_message": True,
+                    },
+                )
+
+            self.assertEqual(reply_response.status_code, 200)
+            payload = reply_response.json()
+            transcript = list(payload.get("transcript", []) or [])
+            self.assertEqual(payload.get("status"), "ready")
+            self.assertEqual(transcript[-1]["speaker"], "贾宝玉")
+            self.assertFalse(any(str(item.get("message", "")).strip() == "继续聊。" for item in transcript))
+
     def test_dialogue_reply_uses_shared_long_term_memory_store(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = WebRunService(tmp)

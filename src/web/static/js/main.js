@@ -413,6 +413,12 @@ function syncModeFields() {
   syncCustomSelect("dialogue-self-card");
   renderSelectedSceneCardPreview(false);
   renderSelectedSelfCardPreview(false);
+  if (typeof syncDialogueMessageKindVisibility === "function") {
+    syncDialogueMessageKindVisibility({
+      mode,
+      session_card: { mode },
+    });
+  }
   publishChatSetupState("chat-setup-mode-updated");
 }
 
@@ -2688,6 +2694,11 @@ const OBSERVE_QUICK_REPLIES = [
   { label: "再逼近点", value: "这句话落下去以后，气氛反而更近了一步。" },
 ];
 let currentDialogueMessageKind = "dialogue";
+let observeAutoMode = false;
+let observeAutoLoopBusy = false;
+let observeAutoSessionId = "";
+const OBSERVE_AUTO_LOOP_DELAY_MS = 480;
+let observeAutoRecentPrompts = [];
 
 function buildDialogueSceneRecommendationCacheKey(session = currentDialogueSession) {
   const target = session || {};
@@ -2879,6 +2890,7 @@ function buildComposerUiState() {
     sendDisabled: Boolean(sendButton?.disabled),
     quickReplies: mode === "observe" ? buildObserveQuickReplies(currentDialogueSession) : [],
     quickHint: nextHint,
+    observeAutoMode,
   };
 }
 
@@ -2924,10 +2936,66 @@ function setDialogueMessageKind(kind) {
   publishComposerUiState("composer-kind-updated");
 }
 
+function syncDialogueMessageKindVisibility(session = currentDialogueSession) {
+  const toggle = el("dialogue-message-kind");
+  const mode = session?.mode || session?.session_card?.mode || "";
+  const hide = mode === "observe";
+  if (toggle) {
+    toggle.classList.toggle("hidden", hide);
+  }
+  if (hide) {
+    setDialogueMessageKind("narration");
+  }
+}
+
 function setQuickRepliesEnabled(enabled) {
   document.querySelectorAll("#observe-quick-replies .quick-reply-chip").forEach((node) => {
     node.disabled = !enabled;
   });
+}
+
+function setObserveAutoUiState() {
+  const mode = currentDialogueSession?.mode || currentDialogueSession?.session_card?.mode || "";
+  const row = el("observe-auto-row");
+  const toggleButton = el("observe-auto-toggle");
+  const status = el("observe-auto-status");
+  const quickReplyRoot = el("observe-quick-replies");
+  const available = mode === "observe" && Boolean(currentDialogueSessionId);
+  if (row) {
+    row.classList.toggle("hidden", !available);
+  }
+  if (!toggleButton || !status) {
+    publishComposerUiState("composer-observe-auto-ui");
+    return;
+  }
+  if (!available) {
+    observeAutoMode = false;
+    observeAutoLoopBusy = false;
+    observeAutoSessionId = "";
+    toggleButton.disabled = true;
+    toggleButton.textContent = "开启连续旁观";
+    status.textContent = "仅旁观模式可用";
+    publishComposerUiState("composer-observe-auto-ui");
+    return;
+  }
+  toggleButton.disabled = false;
+  toggleButton.textContent = observeAutoMode ? "停止连续旁观" : "开启连续旁观";
+  status.textContent = observeAutoMode ? "开启：自动推进中，点停止即可收住" : "关闭：每轮手动推进";
+  if (quickReplyRoot) {
+    quickReplyRoot.classList.toggle("hidden", observeAutoMode);
+  }
+  publishComposerUiState("composer-observe-auto-ui");
+}
+
+function stopObserveAutoLoop(options = {}) {
+  observeAutoMode = false;
+  observeAutoLoopBusy = false;
+  observeAutoSessionId = "";
+  observeAutoRecentPrompts = [];
+  if (options.reason) {
+    setDialogueSessionSuccess(options.reason, "你可以随时再次开启连续旁观。");
+  }
+  setObserveAutoUiState();
 }
 
 function syncSuggestButtonVisibility(session = currentDialogueSession) {
@@ -2960,6 +3028,7 @@ function setComposerWaiting(waiting, message = "") {
     updateDialogueMessagePlaceholder();
   }
   setQuickRepliesEnabled(!waiting);
+  setObserveAutoUiState();
   resizeComposer();
   publishComposerUiState("composer-waiting-updated");
 }
@@ -2981,27 +3050,19 @@ function setSuggestingState(waiting) {
 
 function renderObserveQuickReplies(session = currentDialogueSession) {
   const root = el("observe-quick-replies");
-  const hint = el("observe-quick-hint");
-  const hintRow = el("observe-quick-hint-row");
-  const hintSend = el("observe-quick-hint-send");
+  const kindToggle = el("dialogue-message-kind");
   if (!root) return;
   const mode = session?.mode || session?.session_card?.mode || "";
   if (mode !== "observe") {
+    if (kindToggle) kindToggle.classList.remove("hidden");
     root.innerHTML = "";
     root.classList.add("hidden");
-    if (hintRow) hintRow.classList.add("hidden");
-    if (hint) {
-      hint.textContent = "";
-      hint.classList.add("hidden");
-    }
-    if (hintSend) {
-      hintSend.classList.add("hidden");
-      hintSend.removeAttribute("data-value");
-    }
+    stopObserveAutoLoop();
     publishComposerUiState("composer-quick-replies-hidden");
     return;
   }
 
+  if (kindToggle) kindToggle.classList.add("hidden");
   root.innerHTML = "";
   buildObserveQuickReplies(session).forEach((item) => {
     const button = document.createElement("button");
@@ -3015,30 +3076,8 @@ function renderObserveQuickReplies(session = currentDialogueSession) {
     root.appendChild(button);
   });
   root.classList.remove("hidden");
-  const nextHint = String(session?.runtime_state_overview?.next_hint || "").trim();
-  if (hint) {
-    hint.textContent = nextHint ? `顺手往下推：${nextHint}` : "";
-    hint.classList.toggle("hidden", !nextHint);
-  }
-  if (hintSend) {
-    hintSend.classList.toggle("hidden", !nextHint);
-    if (nextHint) {
-      hintSend.setAttribute("data-value", nextHint);
-    } else {
-      hintSend.removeAttribute("data-value");
-    }
-  }
-  if (hintRow) {
-    hintRow.classList.toggle("hidden", !nextHint);
-  }
+  setObserveAutoUiState();
   publishComposerUiState("composer-quick-replies-rendered");
-}
-
-async function applyQuickHint() {
-  const button = el("observe-quick-hint-send");
-  const value = String(button?.getAttribute("data-value") || "").trim();
-  if (!value) return;
-  await applyQuickReply(value);
 }
 
 async function applyQuickReply(value) {
@@ -3072,16 +3111,18 @@ function coerceMessageOverride(value) {
   return String(value || "");
 }
 
-async function handleSendTurn(messageOverride = "", messageKindOverride = "") {
+async function handleSendTurn(messageOverride = "", messageKindOverride = "", options = {}) {
   if (!currentRunId || !currentDialogueSessionId) {
     setComposerWaiting(false, "先进入这一幕，再把话递出去。");
-    return;
+    return false;
   }
+  const silentOptimistic = Boolean(options?.silentOptimistic);
+  const suppressTranscriptMessage = Boolean(options?.suppressTranscriptMessage);
   const message = coerceMessageOverride(messageOverride).trim() || trimmedValue("dialogue-message", "");
   const messageKind = normalizeDialogueMessageKind(messageKindOverride || readDialogueMessageKind());
   if (!message) {
     setComposerWaiting(false, messageKind === "narration" ? "先写一句剧情推动提示。" : "先写一句你想让他们听见的话。");
-    return;
+    return false;
   }
 
   const sessionSnapshot = currentDialogueSession ? JSON.parse(JSON.stringify(currentDialogueSession)) : null;
@@ -3090,7 +3131,7 @@ async function handleSendTurn(messageOverride = "", messageKindOverride = "") {
   }, DIALOGUE_RETRY_FEEDBACK_DELAY_MS);
   setComposerWaiting(true, DIALOGUE_PLACEHOLDER_WAITING);
 
-  if (currentDialogueSession) {
+  if (currentDialogueSession && !silentOptimistic) {
     currentDialogueSession = {
       ...currentDialogueSession,
       transcript: buildOptimisticTranscript(currentDialogueSession, message, messageKind),
@@ -3116,13 +3157,18 @@ async function handleSendTurn(messageOverride = "", messageKindOverride = "") {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, message_kind: messageKind }),
+          body: JSON.stringify({
+            message,
+            message_kind: messageKind,
+            suppress_transcript_message: suppressTranscriptMessage,
+          }),
         },
         "发送失败。"
       )
     );
     window.clearTimeout(retryFeedbackTimer);
     setComposerWaiting(false, "");
+    return true;
   } catch (error) {
     window.clearTimeout(retryFeedbackTimer);
     if (sessionSnapshot) {
@@ -3148,7 +3194,86 @@ async function handleSendTurn(messageOverride = "", messageKindOverride = "") {
       }
     }
     setComposerWaiting(false, error.message || "这句话暂时没有送达。");
+    return false;
   }
+}
+
+function buildObserveAutoContinueMessage() {
+  const hint = String(currentDialogueSession?.runtime_state_overview?.next_hint || "").trim();
+  const dynamic = buildObserveQuickReplies(currentDialogueSession)
+    .map((item) => String(item?.value || "").trim())
+    .filter(Boolean);
+  const pool = uniq([hint, ...dynamic].filter(Boolean));
+  const transcript = Array.isArray(currentDialogueSession?.transcript) ? currentDialogueSession.transcript : [];
+  const lastUserLike = [...transcript].reverse().find((item) => {
+    const role = String(item?.role || "").trim();
+    return role === "user" || role === "director" || role === "scene";
+  });
+  const lastSent = String(lastUserLike?.message || "").trim();
+  const recent = new Set([lastSent, ...observeAutoRecentPrompts].filter(Boolean));
+  const candidate = pool.find((text) => !recent.has(text)) || pool.find((text) => text !== lastSent) || pool[0] || "继续聊。";
+  observeAutoRecentPrompts = [candidate, ...observeAutoRecentPrompts.filter((item) => item !== candidate)].slice(0, 4);
+  return candidate;
+}
+
+async function runObserveAutoLoop() {
+  if (!observeAutoMode || observeAutoLoopBusy) return;
+  if (!currentDialogueSessionId || (currentDialogueSession?.mode || "") !== "observe") {
+    stopObserveAutoLoop();
+    return;
+  }
+  observeAutoLoopBusy = true;
+  observeAutoSessionId = currentDialogueSessionId;
+  setObserveAutoUiState();
+  try {
+    while (observeAutoMode) {
+      if (!currentDialogueSessionId || currentDialogueSessionId !== observeAutoSessionId) {
+        stopObserveAutoLoop();
+        break;
+      }
+      if ((currentDialogueSession?.mode || "") !== "observe") {
+        stopObserveAutoLoop();
+        break;
+      }
+      const ok = await handleSendTurn(buildObserveAutoContinueMessage(), "narration", {
+        silentOptimistic: true,
+        suppressTranscriptMessage: true,
+      });
+      if (!ok) {
+        stopObserveAutoLoop({
+          reason: "连续旁观已暂停：刚才这一轮发送失败。",
+        });
+        break;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, OBSERVE_AUTO_LOOP_DELAY_MS));
+    }
+  } finally {
+    observeAutoLoopBusy = false;
+    setObserveAutoUiState();
+  }
+}
+
+function toggleObserveAutoMode() {
+  const mode = currentDialogueSession?.mode || currentDialogueSession?.session_card?.mode || "";
+  if (mode !== "observe" || !currentDialogueSessionId) {
+    setDialogueSessionFailure("先进入旁观模式会话，再开启连续旁观。", "切到旁观后再打开这个开关。", true);
+    return;
+  }
+  if (observeAutoMode) {
+    stopObserveAutoLoop({
+      reason: "已停止连续旁观。",
+    });
+    return;
+  }
+  observeAutoMode = true;
+  observeAutoSessionId = currentDialogueSessionId;
+  setDialogueSessionSuccess("连续旁观已开启。", "系统会自动一轮接一轮推进，直到你手动停止。");
+  setObserveAutoUiState();
+  runObserveAutoLoop().catch((error) => {
+    stopObserveAutoLoop({
+      reason: error?.message || "连续旁观已暂停：发生异常。",
+    });
+  });
 }
 
 async function handleSuggestTurn(event) {
@@ -3438,11 +3563,7 @@ function bindEvents() {
       window.toggleDialogueMemory();
     }
   });
-  bind("observe-quick-hint-send", "click", () => {
-    applyQuickHint().catch((error) => {
-      setDialogueSessionFailure(error.message || "这句推进提示暂时没有送出去。", "可以稍后重试，或直接手写下一句。", true);
-    });
-  });
+  bind("observe-auto-toggle", "click", toggleObserveAutoMode);
   bind("close-dialogue-memory-modal-button", "click", () => {
     if (typeof window.closeDialogueMemoryModal === "function") {
       window.closeDialogueMemoryModal();
@@ -3499,6 +3620,10 @@ function bindEvents() {
       event.preventDefault();
       el("prepare-turn-button")?.click();
     }
+  });
+  bind("dialogue-mode", "change", () => {
+    stopObserveAutoLoop();
+    setObserveAutoUiState();
   });
 
   bindChoiceGroup("dialogue-mode-options", "dialogue-mode", syncModeFields);
@@ -3681,6 +3806,7 @@ if (typeof UI_BRIDGE_TOOLS.mergeLegacyActionBridge === "function") {
 window.handleSuggestTurn = handleSuggestTurn;
 window.applyQuickReply = applyQuickReply;
 window.syncSuggestButtonVisibility = syncSuggestButtonVisibility;
+window.syncDialogueMessageKindVisibility = syncDialogueMessageKindVisibility;
 syncSuggestButtonVisibility(null);
 console.log("[zaomeng web] main.js loaded", window.__ZAOMENG_WEB_UI_VERSION__ || "unknown");
 boot();
@@ -3787,6 +3913,8 @@ window.readDialogueMessageKind = readDialogueMessageKind;
 window.updateDialogueMessagePlaceholder = updateDialogueMessagePlaceholder;
 window.setDialogueMessageKind = setDialogueMessageKind;
 window.setQuickRepliesEnabled = setQuickRepliesEnabled;
+window.setObserveAutoUiState = setObserveAutoUiState;
+window.stopObserveAutoLoop = stopObserveAutoLoop;
 window.syncSuggestButtonVisibility = syncSuggestButtonVisibility;
 window.setComposerWaiting = setComposerWaiting;
 window.setSuggestingState = setSuggestingState;
@@ -3795,6 +3923,7 @@ window.applyQuickReply = applyQuickReply;
 window.setComposerDraft = setComposerDraft;
 window.coerceMessageOverride = coerceMessageOverride;
 window.handleSendTurn = handleSendTurn;
+window.toggleObserveAutoMode = toggleObserveAutoMode;
 window.handleSuggestTurn = handleSuggestTurn;
 window.bindEvents = bindEvents;
 window.boot = boot;

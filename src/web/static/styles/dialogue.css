@@ -884,6 +884,7 @@
 }
 
 #turn-stage.has-vue-island > .composer-card > #observe-quick-replies,
+#turn-stage.has-vue-island > .composer-card > #observe-auto-row,
 #turn-stage.has-vue-island > .composer-card > .composer-main {
   display: none !important;
 }
@@ -926,6 +927,23 @@
   padding: 0 0.56rem;
   font-size: 0.65rem;
   flex: 0 0 auto;
+}
+
+.observe-auto-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0 10px 8px;
+}
+
+.observe-auto-status {
+  color: var(--ink-faint);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
 }
 
 .session-group {

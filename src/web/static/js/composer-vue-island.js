@@ -56,11 +56,20 @@
         },
         { immediate: true }
       );
+      watch(
+        mode,
+        (nextMode) => {
+          if (String(nextMode || "").trim() === "observe") {
+            setKind("narration");
+          }
+        },
+        { immediate: true }
+      );
       const placeholder = computed(() => String(composer.value.placeholder || ""));
       const quickReplies = computed(() => (Array.isArray(composer.value.quickReplies) ? composer.value.quickReplies : []));
-      const quickHint = computed(() => String(composer.value.quickHint || "").trim());
       const disabled = computed(() => Boolean(composer.value.disabled));
       const suggestHidden = computed(() => Boolean(composer.value.suggestHidden) || mode.value === "observe");
+      const showKindToggle = computed(() => mode.value !== "observe");
       const suggestDisabled = computed(() => Boolean(composer.value.suggestDisabled));
       const sendDisabled = computed(() => Boolean(composer.value.sendDisabled));
 
@@ -83,7 +92,8 @@
       function send() {
         const actions = composerActions();
         if (typeof actions.send === "function") {
-          actions.send(draft.value, draftKind.value);
+          const sendKind = mode.value === "observe" ? "narration" : draftKind.value;
+          actions.send(draft.value, sendKind);
         }
       }
 
@@ -115,11 +125,11 @@
         draftKind,
         handleEnter,
         placeholder,
-        quickHint,
         quickReplies,
         quickReply,
         send,
         sendDisabled,
+        showKindToggle,
         setDraftValue,
         setKind,
         suggest,
@@ -142,20 +152,8 @@
           </button>
         </div>
 
-        <div v-if="quickHint" class="observe-quick-hint-row">
-          <p class="observe-quick-hint">顺手往下推：{{ quickHint }}</p>
-          <button
-            type="button"
-            class="soft-button"
-            :disabled="disabled"
-            @click="quickReply(quickHint)"
-          >
-            按提示推进
-          </button>
-        </div>
-
         <div class="composer-main composer-main-vue">
-          <div class="composer-kind-toggle" role="group" aria-label="输入类型">
+          <div v-if="showKindToggle" class="composer-kind-toggle" role="group" aria-label="输入类型">
             <button
               type="button"
               class="kind-chip"

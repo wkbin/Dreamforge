@@ -256,6 +256,9 @@ function resetDialogueView() {
   toggle("dialogue-memory", false);
   if (el("dialogue-message")) el("dialogue-message").value = "";
   if (typeof syncSuggestButtonVisibility === "function") syncSuggestButtonVisibility(null);
+  if (typeof window.syncDialogueMessageKindVisibility === "function") {
+    window.syncDialogueMessageKindVisibility(null);
+  }
   if (typeof renderObserveQuickReplies === "function") renderObserveQuickReplies(null);
   resizeComposer();
   setComposerEnabled(false);

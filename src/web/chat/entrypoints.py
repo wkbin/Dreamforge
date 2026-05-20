@@ -103,6 +103,7 @@ def reply_dialogue_turn_payload(
     session_id: str,
     message: str,
     message_kind: str,
+    suppress_transcript_message: bool = False,
     manifest: dict[str, Any],
     dialogue: Any,
     load_pending_turn_payload: Callable[[str, str], dict[str, Any]],
@@ -118,6 +119,7 @@ def reply_dialogue_turn_payload(
         message=message,
         message_kind=message_kind,
         speaker_override=speaker_override,
+        transcript_message="" if suppress_transcript_message else None,
     )
     pending_payload = load_pending_turn_payload(run_id, session_id)
     try:
