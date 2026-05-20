@@ -22,9 +22,9 @@
 
 主文件来源：
 
-- [creation.py](d:/work2/Dreamforge/src/web/run_ops/creation.py)
-- [store.py](d:/work2/Dreamforge/src/web/manifest/store.py)
-- [views.py](d:/work2/Dreamforge/src/web/manifest/views.py)
+- [creation.py](../../src/web/run_ops/creation.py)
+- [store.py](../../src/web/manifest/store.py)
+- [views.py](../../src/web/manifest/views.py)
 
 磁盘位置：
 
@@ -111,7 +111,7 @@ source of truth（已落地）：
 
 主文件来源：
 
-- [packages.py](d:/work2/Dreamforge/src/web/run_ops/packages.py)
+- [packages.py](../../src/web/run_ops/packages.py)
 
 压缩包内路径：
 
@@ -168,7 +168,7 @@ source of truth（已落地）：
 
 主文件来源：
 
-- [service.py](d:/work2/Dreamforge/src/web/chat/service.py)
+- [service.py](../../src/web/chat/service.py)
 
 磁盘位置：
 
@@ -243,8 +243,8 @@ source of truth 建议：
 
 主文件来源：
 
-- [session-state-v1.md](d:/work2/Dreamforge/docs/session-state-v1.md)
-- [service.py](d:/work2/Dreamforge/src/web/chat/service.py)
+- [session-state-v1.md](./archive/session-state-v1.md)
+- [service.py](../../src/web/chat/service.py)
 
 `state` 是会话运行态唯一真相。
 
@@ -377,7 +377,7 @@ source of truth 建议：
 
 来源：
 
-- [service.py](d:/work2/Dreamforge/src/web/chat/service.py)
+- [service.py](../../src/web/chat/service.py)
 
 定位：
 
