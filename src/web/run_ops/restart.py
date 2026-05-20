@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.utils.file_utils import safe_filename
+from .state import project_manifest_summary
 
 
 def classify_requested_characters(
@@ -191,4 +192,5 @@ def apply_restart_manifest_state(
                 "timestamp": now,
             }
         )
+    project_manifest_summary(manifest)
     return manifest

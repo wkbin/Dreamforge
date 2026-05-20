@@ -1,6 +1,6 @@
 # 内部数据字典
 
-更新时间：2026-05-14
+更新时间：2026-05-20
 
 这份文档只描述当前主线里最值得稳定下来的几类核心结构：
 
@@ -22,9 +22,9 @@
 
 主文件来源：
 
-- [creation.py](d:/work2/Dreamforge/src/web/run_ops/creation.py)
-- [store.py](d:/work2/Dreamforge/src/web/manifest/store.py)
-- [views.py](d:/work2/Dreamforge/src/web/manifest/views.py)
+- [creation.py](../../src/web/run_ops/creation.py)
+- [store.py](../../src/web/manifest/store.py)
+- [views.py](../../src/web/manifest/views.py)
 
 磁盘位置：
 
@@ -82,20 +82,36 @@
 - `webui`
   - 当前运行目录、输入目录、payload 目录、artifact 目录、workspace 根
 
-source of truth 建议：
+source of truth（已落地）：
 
 - 真正驱动业务判断时，优先依赖：
   - `status`
   - `progress`
   - `control`
   - `artifacts`
-- `summary` 更适合作为概览，不要单独拿来决定核心流程分支
+- `summary` 已收口为 derived projection（展示层）：
+  - `summary.status_text` 由 `status/progress/control` 投影得到
+  - `summary.graph_status` 由 `progress.graph_status`（必要时回退旧字段）投影得到
+  - `summary.characters_total` / `summary.characters_completed` 由 `progress` 与 `locked_characters` 投影得到
+  - `summary.elapsed_text` 由 `timing.elapsed_text` 投影得到
+
+实现入口：
+
+- `src/web/run_ops/state.py`
+  - `derive_summary_status_text`
+  - `derive_summary_graph_status`
+  - `project_manifest_summary`
+
+约束：
+
+- 不允许再以 `summary.*` 字段作为核心流程分支判定条件
+- 新增业务判定时，优先读取 `status/progress/control/artifacts`
 
 ## 2. Package Manifest
 
 主文件来源：
 
-- [packages.py](d:/work2/Dreamforge/src/web/run_ops/packages.py)
+- [packages.py](../../src/web/run_ops/packages.py)
 
 压缩包内路径：
 
@@ -122,13 +138,26 @@ source of truth 建议：
 - `has_relation_graph`
   - 导出时是否带关系图谱
 - `summary.status_text`
-  - 导出时摘要状态
+  - 导出时运行态投影（由 run 真相字段推导）
 - `summary.graph_status`
-  - 导出时图谱状态
+  - 导出时图谱态投影（由 run 真相字段推导）
 - `exported_at`
 - `updated_at`
 - `builtin`
   - 是否作为内置小说包发布
+
+兼容冻结规则（2026-05-20）：
+
+- 读取入口统一走 `src/web/run_ops/packages.py::_read_package_manifest` 与 `_normalize_package_manifest`
+- 当前支持版本：`0`（legacy）与 `1`（current）
+- 未知版本：直接拒绝（`schema_version` 不在支持集合时抛错）
+- `schema_version=0` 迁移到 current 规则：
+  - 缺失 `summary.status_text` 时回填为 `status`
+  - 缺失 `summary.graph_status` 时按 `has_relation_graph` 回填：`complete` / `pending`
+  - 缺失 `builtin` 回填 `false`
+  - 缺失或非法 `character_count` 回填 `0`
+- 归一化后对外统一输出 `schema_version=1`（逻辑视角为 current schema）
+- 导入流程在解压前先读取并校验 `package_manifest.json`，确保未知版本不会进入后续导入逻辑
 
 定位：
 
@@ -139,7 +168,7 @@ source of truth 建议：
 
 主文件来源：
 
-- [service.py](d:/work2/Dreamforge/src/web/chat/service.py)
+- [service.py](../../src/web/chat/service.py)
 
 磁盘位置：
 
@@ -214,8 +243,8 @@ source of truth 建议：
 
 主文件来源：
 
-- [session-state-v1.md](d:/work2/Dreamforge/docs/session-state-v1.md)
-- [service.py](d:/work2/Dreamforge/src/web/chat/service.py)
+- [session-state-v1.md](./archive/session-state-v1.md)
+- [service.py](../../src/web/chat/service.py)
 
 `state` 是会话运行态唯一真相。
 
@@ -250,6 +279,33 @@ source of truth 建议：
   - 最近事件信号
 - `memory`
   - 当前会话摘要与压缩态
+
+稳定性分级（2026-05-20）：
+
+- `state.version`: `stable`
+  - 仅在发生明确破坏性迁移时升级版本号
+- `state.scene`: `stable`
+  - 允许在保持语义不变前提下增补可选字段
+- `state.presence`: `stable`
+  - 参与者在场/离场语义保持稳定
+- `state.progression`: `evolving`
+  - 节奏与转场策略仍在持续打磨，字段可能继续细化
+- `state.relations.matrix`: `stable`
+  - 作为基线关系视图，优先保持向后兼容
+- `state.relations.delta`: `evolving`
+  - 会话增量表达仍会按对话质量优化而迭代
+- `state.characters.snapshots`: `evolving`
+  - 快照字段会随演出连贯性需求扩展
+- `state.signals`: `experimental`
+  - 事件信号仍处于探索期，不保证字段长期稳定
+- `state.memory.summary`: `evolving`
+  - 压缩摘要结构将继续围绕长会话质量调整
+
+升级影响约定：
+
+- `stable`：新增可选字段可接受；删除/重命名需显式迁移说明
+- `evolving`：允许增补或收敛字段，但需保持旧字段至少一版兼容期
+- `experimental`：可能快速调整；调用方应做缺省容错与非阻塞降级
 
 规则：
 
@@ -321,7 +377,7 @@ source of truth 建议：
 
 来源：
 
-- [service.py](d:/work2/Dreamforge/src/web/chat/service.py)
+- [service.py](../../src/web/chat/service.py)
 
 定位：
 

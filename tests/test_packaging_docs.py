@@ -127,6 +127,13 @@ class PackagingDocsTests(unittest.TestCase):
         self.assertIn("PROFILE.md", contract_text)
         self.assertIn("MEMORY.md", contract_text)
         self.assertIn("run_manifest.json", contract_text)
+        self.assertIn("Canonical Dialogue Runtime State", contract_text)
+        self.assertIn("Required vs Optional Fields", contract_text)
+        self.assertIn("state.scene", contract_text)
+        self.assertIn("state.relations.delta", contract_text)
+        self.assertIn("state.characters.snapshots", contract_text)
+        self.assertIn("Optional with graceful downgrade", contract_text)
+        self.assertIn("scene_progress", contract_text)
         self.assertNotIn("src.cli.app chat", contract_text)
 
     def test_capability_index_reference_is_present(self):
@@ -141,6 +148,9 @@ class PackagingDocsTests(unittest.TestCase):
         self.assertIn("scene_recommendation_context.example.json", capability_text)
         self.assertIn("references/chat_contract.md", capability_text)
         self.assertIn("examples/host_workflow_example.md", capability_text)
+        self.assertIn("Canonical alignment rules", capability_text)
+        self.assertIn("prefer canonical `state.*` fields as the source of truth", capability_text)
+        self.assertIn("`scene_progress` / `relation_delta` / `character_snapshots`", capability_text)
         self.assertNotIn("src.cli.app chat", capability_text)
 
     def test_host_workflow_example_is_present(self):
@@ -183,6 +193,29 @@ class PackagingDocsTests(unittest.TestCase):
 
         self.assertIn("evidence_source", validation_text)
         self.assertIn("interest_claim", validation_text)
+
+    def test_data_dictionary_declares_session_state_stability_levels(self):
+        dictionary_text = Path("docs/data-dictionary.md").read_text(encoding="utf-8")
+        self.assertIn("稳定性分级（2026-05-20）", dictionary_text)
+        self.assertIn("`state.version`: `stable`", dictionary_text)
+        self.assertIn("`state.scene`: `stable`", dictionary_text)
+        self.assertIn("`state.progression`: `evolving`", dictionary_text)
+        self.assertIn("`state.relations.delta`: `evolving`", dictionary_text)
+        self.assertIn("`state.characters.snapshots`: `evolving`", dictionary_text)
+        self.assertIn("`state.signals`: `experimental`", dictionary_text)
+        self.assertIn("升级影响约定：", dictionary_text)
+
+    def test_runtime_contract_declares_code_ownership_mapping(self):
+        contract_text = Path("docs/runtime-contract.md").read_text(encoding="utf-8")
+        self.assertIn("## 7. 代码目录职责映射（P2-3）", contract_text)
+        self.assertIn("scripts/install.sh", contract_text)
+        self.assertIn("scripts/run_webui.py", contract_text)
+        self.assertIn("src/web/service_facades/update.py", contract_text)
+        self.assertIn("src/web/run_ops/packages.py", contract_text)
+        self.assertIn("src/web/manifest", contract_text)
+        self.assertIn("src/web/chat", contract_text)
+        self.assertIn("src/web/static", contract_text)
+        self.assertIn("兼容修补集中入口", contract_text)
 
     def test_skill_version_is_synced_across_metadata_and_release_docs(self):
         skill_dir = Path("zaomeng-skill")

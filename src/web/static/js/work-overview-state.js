@@ -61,7 +61,7 @@
 
   function buildWorkGraphStatus(run) {
     const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
-    const graphFailed = String(run?.summary?.graph_status || "").trim() === "failed" || String(run?.progress?.graph_status || "").trim() === "failed";
+    const graphFailed = runGraphStatus(run) === "failed";
     if (hasGraph) {
       return "已完成";
     }
@@ -183,7 +183,7 @@
 
     const progressMessage = run?.progress?.message || "这一卷还在慢慢成形。";
     const stage = String(run?.progress?.stage || "").trim();
-    const summary = typeof humanizeSummary === "function" ? humanizeSummary(run?.summary?.status_text) : "";
+    const summary = typeof humanizeSummary === "function" ? humanizeSummary(runLifecycleState(run)) : "";
     const stopRequested = Boolean(run?.control?.stop_requested) && run?.status === "running";
 
     if (run?.status === "running") {
@@ -212,7 +212,7 @@
     }
 
     const stageText =
-      stage === "graph_done" || run?.summary?.status_text === "workflow_complete"
+      stage === "graph_done" || isRunWorkflowComplete(run)
         ? "人物与关系已经落稳"
         : summary || "这一卷已经可以继续";
     return {
@@ -280,7 +280,7 @@
     const elapsedText = String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim();
     const progressCopy = String(run?.progress?.message || "").trim() || "人物与关系会依次浮现。";
     const enrichedCopy =
-      elapsedText && run?.summary?.status_text === "workflow_complete" ? `${progressCopy} · 本次用时 ${elapsedText}` : progressCopy;
+      elapsedText && isRunWorkflowComplete(run) ? `${progressCopy} · 本次用时 ${elapsedText}` : progressCopy;
     const currentSource = typeof getCurrentNovelSource === "function" ? getCurrentNovelSource(run) : null;
     return {
       title: run ? `《${runNovelTitle(run)}》` : "人物与关系正在慢慢浮现",
@@ -290,7 +290,7 @@
       heroMetrics: [
         { label: "当前书段", value: run ? (String(currentSource?.source_name || "").trim() || "当前书页") : "-" },
         { label: "角色总数", value: run ? `${(typeof getRunCharacterNames === "function" ? getRunCharacterNames(run).length : 0) || 0} 位` : "-" },
-        { label: "总状态", value: run ? ((typeof humanizeSummary === "function" ? humanizeSummary(run?.summary?.status_text) : "") || "未开始") : "-" },
+        { label: "总状态", value: run ? ((typeof humanizeSummary === "function" ? humanizeSummary(runLifecycleState(run)) : "") || "未开始") : "-" },
         { label: "累计耗时", value: run ? (String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim() || "进行中") : "-" },
       ],
       progressMetrics: [
@@ -430,7 +430,7 @@
 
   function buildWorkGraphSummaryState(run) {
     const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
-    const graphFailed = String(run?.summary?.graph_status || "").trim() === "failed" || String(run?.progress?.graph_status || "").trim() === "failed";
+    const graphFailed = runGraphStatus(run) === "failed";
     const hasCharacters = typeof getRunCharacterNames === "function" ? getRunCharacterNames(run).length > 0 : false;
     if (hasGraph) return { badgeText: "已完成", badgeTone: "stable", copy: "关系线已经能看，先看牵系和张力，再决定从哪种方式入场。" };
     if (graphFailed) return { badgeText: "失败可跳过", badgeTone: "weak", copy: "这轮关系图谱生成失败，但不会阻塞聊天；可以先入场，稍后再补图谱。" };

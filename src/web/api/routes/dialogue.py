@@ -107,6 +107,7 @@ def prepare_dialogue_turn(
             session_id=session_id,
             message=payload.message,
             message_kind=payload.message_kind,
+            suppress_transcript_message=payload.suppress_transcript_message,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Session not found.") from exc
@@ -127,6 +128,7 @@ def reply_dialogue_turn(
             session_id=session_id,
             message=payload.message,
             message_kind=payload.message_kind,
+            suppress_transcript_message=payload.suppress_transcript_message,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Session not found.") from exc

@@ -5,12 +5,13 @@ import threading
 from pathlib import Path
 from typing import Any, Callable
 
+from src.web.run_ops.state import project_manifest_summary
+
 
 def prepare_background_manifest(manifest: dict[str, Any], *, utc_now: Callable[[], str]) -> dict[str, Any]:
     manifest["updated_at"] = utc_now()
     manifest.setdefault("progress", {})["stage"] = "queued"
     manifest["progress"]["message"] = "已开始蒸馏任务"
-    manifest.setdefault("summary", {})["status_text"] = "waiting_for_payloads"
     manifest.setdefault("events", []).append(
         {
             "stage": "queued",
@@ -21,6 +22,7 @@ def prepare_background_manifest(manifest: dict[str, Any], *, utc_now: Callable[[
             "timestamp": utc_now(),
         }
     )
+    project_manifest_summary(manifest)
     return manifest
 
 

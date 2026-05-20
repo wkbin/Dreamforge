@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from .state import project_manifest_summary
+
 
 def ensure_run_workspace(run_dir: Path) -> dict[str, Path]:
     input_dir = run_dir / "input"
@@ -30,7 +32,7 @@ def build_initial_run_manifest(
     utc_now: Callable[[], str],
 ) -> dict[str, Any]:
     now = utc_now()
-    return {
+    manifest = {
         "kind": "zaomeng_web_run",
         "schema_version": 1,
         "run_id": run_id,
@@ -115,6 +117,8 @@ def build_initial_run_manifest(
             "artifact_dir": str(workspace["artifact_dir"].resolve()),
         },
     }
+    project_manifest_summary(manifest)
+    return manifest
 
 
 def attach_workspace_roots(manifest: dict[str, Any], *, characters_root: Path, relations_root: Path) -> None:
@@ -143,7 +147,6 @@ def apply_manual_payload_manifest_state(
     manifest["progress"]["stage"] = "relation_payload_ready"
     manifest["progress"]["message"] = "蒸馏与关系提取 payload 已准备完成"
     manifest["updated_at"] = now
-    manifest["summary"]["status_text"] = "waiting_for_host_generation"
     manifest["capabilities"]["distill"] = {
         "status": "ready",
         "success": False,
@@ -210,4 +213,5 @@ def apply_manual_payload_manifest_state(
             "timestamp": now,
         }
     )
+    project_manifest_summary(manifest)
     return manifest

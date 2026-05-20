@@ -1,5 +1,12 @@
 
-from .compat import coerce_manifest_path, relative_to_run_dir, rewrite_run_root_paths, rewrite_string_path
+from .compat import (
+    apply_imported_run_semantics,
+    coerce_manifest_path,
+    reconcile_discovered_artifacts,
+    relative_to_run_dir,
+    rewrite_run_root_paths,
+    rewrite_string_path,
+)
 from .store import (
     ensure_run_exists,
     load_json_file,
@@ -18,6 +25,7 @@ from .views import (
 
 __all__ = [
     "build_file_urls",
+    "apply_imported_run_semantics",
     "coerce_manifest_path",
     "discover_artifacts",
     "ensure_run_exists",
@@ -25,6 +33,7 @@ __all__ = [
     "load_json_file",
     "load_manifest",
     "manifest_path",
+    "reconcile_discovered_artifacts",
     "reconcile_loaded_manifest",
     "relative_to_run_dir",
     "require_manifest",

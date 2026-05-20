@@ -153,7 +153,7 @@ function applyRunViewFallback(run, options = {}) {
   sourceHistoryExpanded = false;
   characterReadinessExpanded = false;
   workSessionPreviewExpanded = false;
-  runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
+  runCreationPending = run.status === "running" && !isRunWorkflowComplete(run);
   if (!options.preserveDialogue) {
     resetDialogueView();
   }
@@ -256,6 +256,9 @@ function resetDialogueView() {
   toggle("dialogue-memory", false);
   if (el("dialogue-message")) el("dialogue-message").value = "";
   if (typeof syncSuggestButtonVisibility === "function") syncSuggestButtonVisibility(null);
+  if (typeof window.syncDialogueMessageKindVisibility === "function") {
+    window.syncDialogueMessageKindVisibility(null);
+  }
   if (typeof renderObserveQuickReplies === "function") renderObserveQuickReplies(null);
   resizeComposer();
   setComposerEnabled(false);

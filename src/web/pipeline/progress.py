@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from src.web.run_ops.state import project_manifest_summary
+
 
 def apply_distill_progress(
     current: dict[str, Any],
@@ -160,9 +162,7 @@ def finalize_workflow_success(
     refreshed["success"] = True
     refreshed["updated_at"] = utc_now()
     finalize_manifest_timing(refreshed, "completed")
-    refreshed.setdefault("summary", {})["status_text"] = "workflow_complete"
-    if refreshed.get("timing", {}).get("elapsed_text"):
-        refreshed["summary"]["elapsed_text"] = refreshed["timing"]["elapsed_text"]
+    refreshed.setdefault("summary", {})
     refreshed.setdefault("capabilities", {})["distill"] = {
         "status": "complete",
         "success": True,
@@ -197,6 +197,7 @@ def finalize_workflow_success(
             "timestamp": utc_now(),
         }
     )
+    project_manifest_summary(refreshed)
 
 
 def finalize_workflow_success_without_graph(
@@ -210,10 +211,7 @@ def finalize_workflow_success_without_graph(
     refreshed["success"] = True
     refreshed["updated_at"] = utc_now()
     finalize_manifest_timing(refreshed, "completed")
-    refreshed.setdefault("summary", {})["status_text"] = "workflow_complete"
-    refreshed["summary"]["graph_status"] = "failed"
-    if refreshed.get("timing", {}).get("elapsed_text"):
-        refreshed["summary"]["elapsed_text"] = refreshed["timing"]["elapsed_text"]
+    refreshed.setdefault("summary", {})
 
     progress = refreshed.setdefault("progress", {})
     progress["graph_status"] = "failed"
@@ -255,6 +253,7 @@ def finalize_workflow_success_without_graph(
             "timestamp": utc_now(),
         }
     )
+    project_manifest_summary(refreshed)
     refreshed.setdefault("events", []).append(
         {
             "stage": "workflow_complete",
@@ -282,9 +281,7 @@ def finalize_workflow_stopped(
     stopped["success"] = False
     stopped["updated_at"] = utc_now()
     finalize_manifest_timing(stopped, "stopped")
-    stopped.setdefault("summary", {})["status_text"] = "stopped"
-    if stopped.get("timing", {}).get("elapsed_text"):
-        stopped["summary"]["elapsed_text"] = stopped["timing"]["elapsed_text"]
+    stopped.setdefault("summary", {})
     progress = stopped.setdefault("progress", {})
     progress["stage"] = "stopped"
     progress["message"] = message
@@ -318,6 +315,7 @@ def finalize_workflow_stopped(
                 "timestamp": utc_now(),
             }
         )
+    project_manifest_summary(stopped)
 
 
 def finalize_workflow_failed(
@@ -331,9 +329,7 @@ def finalize_workflow_failed(
     failed["success"] = False
     failed["updated_at"] = utc_now()
     finalize_manifest_timing(failed, "failed")
-    failed.setdefault("summary", {})["status_text"] = "failed"
-    if failed.get("timing", {}).get("elapsed_text"):
-        failed["summary"]["elapsed_text"] = failed["timing"]["elapsed_text"]
+    failed.setdefault("summary", {})
     failed.setdefault("progress", {})["message"] = message
     failed.setdefault("events", []).append(
         {
@@ -356,3 +352,4 @@ def finalize_workflow_failed(
                 "timestamp": utc_now(),
             }
         )
+    project_manifest_summary(failed)

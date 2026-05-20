@@ -28,6 +28,7 @@ def release_skill(
     smoke_only: bool = False,
     bump_web_assets: bool = False,
     static_version: str = "",
+    release_tag: str = "",
 ) -> Path:
     if version:
         _sync_skill_version.sync_skill_version(skill_dir, version)
@@ -43,6 +44,8 @@ def release_skill(
         command = [sys.executable, str(repo_root / "scripts" / "dev_checks.py")]
         if smoke_only:
             command.append("--smoke-only")
+        if str(release_tag or "").strip():
+            command.extend(["--release-tag", str(release_tag).strip()])
         subprocess.run(command, cwd=repo_root, check=True)
 
     return _package_skill.build_archive(
@@ -75,6 +78,11 @@ def main() -> int:
         default="",
         help="Optional explicit web static asset version. Implies refreshing web assets before release packaging.",
     )
+    parser.add_argument(
+        "--release-tag",
+        default="",
+        help="Optional release tag to enforce cross-platform regression signoff, for example v2026.05.16.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -95,6 +103,7 @@ def main() -> int:
         smoke_only=bool(args.smoke_only),
         bump_web_assets=not bool(args.no_bump_web_assets) and not bool(str(args.static_version or "").strip()),
         static_version=str(args.static_version or "").strip(),
+        release_tag=str(args.release_tag or "").strip(),
     )
     resolved_static_version = _web_asset_version.read_web_asset_version(repo_root)
     print(f"Web static asset version: {resolved_static_version}")

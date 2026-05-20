@@ -14,6 +14,7 @@ class CIWorkflowTests(unittest.TestCase):
     def test_dev_checks_exposes_smoke_mode_and_guardrail_suite(self):
         script_text = Path("scripts/dev_checks.py").read_text(encoding="utf-8")
         self.assertIn("--smoke-only", script_text)
+        self.assertIn("--release-tag", script_text)
         self.assertIn("tests.test_cli_structure", script_text)
         self.assertIn("tests.test_package_skill_script", script_text)
         self.assertIn("tests.test_release_skill", script_text)
@@ -24,6 +25,8 @@ class CIWorkflowTests(unittest.TestCase):
         self.assertIn("tests.test_packaging_docs", script_text)
         self.assertIn('"run mypy"', script_text)
         self.assertIn('"mypy.ini"', script_text)
+        self.assertIn('"run release regression gate"', script_text)
+        self.assertIn('scripts/release_regression_gate.py', script_text)
 
     def test_mypy_config_targets_guardrail_modules(self):
         config_text = Path("mypy.ini").read_text(encoding="utf-8")

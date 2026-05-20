@@ -160,6 +160,7 @@ class DialogueServiceMixin:
         session_id: str,
         message: str,
         message_kind: str = "dialogue",
+        suppress_transcript_message: bool = False,
     ) -> dict[str, Any]:
         manifest = self._require_manifest(run_id)
         return self.dialogue.prepare_turn(
@@ -167,6 +168,7 @@ class DialogueServiceMixin:
             session_id=session_id,
             message=message,
             message_kind=message_kind,
+            transcript_message="" if suppress_transcript_message else None,
         )
 
     def reply_dialogue_turn(
@@ -176,6 +178,7 @@ class DialogueServiceMixin:
         session_id: str,
         message: str,
         message_kind: str = "dialogue",
+        suppress_transcript_message: bool = False,
     ) -> dict[str, Any]:
         manifest = self._require_manifest(run_id)
         return reply_dialogue_turn_payload(
@@ -183,6 +186,7 @@ class DialogueServiceMixin:
             session_id=session_id,
             message=message,
             message_kind=message_kind,
+            suppress_transcript_message=suppress_transcript_message,
             manifest=manifest,
             dialogue=self.dialogue,
             load_pending_turn_payload=self._load_pending_turn_payload,
