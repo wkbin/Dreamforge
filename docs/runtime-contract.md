@@ -1,6 +1,6 @@
 # Runtime Contract
 
-更新时间：2026-05-14
+更新时间：2026-05-20
 
 这份文档只描述运行期边界，不讨论产品路线。
 目标是把安装、更新、运行、导入导出这些入口的职责固定下来，减少后续继续散开。
@@ -143,3 +143,41 @@
 - 导出包不得写入宿主机器绝对路径作为 source-of-truth
 - 运行入口不得把安装期逻辑和业务运行逻辑混在一起
 - compatibility 修补不得继续散落到 UI、列表、导入、视图多个模块里重复出现
+
+## 7. 代码目录职责映射（P2-3）
+
+为了避免“边界写在文档里、代码里却继续散开”，运行期主线职责固定到以下目录：
+
+- 安装入口与安装期脚本：
+  - `scripts/install.sh`
+  - 仅负责安装期依赖与启动命令落地，不写业务运行数据
+- 运行入口：
+  - `scripts/run_webui.py`
+  - `src/cli`
+  - 仅负责启动与参数分发，不承担导入导出业务逻辑
+- 更新与版本检查：
+  - `src/web/service_facades/update.py`
+  - `scripts/release_skill.py`
+  - 保持“更新程序不覆盖用户业务数据”约束
+- 运行编排与状态推进：
+  - `src/web/service_facades`
+  - `src/web/pipeline`
+  - `src/web/run_ops`
+  - 负责 run 创建、推进、停止、重启与状态投影
+- manifest 与兼容层：
+  - `src/web/manifest`
+  - 兼容修补集中入口（路径重写、导入语义迁移、缺失产物降级）
+- 导入导出小说包：
+  - `src/web/run_ops/packages.py`
+  - 负责 package manifest 校验、schema 兼容、导入导出边界
+- 对话运行态：
+  - `src/web/chat`
+  - canonical `session state` 的读写与派生视图
+- 前端展示层：
+  - `src/web/static`
+  - 只消费 canonical/derived 数据，不新增后端兼容补丁
+
+约束：
+
+- 新增代码若涉及边界变更，必须同时更新本节映射与对应测试断言
+- 目录职责冲突时，优先保持“兼容层集中、入口轻量、业务层单一职责”

@@ -16,7 +16,7 @@
   function buildBookshelfItems(runs, currentRunIdValue = "", currentRunValue = null) {
     const groupedRuns = typeof aggregateRunsByNovel === "function" ? aggregateRunsByNovel(runs || []) : (runs || []);
     return groupedRuns.map((run) => {
-      const status = typeof humanizeSummary === "function" ? humanizeSummary(run?.summary?.status_text) : String(run?.summary?.status_text || "未开始");
+      const status = typeof humanizeSummary === "function" ? humanizeSummary(runLifecycleState(run)) : String(runLifecycleState(run) || "未开始");
       const updatedAt = typeof formatWeakTime === "function" ? formatWeakTime(run?.updated_at || "") : "";
       const characterCount = typeof getRunCharacterNames === "function" ? getRunCharacterNames(run).length : 0;
       const cardState = getBookshelfCardState(run);

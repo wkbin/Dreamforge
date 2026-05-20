@@ -138,6 +138,12 @@ At dialogue time, the host should read:
 - `run_manifest.json`
 - constraint references such as `output_schema.md`, `style_differ.md`, and `logic_constraint.md`
 
+Canonical alignment rules:
+
+- prefer canonical `state.*` fields as the source of truth
+- treat `scene_progress` / `relation_delta` / `character_snapshots` as derived compatibility projections
+- classify fields into required handshake vs optional downgrade buckets as defined in `references/chat_contract.md`
+
 Reference:
 
 - `references/chat_contract.md`

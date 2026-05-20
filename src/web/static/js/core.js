@@ -277,10 +277,32 @@ function joinStatusParts(parts = []) {
     .join(" ");
 }
 
+function normalizeChatFlowImpact(impact = "", affectsChatFlow = false) {
+  const trimmed = String(impact || "").trim();
+  const note = affectsChatFlow ? "这会影响聊天主流程。" : "这不会影响聊天主流程。";
+  if (!trimmed) {
+    return note;
+  }
+  if (trimmed.includes("聊天主流程")) {
+    return trimmed;
+  }
+  return `${trimmed} ${note}`.trim();
+}
+
 function setFlowStatus(id, options = {}) {
+  const phase = String(options.phase || "").trim();
   const message = String(options.message || "").trim();
-  const impact = String(options.impact || "").trim();
-  const nextStep = String(options.nextStep || "").trim();
+  const affectsChatFlow =
+    options.chatFlowImpact === "affects" ||
+    options.affectsChatFlow === true;
+  const impact =
+    phase === "failure"
+      ? normalizeChatFlowImpact(options.impact || "", affectsChatFlow)
+      : String(options.impact || "").trim();
+  const nextStep =
+    phase === "success" && !String(options.nextStep || "").trim()
+      ? "可以继续下一步操作。"
+      : String(options.nextStep || "").trim();
   setStatus(id, joinStatusParts([message, impact, nextStep]));
 }
 
@@ -303,6 +325,7 @@ function setButtonBusy(target, pending, options = {}) {
 
 window.__ZAOMENG_FLOW_FEEDBACK__ = {
   joinStatusParts,
+  normalizeChatFlowImpact,
   setFlowStatus,
   setButtonBusy,
 };
@@ -1189,7 +1212,7 @@ function findRunById(runId) {
 
 function runSortScore(run) {
   const characterCount = (run?.artifact_index?.characters || []).length;
-  const status = String(run?.summary?.status_text || "");
+  const status = runLifecycleState(run);
   const statusScore =
     status === "workflow_complete" ? 5 :
     status === "graph_ready" ? 4 :
@@ -1197,6 +1220,45 @@ function runSortScore(run) {
     status === "graph_pending" ? 2 :
     status === "waiting_for_host_generation" ? 1 : 0;
   return statusScore * 100 + characterCount;
+}
+
+function runGraphStatus(run) {
+  const progressStatus = String(run?.progress?.graph_status || "").trim();
+  if (progressStatus) {
+    return progressStatus;
+  }
+  return String(run?.summary?.graph_status || "").trim();
+}
+
+function runLifecycleState(run) {
+  const status = String(run?.status || "").trim();
+  const stage = String(run?.progress?.stage || "").trim();
+  const graphStatus = runGraphStatus(run);
+  const total = Number(run?.progress?.total_characters || run?.locked_characters?.length || 0);
+  const completed = Number(run?.progress?.completed_count || run?.artifact_index?.characters?.length || 0);
+  const stopRequested = Boolean(run?.control?.stop_requested);
+  if (status === "ready") return "workflow_complete";
+  if (status === "failed") return "failed";
+  if (status === "stopped") return "stopped";
+  if (status === "running") {
+    if (stopRequested) return "stop_requested";
+    if (stage === "relation_payload_ready") return "waiting_for_host_generation";
+    if (graphStatus === "complete") {
+      if (total > 0 && completed >= total) {
+        return "waiting_for_verification";
+      }
+      return "graph_ready";
+    }
+    if (total > 0 && completed >= total && (graphStatus === "pending" || graphStatus === "running" || graphStatus === "")) {
+      return "graph_pending";
+    }
+    return "waiting_for_payloads";
+  }
+  return String(run?.summary?.status_text || "").trim();
+}
+
+function isRunWorkflowComplete(run) {
+  return runLifecycleState(run) === "workflow_complete";
 }
 
 function aggregateRunsByNovel(runs) {

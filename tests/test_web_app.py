@@ -1903,6 +1903,7 @@ class WebRunServiceTests(unittest.TestCase):
             stopped = service.stop_run(run["run_id"])
             self.assertTrue(stopped["control"]["stop_requested"])
             self.assertEqual(stopped["summary"]["status_text"], "stop_requested")
+            self.assertEqual(stopped["progress"]["stage"], "characters_locked")
             self.assertIn("正在收束当前步骤", stopped["progress"]["message"])
 
             manifest_path = Path(tmp) / "runs" / run["run_id"] / "run_manifest.json"

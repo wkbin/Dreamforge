@@ -21,7 +21,9 @@ class WebFrontendBridgeSyncTests(unittest.TestCase):
     def test_bootstrap_loads_webui_api_before_bookshelf_island(self):
         content = read_js("bootstrap.js")
         api_index = content.index('/web/js/webui-api.js?v=${version}')
+        main_index = content.index('/web/js/main.js?v=${version}')
         island_index = content.index('/web/js/bookshelf-vue-island.js?v=${version}')
+        self.assertLess(api_index, main_index)
         self.assertLess(api_index, island_index)
 
     def test_bootstrap_keeps_optional_islands_non_fatal(self):

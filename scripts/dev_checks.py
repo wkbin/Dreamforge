@@ -33,6 +33,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run prompt-first guardrail tests without the full test suite.",
     )
+    parser.add_argument(
+        "--release-tag",
+        default="",
+        help="Optional release tag for cross-platform regression gate, for example v2026.05.16.",
+    )
     return parser.parse_args()
 
 
@@ -44,6 +49,10 @@ def main() -> int:
         print("[done] smoke checks passed")
         return 0
 
+    gate_command = [sys.executable, "scripts/release_regression_gate.py"]
+    if str(args.release_tag or "").strip():
+        gate_command.extend(["--release-tag", str(args.release_tag).strip()])
+    run_step("run release regression gate", gate_command)
     run_step("run unit tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests"])
     print("[done] development checks passed")
     return 0

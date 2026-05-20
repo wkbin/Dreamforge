@@ -47,6 +47,40 @@ Recommended additional persona inputs when present:
 - `CONFLICTS.md`
 - `ROLE.md`
 
+## Canonical Dialogue Runtime State
+
+The host should treat canonical session state as the source of truth.
+
+Primary canonical shape:
+
+- `state.scene`
+- `state.presence`
+- `state.progression`
+- `state.relations.matrix`
+- `state.relations.delta`
+- `state.characters.snapshots`
+- `state.signals`
+- `state.memory.summary`
+
+Compatibility projections such as `scene_progress`, `relation_delta`, and `character_snapshots` are derived views, not primary storage.
+
+## Required vs Optional Fields
+
+Required (host should read/write these as stable handshake fields):
+
+- `state.scene.location`
+- `state.scene.time_hint`
+- `state.presence.present_participants`
+- `state.relations.delta`
+- `state.characters.snapshots`
+
+Optional with graceful downgrade (host should continue if missing):
+
+- `state.progression.world_tension_summary`
+- `state.progression.scene_shift_reason`
+- `state.signals`
+- `state.memory.summary`
+
 ## Host Responsibilities
 
 ### 1. Mode Selection

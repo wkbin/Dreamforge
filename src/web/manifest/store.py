@@ -6,6 +6,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
+from src.web.run_ops.state import project_manifest_summary
+
 
 def manifest_path(runs_root: Path, run_id: str) -> Path:
     return runs_root / run_id / "run_manifest.json"
@@ -102,13 +104,9 @@ def reconcile_loaded_manifest(
         progress["stage"] = "stopped"
         current_character = str(progress.get("current_character", "")).strip()
         progress["message"] = f"已停止蒸馏，停在 {current_character}。" if current_character else "这次蒸馏已停止。"
-        summary = manifest.setdefault("summary", {})
-        summary["status_text"] = "stopped"
         control["stop_acknowledged_at"] = str(control.get("stop_acknowledged_at", "")).strip() or now_text
         manifest["control"] = control
         finalize_manifest_timing(manifest, "stopped")
-        if manifest.get("timing", {}).get("elapsed_text"):
-            summary["elapsed_text"] = manifest["timing"]["elapsed_text"]
         manifest.setdefault("capabilities", {})["verify_workflow"] = {
             "status": "stopped",
             "success": False,
@@ -127,5 +125,6 @@ def reconcile_loaded_manifest(
                     "timestamp": now_text,
                 }
             )
+        project_manifest_summary(manifest)
         return manifest, True
     return manifest, False

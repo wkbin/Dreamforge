@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from .state import project_manifest_summary
+
 
 def refresh_run_manifest(
     manifest: dict[str, Any],
@@ -32,8 +34,6 @@ def stop_run_manifest(
     control["stop_requested_at"] = now_text
     progress = manifest.setdefault("progress", {})
     progress["message"] = "已收到停止请求，正在收束当前步骤"
-    summary = manifest.setdefault("summary", {})
-    summary["status_text"] = "stop_requested"
     manifest["updated_at"] = now_text
     manifest.setdefault("events", []).append(
         {
@@ -45,4 +45,5 @@ def stop_run_manifest(
             "timestamp": now_text,
         }
     )
+    project_manifest_summary(manifest)
     return manifest

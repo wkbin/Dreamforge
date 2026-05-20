@@ -12,11 +12,15 @@ const UI_BRIDGE_TOOLS = window.__ZAOMENG_UI_BRIDGE_TOOLS__ || {};
 const FLOW_FEEDBACK_TOOLS = window.__ZAOMENG_FLOW_FEEDBACK__ || {};
 
 function setFlowStatusMessage(statusId, options = {}) {
+  const payload = {
+    ...options,
+    phase: options.phase || (options.impact ? "failure" : ""),
+  };
   if (typeof FLOW_FEEDBACK_TOOLS.setFlowStatus === "function") {
-    FLOW_FEEDBACK_TOOLS.setFlowStatus(statusId, options);
+    FLOW_FEEDBACK_TOOLS.setFlowStatus(statusId, payload);
     return;
   }
-  setStatus(statusId, String(options.message || "").trim());
+  setStatus(statusId, String(payload.message || "").trim());
 }
 
 function setButtonBusyState(target, pending, options = {}) {
@@ -38,6 +42,112 @@ function setButtonBusyState(target, pending, options = {}) {
 
 function setDistillFlowStatus(statusId, options = {}) {
   setFlowStatusMessage(statusId, options);
+}
+
+function setFlowLoadingStatus(statusId, message, nextStep = "") {
+  setFlowStatusMessage(statusId, {
+    phase: "loading",
+    message,
+    nextStep,
+  });
+}
+
+function setFlowSuccessStatus(statusId, message, nextStep = "") {
+  setFlowStatusMessage(statusId, {
+    phase: "success",
+    message,
+    nextStep,
+  });
+}
+
+function setFlowFailureStatus(statusId, message, nextStep = "", options = {}) {
+  setFlowStatusMessage(statusId, {
+    phase: "failure",
+    message,
+    impact: options.impact || "",
+    affectsChatFlow: Boolean(options.affectsChatFlow),
+    nextStep,
+  });
+}
+
+function setDialogueSessionLoading(message, nextStep = "") {
+  setFlowLoadingStatus("dialogue-session-status", message, nextStep);
+}
+
+function setDialogueSessionSuccess(message, nextStep = "") {
+  setFlowSuccessStatus("dialogue-session-status", message, nextStep);
+}
+
+function setDialogueSessionFailure(message, nextStep = "", affectsChatFlow = true) {
+  setFlowFailureStatus("dialogue-session-status", message, nextStep, { affectsChatFlow });
+}
+
+function setSceneCardLoading(message, nextStep = "") {
+  setFlowLoadingStatus("scene-card-status", message, nextStep);
+}
+
+function setSceneCardSuccess(message, nextStep = "") {
+  setFlowSuccessStatus("scene-card-status", message, nextStep);
+}
+
+function setSceneCardFailure(message, nextStep = "") {
+  setFlowFailureStatus("scene-card-status", message, nextStep, { affectsChatFlow: false });
+}
+
+function setSelfCardLoading(message, nextStep = "") {
+  setFlowLoadingStatus("self-card-status", message, nextStep);
+}
+
+function setSelfCardSuccess(message, nextStep = "") {
+  setFlowSuccessStatus("self-card-status", message, nextStep);
+}
+
+function setSelfCardFailure(message, nextStep = "") {
+  setFlowFailureStatus("self-card-status", message, nextStep, { affectsChatFlow: false });
+}
+
+function setOpeningPresetLoading(message, nextStep = "") {
+  setFlowLoadingStatus("opening-preset-status", message, nextStep);
+}
+
+function setOpeningPresetSuccess(message, nextStep = "") {
+  setFlowSuccessStatus("opening-preset-status", message, nextStep);
+}
+
+function setOpeningPresetFailure(message, nextStep = "") {
+  setFlowFailureStatus("opening-preset-status", message, nextStep, { affectsChatFlow: false });
+}
+
+function setPersonaReviewLoading(message, nextStep = "") {
+  setFlowLoadingStatus("persona-review-status", message, nextStep);
+}
+
+function setPersonaReviewSuccess(message, nextStep = "") {
+  setFlowSuccessStatus("persona-review-status", message, nextStep);
+}
+
+function setPersonaReviewFailure(message, nextStep = "") {
+  setFlowFailureStatus("persona-review-status", message, nextStep, { affectsChatFlow: false });
+}
+
+function setRelationDetailsLoading(message, nextStep = "") {
+  setFlowLoadingStatus("relation-details-status", message, nextStep);
+}
+
+function setRelationDetailsFailure(message, nextStep = "") {
+  setFlowFailureStatus("relation-details-status", message, nextStep, { affectsChatFlow: false });
+}
+
+async function requireWebUiApi(timeoutMs = 4000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    const api = window.__ZAOMENG_WEBUI_API__;
+    if (api && typeof api.listOpeningPresets === "function") {
+      return api;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 16));
+  }
+  throw new Error("webui api is not ready.");
 }
 
 function applyRunViewSafely(run, options = {}) {
@@ -328,7 +438,7 @@ function clearChatSetupSelfCardSelection() {
 
 async function handleModelSettingsSubmit(event) {
   event.preventDefault();
-  setStatus("model-settings-status", "正在把故事声源接进来...");
+  setFlowLoadingStatus("model-settings-status", "正在把故事声源接进来...");
   try {
     modelSettings = await apiJson(
       "/api/web/settings/model",
@@ -346,11 +456,16 @@ async function handleModelSettingsSubmit(event) {
       "保存失败。"
     );
     applyModelSettingsView();
-    setStatus("model-settings-status", "故事声源已经接通。");
+    setFlowSuccessStatus("model-settings-status", "故事声源已经接通。", "现在可以开始新的一卷。");
     closeSettingsModal();
     updateWorkflowState();
   } catch (error) {
-    setStatus("model-settings-status", error.message || "这次连接没有成功。");
+    setFlowFailureStatus(
+      "model-settings-status",
+      error.message || "这次连接没有成功。",
+      "可以检查模型地址和密钥后重试。",
+      { affectsChatFlow: true }
+    );
   }
 }
 
@@ -358,26 +473,27 @@ async function handleCreateRunSubmit(event) {
   event.preventDefault();
   if (!modelSettings.configured) {
     openSettingsModal();
-    setStatus("form-status", "先把故事声源接进来，再开始这一卷。");
+    setFlowFailureStatus("form-status", "先把故事声源接进来，再开始这一卷。", "先完成模型配置后再发起蒸馏。", { affectsChatFlow: true });
     return;
   }
   const file = el("novel-file")?.files?.[0];
   if (!file) {
-    setStatus("form-status", "先放入一本书，故事才会往下走。");
+    setFlowFailureStatus("form-status", "先放入一本书，故事才会往下走。", "选择一本小说文件后再开始。", { affectsChatFlow: false });
     return;
   }
   const characters = charactersOf("characters");
   if (!characters.length) {
-    setStatus("form-status", "至少写下一个你想遇见的人。");
+    setFlowFailureStatus("form-status", "至少写下一个你想遇见的人。", "先补一个角色名再开始。", { affectsChatFlow: false });
     return;
   }
   runCreationPending = true;
   updateWorkflowState();
   setButtonBusyState("submit-button", true, { idleText: "开始唤醒人物", busyText: "蒸馏中..." });
-  setDistillFlowStatus("form-status", {
-    message: "正在翻检正文，替你把人物请出来...",
-    nextStep: "开始后你可以在书卷页继续看人物蒸馏和关系图进度。",
-  });
+  setFlowLoadingStatus(
+    "form-status",
+    "正在翻检正文，替你把人物请出来...",
+    "开始后你可以在书卷页继续看人物蒸馏和关系图进度。"
+  );
   try {
     const run = await apiJson(
       "/api/web/runs",
@@ -397,19 +513,21 @@ async function handleCreateRunSubmit(event) {
     );
     applyRunViewSafely(run);
     await loadRunsOverview();
-    setDistillFlowStatus("form-status", {
-      message: "人物整理已经开始，进度会在这里慢慢往前走。",
-      nextStep: "接下来可以盯住书卷页，等人物先落稳几位。",
-    });
+    setFlowSuccessStatus(
+      "form-status",
+      "人物整理已经开始，进度会在这里慢慢往前走。",
+      "接下来可以盯住书卷页，等人物先落稳几位。"
+    );
   } catch (error) {
     runCreationPending = false;
     stopRunPolling();
     updateWorkflowState();
-    setDistillFlowStatus("form-status", {
-      message: error.message || "这一轮人物整理没有成功。",
-      impact: "这不会影响你已有书架和已经在聊的会话。",
-      nextStep: "可以调整正文片段或人物名单后再试。",
-    });
+    setFlowFailureStatus(
+      "form-status",
+      error.message || "这一轮人物整理没有成功。",
+      "可以调整正文片段或人物名单后再试。",
+      { impact: "这不会影响你已有书架和已经在聊的会话。", affectsChatFlow: false }
+    );
   } finally {
     setButtonBusyState("submit-button", false, { idleText: "开始唤醒人物", busyText: "蒸馏中..." });
   }
@@ -436,20 +554,19 @@ async function handleRedistill() {
   runCreationPending = true;
   updateWorkflowState();
   setButtonBusyState("redistill-button", true, { idleText: "继续整理", busyText: "继续蒸馏中..." });
-  setDistillFlowStatus("redistill-status", file
-    ? {
-        message: "正在换入新的书段，并继续整理人物...",
-        nextStep: "这一轮会沿着新书段增量补稳人物，不会把已有成果推倒重来。",
-      }
-    : selectedSegment
-      ? {
-          message: "正在切到推荐片段，并继续补稳这一位角色...",
-          nextStep: "这次会优先补强当前命中的角色窗口。",
-        }
-      : {
-          message: "正在沿着这卷书继续往下整理...",
-          nextStep: "这一轮会在已有人物基础上继续补稳，不会重头开始。",
-        });
+  setFlowLoadingStatus(
+    "redistill-status",
+    file
+      ? "正在换入新的书段，并继续整理人物..."
+      : selectedSegment
+        ? "正在切到推荐片段，并继续补稳这一位角色..."
+        : "正在沿着这卷书继续往下整理...",
+    file
+      ? "这一轮会沿着新书段增量补稳人物，不会把已有成果推倒重来。"
+      : selectedSegment
+        ? "这次会优先补强当前命中的角色窗口。"
+        : "这一轮会在已有人物基础上继续补稳，不会重头开始。"
+  );
   try {
     const run = await apiJson(
       `/api/web/runs/${currentRunId}/redistill`,
@@ -473,29 +590,29 @@ async function handleRedistill() {
     }
     resetRedistillRecommendationState();
     updateRedistillFileView();
-    setDistillFlowStatus("redistill-status", file
-      ? {
-          message: "新的书段已经接入，这一轮增量整理开始了。",
-          nextStep: "你可以回到书卷页继续看人物和图谱怎么往前长。",
-        }
-      : selectedSegment
-        ? {
-            message: "推荐片段已经接入，这一轮增量整理开始了。",
-            nextStep: "这位角色会优先吃到这一段证据补料。",
-          }
-        : {
-            message: "新的整理已经开始，人物会陆续补进来。",
-            nextStep: "接下来适合继续盯住这卷的进度变化。",
-          });
+    setFlowSuccessStatus(
+      "redistill-status",
+      file
+        ? "新的书段已经接入，这一轮增量整理开始了。"
+        : selectedSegment
+          ? "推荐片段已经接入，这一轮增量整理开始了。"
+          : "新的整理已经开始，人物会陆续补进来。",
+      file
+        ? "你可以回到书卷页继续看人物和图谱怎么往前长。"
+        : selectedSegment
+          ? "这位角色会优先吃到这一段证据补料。"
+          : "接下来适合继续盯住这卷的进度变化。"
+    );
   } catch (error) {
     runCreationPending = false;
     stopRunPolling();
     updateWorkflowState();
-    setDistillFlowStatus("redistill-status", {
-      message: error.message || "这次继续整理没有接上。",
-      impact: "这不会影响这卷已落下的人物、校对结果和当前聊天。",
-      nextStep: "可以换一段更贴近角色的正文，或稍后再试。",
-    });
+    setFlowFailureStatus(
+      "redistill-status",
+      error.message || "这次继续整理没有接上。",
+      "可以换一段更贴近角色的正文，或稍后再试。",
+      { impact: "这不会影响这卷已落下的人物、校对结果和当前聊天。", affectsChatFlow: false }
+    );
   } finally {
     setButtonBusyState("redistill-button", false, { idleText: "继续整理", busyText: "继续蒸馏中..." });
   }
@@ -517,10 +634,11 @@ async function handleRedistillRecommend() {
   redistillSuggestionState.selectedSegmentId = "";
   renderRedistillRecommendationState(character);
   setButtonBusyState("redistill-recommend-button", true, { idleText: "推荐片段", busyText: "推荐中..." });
-  setDistillFlowStatus("redistill-status", {
-    message: `正在替「${character}」翻当前书段，挑适合补稳的正文片段...`,
-    nextStep: "挑完后你可以直接点用推荐片段继续增量蒸馏。",
-  });
+  setFlowLoadingStatus(
+    "redistill-status",
+    `正在替「${character}」翻当前书段，挑适合补稳的正文片段...`,
+    "挑完后你可以直接点用推荐片段继续增量蒸馏。"
+  );
   try {
     const payload = await apiJson(
       `/api/web/runs/${currentRunId}/redistill/recommend`,
@@ -539,26 +657,26 @@ async function handleRedistillRecommend() {
     redistillSuggestionState.items = Array.isArray(payload?.segments) ? payload.segments : [];
     redistillSuggestionState.selectedSegmentId = "";
     renderRedistillRecommendationState(character);
-    setDistillFlowStatus("redistill-status",
+    setFlowSuccessStatus(
+      "redistill-status",
       redistillSuggestionState.items.length
-        ? {
-            message: `已经为「${character}」挑出 ${redistillSuggestionState.items.length} 段更适合补料的正文。`,
-            nextStep: "选中其中一段后，就可以直接继续这位角色的增量蒸馏。",
-          }
-        : {
-            message: `当前书段里暂时没找到更适合「${character}」的推荐窗口。`,
-            nextStep: "可以改用新书段，或直接沿用当前正文继续蒸馏。",
-          });
+        ? `已经为「${character}」挑出 ${redistillSuggestionState.items.length} 段更适合补料的正文。`
+        : `当前书段里暂时没找到更适合「${character}」的推荐窗口。`,
+      redistillSuggestionState.items.length
+        ? "选中其中一段后，就可以直接继续这位角色的增量蒸馏。"
+        : "可以改用新书段，或直接沿用当前正文继续蒸馏。"
+    );
   } catch (error) {
     redistillSuggestionState.loading = false;
     redistillSuggestionState.items = [];
     redistillSuggestionState.selectedSegmentId = "";
     renderRedistillRecommendationState(character);
-    setDistillFlowStatus("redistill-status", {
-      message: error.message || "这次推荐片段没有接上。",
-      impact: "这不会影响这卷继续聊天或直接继续增量蒸馏。",
-      nextStep: "可以稍后重试，或直接手动换入更贴近角色的正文。",
-    });
+    setFlowFailureStatus(
+      "redistill-status",
+      error.message || "这次推荐片段没有接上。",
+      "可以稍后重试，或直接手动换入更贴近角色的正文。",
+      { impact: "这不会影响这卷继续聊天或直接继续增量蒸馏。", affectsChatFlow: false }
+    );
   } finally {
     setButtonBusyState("redistill-recommend-button", false, { idleText: "推荐片段", busyText: "推荐中..." });
   }
@@ -631,7 +749,7 @@ function handleRedistillRefresh() {
 async function handleDialogueSessionSubmit(event) {
   event.preventDefault();
   if (!currentRunId) {
-    setStatus("dialogue-session-status", "先让人物从书页里走出来，再进入这一幕。");
+    setDialogueSessionFailure("先让人物从书页里走出来，再进入这一幕。", "先完成一轮人物蒸馏后再开场。", true);
     publishChatSetupState("chat-setup-submit-blocked");
     return;
   }
@@ -642,7 +760,7 @@ async function handleDialogueSessionSubmit(event) {
     let participants = charactersOf("dialogue-participants");
     if (mode === "act") {
       if (!controlledCharacter) {
-        setStatus("dialogue-session-status", "先写下此刻由你扮演谁。");
+        setDialogueSessionFailure("先写下此刻由你扮演谁。", "填入扮演角色后再开始这一幕。", true);
         publishChatSetupState("chat-setup-submit-blocked");
         return;
       }
@@ -654,7 +772,7 @@ async function handleDialogueSessionSubmit(event) {
     setComposerEnabled(false);
     renderSessionBooting(mode, participants);
     updateWorkflowState();
-    setStatus("dialogue-session-status", "正在替你铺开这一幕...");
+    setDialogueSessionLoading("正在替你铺开这一幕...", "铺开后你就可以继续对话推进。");
     publishChatSetupState("chat-setup-submitting");
     await renderDialogueSession(
       await apiJson(
@@ -683,13 +801,13 @@ async function handleDialogueSessionSubmit(event) {
         "进入聊天失败。"
       )
     );
-    setStatus("dialogue-session-status", "这一幕已经铺好，你可以继续说下去。");
+    setDialogueSessionSuccess("这一幕已经铺好，你可以继续说下去。", "直接发送下一句，或者先补一句场景提示。");
     publishChatSetupState("chat-setup-submitted");
   } catch (error) {
     sessionBooting = false;
     setComposerEnabled(Boolean(currentDialogueSessionId));
     updateWorkflowState();
-    setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。");
+    setDialogueSessionFailure(error.message || "这一幕暂时没有铺开。", "可以稍后重试，或先调整入场模式和参与人物。", true);
     publishChatSetupState("chat-setup-submit-failed");
   }
 }
@@ -769,7 +887,7 @@ function openNewSceneCard() {
   startSceneCardDraft({
     title: trimmedValue("scene-card-preview-title", "") || "",
   });
-  setStatus("scene-card-status", "你可以手写，也可以让 AI 先随机搭一幕。");
+  setSceneCardSuccess("你可以手写，也可以让 AI 先随机搭一幕。", "写完后保存即可在开场时直接选用。");
   openSceneCardModal();
   publishSceneCardEditorState("scene-card-new-opened");
 }
@@ -779,7 +897,7 @@ async function openExistingSceneCard(cardId) {
     openNewSceneCard();
     return;
   }
-  setStatus("scene-card-status", "正在载入场景卡...");
+  setSceneCardLoading("正在载入场景卡...");
   publishSceneCardEditorState("scene-card-loading");
   try {
     const payload = await apiJson(`/api/web/scene-cards/${encodeURIComponent(cardId)}`, {}, "场景卡载入失败。");
@@ -787,11 +905,11 @@ async function openExistingSceneCard(cardId) {
     setValue("scene-card-id", payload.card_id || "");
     fillSceneCardFields(payload.fields || {});
     updateSceneCardDeleteButton();
-    setStatus("scene-card-status", "");
+    setSceneCardSuccess("场景卡已载入。", "可以直接编辑后保存。");
     openSceneCardModal();
     publishSceneCardEditorState("scene-card-loaded");
   } catch (error) {
-    setStatus("dialogue-session-status", error.message || "场景卡载入失败。");
+    setDialogueSessionFailure(error.message || "场景卡载入失败。", "可以稍后重试，或先新建一张场景卡。", false);
     publishSceneCardEditorState("scene-card-load-failed");
   }
 }
@@ -943,7 +1061,7 @@ async function handleGenerateSceneCard(event) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   const button = el("generate-scene-card-button");
   if (button) button.disabled = true;
-  setStatus("scene-card-status", "正在随机生成一张场景卡...");
+  setSceneCardLoading("正在随机生成一张场景卡...");
   publishSceneCardEditorState("scene-card-generating");
   try {
     const payload = await apiJson(
@@ -952,10 +1070,10 @@ async function handleGenerateSceneCard(event) {
       "场景卡生成失败。"
     );
     fillSceneCardFields(payload.fields || {});
-    setStatus("scene-card-status", "AI 已经把这一幕先搭好了，你可以直接保存，也可以再手修。");
+    setSceneCardSuccess("AI 已经把这一幕先搭好了，你可以直接保存，也可以再手修。", "确认无误后保存这张场景卡。");
     publishSceneCardEditorState("scene-card-generated");
   } catch (error) {
-    setStatus("scene-card-status", error.message || "场景卡生成失败。");
+    setSceneCardFailure(error.message || "场景卡生成失败。", "可以稍后重试，或改为手动填写。");
     publishSceneCardEditorState("scene-card-generate-failed");
   } finally {
     if (button) button.disabled = false;
@@ -967,11 +1085,11 @@ async function handleSceneCardSubmit(event) {
   const fields = collectSceneCardPayload();
   const validationMessage = validateSceneCardPayload(fields);
   if (validationMessage) {
-    setStatus("scene-card-status", validationMessage);
+    setSceneCardFailure(validationMessage, "补全必填字段后再保存。");
     publishSceneCardEditorState("scene-card-validation-failed");
     return;
   }
-  setStatus("scene-card-status", "正在保存场景卡...");
+  setSceneCardLoading("正在保存场景卡...");
   publishSceneCardEditorState("scene-card-saving");
   try {
     const cardId = trimmedValue("scene-card-id", "");
@@ -992,11 +1110,11 @@ async function handleSceneCardSubmit(event) {
       syncCustomSelect("dialogue-scene-card");
     }
     syncSelectedSceneCardFromSelect();
-    setStatus("scene-card-status", "场景卡已保存。");
+    setSceneCardSuccess("场景卡已保存。", "现在可以在开场器里直接选用这张卡。");
     publishSceneCardEditorState("scene-card-saved");
     closeSceneCardModal();
   } catch (error) {
-    setStatus("scene-card-status", error.message || "场景卡保存失败。");
+    setSceneCardFailure(error.message || "场景卡保存失败。", "可以稍后重试，或先复制内容避免丢失。");
     publishSceneCardEditorState("scene-card-save-failed");
   }
 }
@@ -1006,7 +1124,7 @@ async function handleDeleteSceneCard(event) {
   const cardId = trimmedValue("scene-card-id", "");
   if (!cardId) return;
   if (!window.confirm("确定删除这张场景卡吗？")) return;
-  setStatus("scene-card-status", "正在删除场景卡...");
+  setSceneCardLoading("正在删除场景卡...");
   publishSceneCardEditorState("scene-card-deleting");
   try {
     await apiJson(
@@ -1023,7 +1141,7 @@ async function handleDeleteSceneCard(event) {
     publishSceneCardEditorState("scene-card-deleted");
     closeSceneCardModal();
   } catch (error) {
-    setStatus("scene-card-status", error.message || "场景卡删除失败。");
+    setSceneCardFailure(error.message || "场景卡删除失败。", "可以稍后重试，或先关闭弹窗后再试。");
     publishSceneCardEditorState("scene-card-delete-failed");
   }
 }
@@ -1252,7 +1370,7 @@ function renderDialogueSceneChainSuggestions(chains = [], sessionId = "") {
     button.textContent = "接这条线并切幕";
     button.addEventListener("click", () => {
       applyDialogueSceneChain(chain).catch((error) => {
-        setStatus("dialogue-live-scene-status", error.message || "这条线暂时没有接上。");
+        setFlowFailureStatus("dialogue-live-scene-status", error.message || "这条线暂时没有接上。", "可以稍后重试，或手动切到目标场景卡。", { affectsChatFlow: false });
       });
     });
     actions.appendChild(button);
@@ -1317,26 +1435,28 @@ async function branchDialogueSessionFromScene(sceneIndex) {
   if (!currentRunId || !currentDialogueSessionId || !Number.isInteger(index) || index < 0) {
     return;
   }
-  setStatus("dialogue-live-scene-status", "正在从这一幕重新岔开一条新会话...");
+  setFlowLoadingStatus("dialogue-live-scene-status", "正在从这一幕重新岔开一条新会话...");
   try {
-    const payload = await window.__ZAOMENG_WEBUI_API__.branchDialogueSession(currentRunId, currentDialogueSessionId, index);
+    const api = await requireWebUiApi();
+    const payload = await api.branchDialogueSession(currentRunId, currentDialogueSessionId, index);
     await renderDialogueSession(payload);
-    setStatus("dialogue-session-status", "已经从这幕重新开出一条新分支。");
-    setStatus("dialogue-live-scene-status", "新的分支会话已经接上。");
+    setDialogueSessionSuccess("已经从这幕重新开出一条新分支。", "可以继续沿新分支推进。");
+    setFlowSuccessStatus("dialogue-live-scene-status", "新的分支会话已经接上。", "可以继续说下一句。");
   } catch (error) {
-    setStatus("dialogue-live-scene-status", error.message || "分支会话创建失败。");
+    setFlowFailureStatus("dialogue-live-scene-status", error.message || "分支会话创建失败。", "可以稍后重试，或继续当前会话。", { affectsChatFlow: true });
   }
 }
 
 async function handleRecommendSceneCard(event) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   if (!sceneCards.length) {
-    setStatus("dialogue-session-status", "你还没有场景卡，先新建一张再让我替你挑。");
+    setDialogueSessionFailure("你还没有场景卡，先新建一张再让我替你挑。", "先新建场景卡后再让系统推荐。", false);
     return;
   }
-  setStatus("dialogue-session-status", "正在按这场的角色和入场方式替你挑更合适的场景卡...");
+  setDialogueSessionLoading("正在按这场的角色和入场方式替你挑更合适的场景卡...");
   try {
-    const payload = await window.__ZAOMENG_WEBUI_API__.recommendSceneCards({
+    const api = await requireWebUiApi();
+    const payload = await api.recommendSceneCards({
       mode: valueOf("dialogue-mode", "observe"),
       participants: charactersOf("dialogue-participants"),
     });
@@ -1351,16 +1471,19 @@ async function handleRecommendSceneCard(event) {
       syncSelectedSceneCardFromSelect();
       const top = Array.isArray(payload?.items) ? payload.items[0] : null;
       const reasons = Array.isArray(top?.recommendation?.reasons) ? top.recommendation.reasons.filter(Boolean).slice(0, 3) : [];
-      setStatus("dialogue-session-status", reasons.length ? `已替你挑好场景卡：${reasons.join("，")}。` : "已替你挑好一张更合适的场景卡。");
+      setDialogueSessionSuccess(
+        reasons.length ? `已替你挑好场景卡：${reasons.join("，")}。` : "已替你挑好一张更合适的场景卡。",
+        "确认后可以直接开场。"
+      );
     } else {
-      setStatus("dialogue-session-status", "这一轮没挑出更明确的推荐，你也可以手动选。");
+      setDialogueSessionSuccess("这一轮没挑出更明确的推荐，你也可以手动选。", "你可以直接手动选一张场景卡。");
     }
     if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
       UI_BRIDGE_TOOLS.syncLegacyUiState("scene-card-recommended", { currentSceneCardRecommendation });
     }
     publishChatSetupState("chat-setup-scene-card-recommended");
   } catch (error) {
-    setStatus("dialogue-session-status", error.message || "场景卡推荐失败。");
+    setDialogueSessionFailure(error.message || "场景卡推荐失败。", "可以稍后重试，或手动选择场景卡。", false);
   }
 }
 
@@ -1368,7 +1491,7 @@ async function handleDuplicateSceneCard(event) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   const fields = collectSceneCardPayload();
   startSceneCardDraft(fields);
-  setStatus("scene-card-status", "已经按当前内容另起一张新卡。保存后会成为独立场景卡。");
+  setSceneCardSuccess("已经按当前内容另起一张新卡。保存后会成为独立场景卡。", "确认后保存这张新卡。");
   publishSceneCardEditorState("scene-card-duplicated");
 }
 
@@ -1438,7 +1561,7 @@ function openNewSelfCard() {
     scene_identity: trimmedValue("dialogue-self-identity", ""),
     interaction_style: trimmedValue("dialogue-self-style", ""),
   });
-  setStatus("self-card-status", "你可以手写，也可以让 AI 先随机捏一张。");
+  setSelfCardSuccess("你可以手写，也可以让 AI 先随机捏一张。", "写完后保存即可在插入模式直接选用。");
   openSelfCardModal();
   publishSelfCardEditorState("self-card-new-opened");
 }
@@ -1448,7 +1571,7 @@ async function openExistingSelfCard(cardId) {
     openNewSelfCard();
     return;
   }
-  setStatus("self-card-status", "正在载入角色卡...");
+  setSelfCardLoading("正在载入角色卡...");
   publishSelfCardEditorState("self-card-loading");
   try {
     const payload = await apiJson(`/api/web/self-cards/${encodeURIComponent(cardId)}`, {}, "角色卡载入失败。");
@@ -1456,11 +1579,11 @@ async function openExistingSelfCard(cardId) {
     setValue("self-card-id", payload.card_id || "");
     fillSelfCardFields(payload.fields || {});
     updateSelfCardDeleteButton();
-    setStatus("self-card-status", "");
+    setSelfCardSuccess("角色卡已载入。", "可以直接编辑后保存。");
     openSelfCardModal();
     publishSelfCardEditorState("self-card-loaded");
   } catch (error) {
-    setStatus("dialogue-session-status", error.message || "角色卡载入失败。");
+    setDialogueSessionFailure(error.message || "角色卡载入失败。", "可以稍后重试，或先新建一张角色卡。", false);
     publishSelfCardEditorState("self-card-load-failed");
   }
 }
@@ -1598,7 +1721,7 @@ async function handleGenerateSelfCard(event) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   const button = el("generate-self-card-button");
   if (button) button.disabled = true;
-  setStatus("self-card-status", "正在随机生成一张角色卡...");
+  setSelfCardLoading("正在随机生成一张角色卡...");
   publishSelfCardEditorState("self-card-generating");
   try {
     const payload = await apiJson(
@@ -1607,10 +1730,10 @@ async function handleGenerateSelfCard(event) {
       "角色卡生成失败。"
     );
     fillSelfCardFields(payload.fields || {});
-    setStatus("self-card-status", "AI 已经把整张卡先填好了，你可以直接保存，也可以再手修。");
+    setSelfCardSuccess("AI 已经把整张卡先填好了，你可以直接保存，也可以再手修。", "确认无误后保存这张角色卡。");
     publishSelfCardEditorState("self-card-generated");
   } catch (error) {
-    setStatus("self-card-status", error.message || "角色卡生成失败。");
+    setSelfCardFailure(error.message || "角色卡生成失败。", "可以稍后重试，或改为手动填写。");
     publishSelfCardEditorState("self-card-generate-failed");
   } finally {
     if (button) button.disabled = false;
@@ -1623,11 +1746,11 @@ async function handleSelfCardSubmit(event) {
   const fields = collectSelfCardPayload();
   const validationMessage = validateSelfCardPayload(fields);
   if (validationMessage) {
-    setStatus("self-card-status", validationMessage);
+    setSelfCardFailure(validationMessage, "补全必填字段后再保存。");
     publishSelfCardEditorState("self-card-validation-failed");
     return;
   }
-  setStatus("self-card-status", "正在保存角色卡...");
+  setSelfCardLoading("正在保存角色卡...");
   publishSelfCardEditorState("self-card-saving");
   try {
     const payload = await apiJson(
@@ -1647,12 +1770,12 @@ async function handleSelfCardSubmit(event) {
       syncCustomSelect("dialogue-self-card");
     }
     syncSelectedSelfCardFromSelect();
-    setStatus("dialogue-session-status", "角色卡已经接好，现在可以直接带它入场。");
-    setStatus("self-card-status", "角色卡已保存。");
+    setDialogueSessionSuccess("角色卡已经接好，现在可以直接带它入场。", "切到插入模式后可直接套用。");
+    setSelfCardSuccess("角色卡已保存。", "现在可以在开场器里直接选用这张卡。");
     publishSelfCardEditorState("self-card-saved");
     closeSelfCardModal();
   } catch (error) {
-    setStatus("self-card-status", error.message || "角色卡保存失败。");
+    setSelfCardFailure(error.message || "角色卡保存失败。", "可以稍后重试，或先复制内容避免丢失。");
     publishSelfCardEditorState("self-card-save-failed");
   }
 }
@@ -1664,7 +1787,7 @@ async function handleDeleteSelfCard(event) {
   if (!window.confirm("确定删除这张角色卡吗？")) {
     return;
   }
-  setStatus("self-card-status", "正在删除角色卡...");
+  setSelfCardLoading("正在删除角色卡...");
   publishSelfCardEditorState("self-card-deleting");
   try {
     await apiJson(
@@ -1678,11 +1801,11 @@ async function handleDeleteSelfCard(event) {
     await loadSelfCards();
     currentSelfCard = null;
     renderSelectedSelfCardPreview();
-    setStatus("dialogue-session-status", "角色卡已经删掉了。");
+    setDialogueSessionSuccess("角色卡已经删掉了。", "可以新建一张角色卡继续使用插入模式。");
     publishSelfCardEditorState("self-card-deleted");
     closeSelfCardModal();
   } catch (error) {
-    setStatus("self-card-status", error.message || "角色卡删除失败。");
+    setSelfCardFailure(error.message || "角色卡删除失败。", "可以稍后重试，或先关闭弹窗后再试。");
     publishSelfCardEditorState("self-card-delete-failed");
   }
 }
@@ -1788,7 +1911,8 @@ function syncSelectedOpeningPresetFromSelect() {
 }
 
 async function loadOpeningPresets() {
-  const payload = await window.__ZAOMENG_WEBUI_API__.listOpeningPresets();
+  const api = await requireWebUiApi();
+  const payload = await api.listOpeningPresets();
   openingPresets = Array.isArray(payload?.items) ? payload.items : [];
   renderOpeningPresetOptions(openingPresets);
   if (typeof UI_BRIDGE_TOOLS.syncLegacyUiState === "function") {
@@ -1875,7 +1999,10 @@ function applyOpeningPresetToChatSetup(preset) {
   updateCharacterPillState();
   applyPresetSceneCard(fields);
   applyPresetSelfCard(mode, fields);
-  setStatus("dialogue-session-status", `已套用开局模板「${preset?.preview?.title || fields.title || "未命名模板"}」。`);
+  setDialogueSessionSuccess(
+    `已套用开局模板「${preset?.preview?.title || fields.title || "未命名模板"}」。`,
+    "确认参与人物和模式后可以直接开场。"
+  );
   publishChatSetupState("chat-setup-opening-preset-applied");
 }
 
@@ -1890,7 +2017,7 @@ function openNewOpeningPreset() {
       note: "",
     },
   });
-  setStatus("opening-preset-status", "会把你当前这套模式、人物、角色卡和场景卡一起收成模板。");
+  setOpeningPresetSuccess("会把你当前这套模式、人物、角色卡和场景卡一起收成模板。", "补上模板标题后即可保存。");
   openOpeningPresetModal();
 }
 
@@ -1900,7 +2027,7 @@ function openExistingOpeningPreset() {
     return;
   }
   fillOpeningPresetMetaForm(currentOpeningPreset);
-  setStatus("opening-preset-status", "保存时会用你当前这套搭配覆盖模板内容。");
+  setOpeningPresetSuccess("保存时会用你当前这套搭配覆盖模板内容。", "确认后保存即可覆盖这套模板。");
   openOpeningPresetModal();
 }
 
@@ -1909,20 +2036,21 @@ async function handleOpeningPresetSubmit(event) {
   const title = trimmedValue("opening-preset-title", "");
   const note = trimmedValue("opening-preset-note", "");
   const cardId = trimmedValue("opening-preset-id", "");
-  setStatus("opening-preset-status", "正在保存开局模板...");
+  setOpeningPresetLoading("正在保存开局模板...");
   try {
-    const payload = await window.__ZAOMENG_WEBUI_API__.saveOpeningPreset(cardId, collectOpeningPresetPayload({ title, note }));
+    const api = await requireWebUiApi();
+    const payload = await api.saveOpeningPreset(cardId, collectOpeningPresetPayload({ title, note }));
     await loadOpeningPresets();
     const select = el("dialogue-opening-preset");
     if (select) {
       select.value = payload.card_id || "";
     }
     syncSelectedOpeningPresetFromSelect();
-    setStatus("dialogue-session-status", "这套开局已经收成模板，下次可以一键套用。");
-    setStatus("opening-preset-status", "开局模板已保存。");
+    setDialogueSessionSuccess("这套开局已经收成模板，下次可以一键套用。", "需要时可直接一键套用后开场。");
+    setOpeningPresetSuccess("开局模板已保存。", "现在可以在开场器里直接选用。");
     closeOpeningPresetModal();
   } catch (error) {
-    setStatus("opening-preset-status", error.message || "开局模板保存失败。");
+    setOpeningPresetFailure(error.message || "开局模板保存失败。", "可以稍后重试，或先精简模板内容后再保存。");
   }
 }
 
@@ -1931,27 +2059,28 @@ async function handleDeleteOpeningPreset(event) {
   const cardId = trimmedValue("opening-preset-id", "");
   if (!cardId) return;
   if (!window.confirm("确定删除这套开局模板吗？")) return;
-  setStatus("opening-preset-status", "正在删除开局模板...");
+  setOpeningPresetLoading("正在删除开局模板...");
   try {
-    await window.__ZAOMENG_WEBUI_API__.deleteOpeningPreset(cardId);
+    const api = await requireWebUiApi();
+    await api.deleteOpeningPreset(cardId);
     if (selectedOpeningPresetId === cardId) {
       selectedOpeningPresetId = "";
       currentOpeningPreset = null;
     }
     await loadOpeningPresets();
     renderOpeningPresetPreview();
-    setStatus("dialogue-session-status", "这套开局模板已经删掉了。");
-    setStatus("opening-preset-status", "开局模板已删除。");
+    setDialogueSessionSuccess("这套开局模板已经删掉了。", "可以新建一套模板继续使用。");
+    setOpeningPresetSuccess("开局模板已删除。", "现在可以创建新的模板。");
     closeOpeningPresetModal();
   } catch (error) {
-    setStatus("opening-preset-status", error.message || "开局模板删除失败。");
+    setOpeningPresetFailure(error.message || "开局模板删除失败。", "可以稍后重试，或先刷新模板列表后再试。");
   }
 }
 
 async function handleApplyOpeningPreset(event) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   if (!currentOpeningPreset) {
-    setStatus("dialogue-session-status", "先挑一套开局模板。");
+    setDialogueSessionFailure("先挑一套开局模板。", "先选中一套模板后再套用。", false);
     return;
   }
   applyOpeningPresetToChatSetup(currentOpeningPreset);
@@ -1960,7 +2089,7 @@ async function handleApplyOpeningPreset(event) {
 async function handleStartOpeningPreset(event) {
   if (event && typeof event.preventDefault === "function") event.preventDefault();
   if (!currentOpeningPreset) {
-    setStatus("dialogue-session-status", "先挑一套开局模板。");
+    setDialogueSessionFailure("先挑一套开局模板。", "先选中一套模板后再开场。", false);
     return;
   }
   applyOpeningPresetToChatSetup(currentOpeningPreset);
@@ -1976,7 +2105,7 @@ async function openPersonaReviewForCharacter(characterName = "") {
     setValue("persona-review-character", character);
   }
   if (!character) {
-    setStatus("persona-review-status", "这一卷里还没有可校对的人物。");
+    setPersonaReviewFailure("这一卷里还没有可校对的人物。", "先完成人物蒸馏后再来校对。");
     return;
   }
   openPersonaReviewModal();
@@ -1985,13 +2114,13 @@ async function openPersonaReviewForCharacter(characterName = "") {
     reviewActions.openForCharacter(character);
     return;
   }
-  setStatus("persona-review-status", "正在载入人物档案...");
+  setPersonaReviewLoading("正在载入人物档案...");
   try {
     renderPersonaReview(await apiJson(`/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`));
     renderPersonaAutofillReferences(null);
-    setStatus("persona-review-status", ""); 
+    setPersonaReviewSuccess("人物档案已载入。", "你可以直接修改并保存。");
   } catch (error) {
-    setStatus("persona-review-status", error.message || "人物档案暂时没有载入。");
+    setPersonaReviewFailure(error.message || "人物档案暂时没有载入。", "可以稍后重试，或先回到书卷页刷新。");
   }
 }
 
@@ -2003,7 +2132,7 @@ async function openWorkCharacterReview() {
   if (!currentRunId || !currentRun) return;
   const names = getRunCharacterNames(currentRun);
   if (!names.length) {
-    setStatus("bookshelf-status", "这一卷里还没有可校对的人物。");
+    setFlowFailureStatus("bookshelf-status", "这一卷里还没有可校对的人物。", "先完成人物蒸馏后再来校对。", { affectsChatFlow: false });
     return;
   }
 
@@ -2016,7 +2145,7 @@ async function openWorkCharacterReview() {
     targetCharacter = names[0] || "";
   }
   if (!targetCharacter) {
-    setStatus("bookshelf-status", "这一卷里还没有可校对的人物。");
+    setFlowFailureStatus("bookshelf-status", "这一卷里还没有可校对的人物。", "先完成人物蒸馏后再来校对。", { affectsChatFlow: false });
     return;
   }
 
@@ -2044,13 +2173,13 @@ async function handlePersonaCharacterChange() {
   if (!currentRunId) return;
   const character = valueOf("persona-review-character", "");
   if (!character) return;
-  setStatus("persona-review-status", "正在切换人物...");
+  setPersonaReviewLoading("正在切换人物...");
   try {
     renderPersonaReview(await apiJson(`/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}`));
     renderPersonaAutofillReferences(null);
-    setStatus("persona-review-status", "");
+    setPersonaReviewSuccess("人物档案已切换。", "可以继续编辑当前人物。");
   } catch (error) {
-    setStatus("persona-review-status", error.message || "人物档案暂时没有载入。");
+    setPersonaReviewFailure(error.message || "人物档案暂时没有载入。", "可以稍后重试，或切换到其他人物。");
   }
 }
 
@@ -2071,7 +2200,7 @@ async function handlePersonaFieldAutofill(event) {
   const character = valueOf("persona-review-character", "");
   const field = trigger.getAttribute("data-persona-autofill-field") || "";
   if (!character || !field) {
-    setStatus("persona-review-status", "先选一个人物。");
+    setPersonaReviewFailure("先选一个人物。", "选中人物后再进行字段补全。");
     return;
   }
   const labelText = trigger.closest(".field-card")?.querySelector(".field-card-head span, span")?.textContent || field;
@@ -2080,7 +2209,7 @@ async function handlePersonaFieldAutofill(event) {
   const originalText = trigger.textContent || "AI补全";
   trigger.textContent = "生成中...";
   setPersonaReviewFieldFeedback(field, "loading", "正在生成补全...");
-  setStatus("persona-review-status", `正在生成「${labelText}」的补全内容...`);
+  setPersonaReviewLoading(`正在生成「${labelText}」的补全内容...`);
   try {
     const payload = await apiJson(
       `/api/web/runs/${currentRunId}/personas/${encodeURIComponent(character)}/suggest-field`,
@@ -2099,16 +2228,16 @@ async function handlePersonaFieldAutofill(event) {
       markPersonaReviewFieldAutofilled(field);
       renderPersonaAutofillReferences(payload);
       setPersonaReviewFieldFeedback(field, "success", "已生成补全内容，记得保存。");
-      setStatus("persona-review-status", payload.message || "已生成补全内容，请记得保存人物校对。");
+      setPersonaReviewSuccess(payload.message || "已生成补全内容，请记得保存人物校对。", "确认后点保存写回这一卷。");
     } else {
       renderPersonaAutofillReferences(payload);
       setPersonaReviewFieldFeedback(field, "error", payload?.message || payload?.reason || "人物信息补全无法生成。");
-      setStatus("persona-review-status", payload?.message || payload?.reason || "人物信息补全无法生成。");
+      setPersonaReviewFailure(payload?.message || payload?.reason || "人物信息补全无法生成。", "可以换字段重试，或手动补全。");
     }
   } catch (error) {
     renderPersonaAutofillReferences(null);
     setPersonaReviewFieldFeedback(field, "error", error.message || "人物信息补全无法生成。");
-    setStatus("persona-review-status", error.message || "人物信息补全无法生成。");
+    setPersonaReviewFailure(error.message || "人物信息补全无法生成。", "可以稍后重试，或手动补全该字段。");
   } finally {
     delete trigger.dataset.loading;
     trigger.disabled = false;
@@ -2127,10 +2256,10 @@ async function handlePersonaReviewSubmit(event) {
   if (!currentRunId) return;
   const character = valueOf("persona-review-character", "");
   if (!character) {
-    setStatus("persona-review-status", "先选一个人物。");
+    setPersonaReviewFailure("先选一个人物。", "选中人物后再保存校对内容。");
     return;
   }
-  setStatus("persona-review-status", "正在写回人物校对...");
+  setPersonaReviewLoading("正在写回人物校对...");
   try {
     renderPersonaReview(
       await apiJson(
@@ -2147,9 +2276,9 @@ async function handlePersonaReviewSubmit(event) {
     clearAllPersonaReviewFieldFeedback();
     renderPersonaAutofillReferences(null);
     applyRunViewSafely(await apiJson(`/api/web/runs/${currentRunId}`));
-    setStatus("persona-review-status", "人物校对已经写回这一卷。");
+    setPersonaReviewSuccess("人物校对已经写回这一卷。", "你可以继续校对下一个人物。");
   } catch (error) {
-    setStatus("persona-review-status", error.message || "这次校对没有保存成功。");
+    setPersonaReviewFailure(error.message || "这次校对没有保存成功。", "可以稍后重试，或先复制修改内容。");
   }
 }
 
@@ -2162,11 +2291,11 @@ async function openRelationDetails() {
   } else if (typeof publishLegacyUiState === "function") {
     publishLegacyUiState("relation-details-loading", { currentRelationDetails: null });
   }
-  setStatus("relation-details-status", "正在整理关系明细...");
+  setRelationDetailsLoading("正在整理关系明细...");
   try {
     renderRelationDetails(await apiJson(`/api/web/runs/${currentRunId}/relations`));
   } catch (error) {
-    setStatus("relation-details-status", error.message || "关系明细暂时没有载入。");
+    setRelationDetailsFailure(error.message || "关系明细暂时没有载入。", "可以稍后重试，或先继续聊天推进。");
   }
 }
 
@@ -2227,31 +2356,29 @@ function renderBuiltinNovelList(items) {
 
 async function loadBuiltinNovels() {
   setButtonBusyState("refresh-builtin-novels-button", true, { idleText: "刷新列表", busyText: "刷新中..." });
-  setFlowStatusMessage("builtin-novel-status", {
-    message: "正在翻出内置书卷...",
-    nextStep: "整理好后你可以直接复制一本到自己的书架。",
-  });
+  setFlowLoadingStatus(
+    "builtin-novel-status",
+    "正在翻出内置书卷...",
+    "整理好后你可以直接复制一本到自己的书架。"
+  );
   try {
     const payload = await apiJson("/api/web/builtin-novels", {}, "内置小说列表载入失败。");
     const items = Array.isArray(payload.items) ? payload.items : [];
     renderBuiltinNovelList(items);
-    setFlowStatusMessage("builtin-novel-status", items.length
-      ? {
-          message: `当前有 ${items.length} 卷可直接试玩的内置小说。`,
-          nextStep: "选一卷复制到书架后，就可以直接开聊。",
-        }
-      : {
-          message: "内置目录里暂时还没有小说包。",
-          nextStep: "你可以先导出一卷，再放进内置目录。",
-        });
+    setFlowSuccessStatus(
+      "builtin-novel-status",
+      items.length ? `当前有 ${items.length} 卷可直接试玩的内置小说。` : "内置目录里暂时还没有小说包。",
+      items.length ? "选一卷复制到书架后，就可以直接开聊。" : "你可以先导出一卷，再放进内置目录。"
+    );
     return items;
   } catch (error) {
     renderBuiltinNovelList([]);
-    setFlowStatusMessage("builtin-novel-status", {
-      message: error.message || "内置小说列表暂时没有载入。",
-      impact: "这不会影响你继续使用当前书架或聊天。",
-      nextStep: "可以稍后重试，或先从本地导入小说包。",
-    });
+    setFlowFailureStatus(
+      "builtin-novel-status",
+      error.message || "内置小说列表暂时没有载入。",
+      "可以稍后重试，或先从本地导入小说包。",
+      { impact: "这不会影响你继续使用当前书架或聊天。", affectsChatFlow: false }
+    );
     throw error;
   } finally {
     setButtonBusyState("refresh-builtin-novels-button", false, { idleText: "刷新列表", busyText: "刷新中..." });
@@ -2274,10 +2401,11 @@ async function handleOpenBuiltinNovelModal() {
 async function handleCloneBuiltinNovel(packageId, title = "", trigger = null) {
   const safeTitle = String(title || "").trim();
   setButtonBusyState(trigger, true, { idleText: "复制到我的书架", busyText: "复制中..." });
-  setFlowStatusMessage("builtin-novel-status", {
-    message: safeTitle ? `正在把《${safeTitle}》复制到你的书架...` : "正在复制这卷书...",
-    nextStep: "复制完成后你就能直接进入这卷书。",
-  });
+  setFlowLoadingStatus(
+    "builtin-novel-status",
+    safeTitle ? `正在把《${safeTitle}》复制到你的书架...` : "正在复制这卷书...",
+    "复制完成后你就能直接进入这卷书。"
+  );
   try {
     const run = await apiJson(
       `/api/web/builtin-novels/${encodeURIComponent(packageId)}/clone`,
@@ -2289,16 +2417,18 @@ async function handleCloneBuiltinNovel(packageId, title = "", trigger = null) {
     closeBuiltinNovelModal();
     applyRunViewSafely(run);
     await loadRunsOverview();
-    setFlowStatusMessage("bookshelf-status", {
-      message: safeTitle ? `《${safeTitle}》已经落到你的书架里。` : "内置小说已经复制到你的书架里。",
-      nextStep: "现在可以直接开聊，或先看人物和关系整理情况。",
-    });
+    setFlowSuccessStatus(
+      "bookshelf-status",
+      safeTitle ? `《${safeTitle}》已经落到你的书架里。` : "内置小说已经复制到你的书架里。",
+      "现在可以直接开聊，或先看人物和关系整理情况。"
+    );
   } catch (error) {
-    setFlowStatusMessage("builtin-novel-status", {
-      message: error.message || "这卷内置小说暂时没有复制成功。",
-      impact: "这不会影响你现有书架和聊天。",
-      nextStep: "可以稍后再试，或先从本地导入小说包。",
-    });
+    setFlowFailureStatus(
+      "builtin-novel-status",
+      error.message || "这卷内置小说暂时没有复制成功。",
+      "可以稍后再试，或先从本地导入小说包。",
+      { impact: "这不会影响你现有书架和聊天。", affectsChatFlow: false }
+    );
   } finally {
     setButtonBusyState(trigger, false, { idleText: "复制到我的书架", busyText: "复制中..." });
   }
@@ -2314,10 +2444,11 @@ async function handleImportRunPackage(event) {
   const file = input.files?.[0];
   if (!file) return;
   setButtonBusyState("bookshelf-import-run-button", true, { idleText: "导入小说包", busyText: "导入中..." });
-  setFlowStatusMessage("bookshelf-status", {
-    message: `正在导入 ${file.name}...`,
-    nextStep: "导入完成后会自动落到你的书架里。",
-  });
+  setFlowLoadingStatus(
+    "bookshelf-status",
+    `正在导入 ${file.name}...`,
+    "导入完成后会自动落到你的书架里。"
+  );
   try {
     const run = await apiJson(
       "/api/web/runs/import",
@@ -2334,17 +2465,19 @@ async function handleImportRunPackage(event) {
     input.value = "";
     applyRunViewSafely(run);
     await loadRunsOverview();
-    setFlowStatusMessage("bookshelf-status", {
-      message: `《${runNovelTitle(run)}》已经导入到你的书架。`,
-      nextStep: "现在可以直接开聊，或先校对人物信息。",
-    });
+    setFlowSuccessStatus(
+      "bookshelf-status",
+      `《${runNovelTitle(run)}》已经导入到你的书架。`,
+      "现在可以直接开聊，或先校对人物信息。"
+    );
   } catch (error) {
     input.value = "";
-    setFlowStatusMessage("bookshelf-status", {
-      message: error.message || "这次导入没有接上。",
-      impact: "这不会影响你当前已经在聊的会话或已有书卷。",
-      nextStep: "可以检查小说包是否完整后再试。",
-    });
+    setFlowFailureStatus(
+      "bookshelf-status",
+      error.message || "这次导入没有接上。",
+      "可以检查小说包是否完整后再试。",
+      { impact: "这不会影响你当前已经在聊的会话或已有书卷。", affectsChatFlow: false }
+    );
   } finally {
     setButtonBusyState("bookshelf-import-run-button", false, { idleText: "导入小说包", busyText: "导入中..." });
   }
@@ -2374,10 +2507,11 @@ async function handleExportRunPackage() {
   const title = runNovelTitle(run);
   setRunPackageExportPending(runId, true);
   setButtonBusyState("detail-export-package-button", true, { idleText: "导出小说包", busyText: "导出中..." });
-  setFlowStatusMessage("bookshelf-status", {
-    message: `正在打包《${title}》的小说包...`,
-    nextStep: "打包完成后会自动开始下载。",
-  });
+  setFlowLoadingStatus(
+    "bookshelf-status",
+    `正在打包《${title}》的小说包...`,
+    "打包完成后会自动开始下载。"
+  );
   try {
     const response = await fetch(`/api/web/runs/${encodeURIComponent(runId)}/export`);
     if (!response.ok) {
@@ -2387,16 +2521,18 @@ async function handleExportRunPackage() {
     const blob = await response.blob();
     const fallbackName = `${String(run?.novel_id || title || "zaomeng-run").trim() || "zaomeng-run"}.zaomeng-run.zip`;
     downloadBlobFile(blob, resolveDownloadFilename(response, fallbackName));
-    setFlowStatusMessage("bookshelf-status", {
-      message: `《${title}》的小说包已经准备好，正在开始下载。`,
-      nextStep: "你可以把它导入到别的设备，或放进内置小说目录。",
-    });
+    setFlowSuccessStatus(
+      "bookshelf-status",
+      `《${title}》的小说包已经准备好，正在开始下载。`,
+      "你可以把它导入到别的设备，或放进内置小说目录。"
+    );
   } catch (error) {
-    setFlowStatusMessage("bookshelf-status", {
-      message: error.message || "这次导出没有接上。",
-      impact: "这不会影响这卷继续聊天或继续校对。",
-      nextStep: "可以稍后重试；如果书还在整理中，等结束后再导出更稳。",
-    });
+    setFlowFailureStatus(
+      "bookshelf-status",
+      error.message || "这次导出没有接上。",
+      "可以稍后重试；如果书还在整理中，等结束后再导出更稳。",
+      { impact: "这不会影响这卷继续聊天或继续校对。", affectsChatFlow: false }
+    );
   } finally {
     setRunPackageExportPending(runId, false);
     setButtonBusyState("detail-export-package-button", false, { idleText: "导出小说包", busyText: "导出中..." });
@@ -2477,11 +2613,12 @@ function scheduleAppUpdatePolling() {
         window.setTimeout(() => window.location.reload(), 900);
       }
     } catch (error) {
-      setFlowStatusMessage("app-update-status", {
-        message: error.message || "刚才那次更新状态暂时没取到。",
-        impact: "这不会影响你继续使用当前版本。",
-        nextStep: "稍后可以再手动检查一次更新。",
-      });
+      setFlowFailureStatus(
+        "app-update-status",
+        error.message || "刚才那次更新状态暂时没取到。",
+        "稍后可以再手动检查一次更新。",
+        { impact: "这不会影响你继续使用当前版本。", affectsChatFlow: false }
+      );
     }
   }, 1200);
 }
@@ -2505,10 +2642,11 @@ function dismissAppUpdateModal() {
 
 async function handleConfirmAppUpdate() {
   setButtonBusyState("confirm-app-update-button", true, { idleText: "现在更新", busyText: "更新中..." });
-  setFlowStatusMessage("app-update-status", {
-    message: "正在替你接上更新...",
-    nextStep: "更新完成后会自动刷新当前页面。",
-  });
+  setFlowLoadingStatus(
+    "app-update-status",
+    "正在替你接上更新...",
+    "更新完成后会自动刷新当前页面。"
+  );
   try {
     const status = await apiJson(
       "/api/web/settings/update",
@@ -2522,11 +2660,12 @@ async function handleConfirmAppUpdate() {
     scheduleAppUpdatePolling();
   } catch (error) {
     setButtonBusyState("confirm-app-update-button", false, { idleText: "现在更新", busyText: "更新中..." });
-    setFlowStatusMessage("app-update-status", {
-      message: error.message || "这次更新没有接上。",
-      impact: "这不会影响你继续使用当前版本聊天。",
-      nextStep: "可以稍后再试更新。",
-    });
+    setFlowFailureStatus(
+      "app-update-status",
+      error.message || "这次更新没有接上。",
+      "可以稍后再试更新。",
+      { impact: "这不会影响你继续使用当前版本聊天。", affectsChatFlow: false }
+    );
   }
 }
 
@@ -3085,7 +3224,9 @@ function bindEvents() {
   });
   bind("new-dialogue-session-button", "click", openNewDialogueSession);
   bind("bookshelf-open-builtin-button", "click", () => {
-    handleOpenBuiltinNovelModal().catch((error) => setStatus("builtin-novel-status", error.message || "内置小说列表暂时没有载入。"));
+    handleOpenBuiltinNovelModal().catch((error) =>
+      setFlowFailureStatus("builtin-novel-status", error.message || "内置小说列表暂时没有载入。", "可以稍后重试，或先从本地导入小说包。", { affectsChatFlow: false })
+    );
   });
   bind("bookshelf-import-run-button", "click", triggerImportRunPackage);
   bind("refresh-builtin-novels-button", "click", () => {
@@ -3096,18 +3237,24 @@ function bindEvents() {
   bind("import-run-package-input", "change", handleImportRunPackage);
   bind("detail-start-chat-button", "click", openNewDialogueSession);
   bind("quick-open-observe-button", "click", () => {
-    openQuickDialogueMode("observe").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+    openQuickDialogueMode("observe").catch((error) =>
+      setDialogueSessionFailure(error.message || "这一幕暂时没有铺开。", "可以稍后重试，或先检查人物与场景卡。", true)
+    );
   });
   bind("quick-open-act-button", "click", () => {
-    openQuickDialogueMode("act").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+    openQuickDialogueMode("act").catch((error) =>
+      setDialogueSessionFailure(error.message || "这一幕暂时没有铺开。", "可以稍后重试，或先检查人物与场景卡。", true)
+    );
   });
   bind("quick-open-insert-button", "click", () => {
-    openQuickDialogueMode("insert").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+    openQuickDialogueMode("insert").catch((error) =>
+      setDialogueSessionFailure(error.message || "这一幕暂时没有铺开。", "可以稍后重试，或先检查人物与场景卡。", true)
+    );
   });
   bind("detail-stop-run-button", "click", handleStopRun);
   bind("open-persona-review-button", "click", () => {
     openWorkCharacterReview().catch((error) => {
-      setStatus("bookshelf-status", error.message || "人物档案暂时没有载入。");
+      setFlowFailureStatus("bookshelf-status", error.message || "人物档案暂时没有载入。", "可以稍后重试，或先回到书卷页刷新。", { affectsChatFlow: false });
     });
   });
   bind("open-relation-details-button", "click", openRelationDetails);
@@ -3133,7 +3280,7 @@ function bindEvents() {
   bind("character-overview-review-button", "click", () => {
     if (!currentCharacterOverview?.character) return;
     openPersonaReviewForCharacter(currentCharacterOverview.character).catch((error) =>
-      setStatus("persona-review-status", error.message || "人物档案暂时没有载入。")
+      setPersonaReviewFailure(error.message || "人物档案暂时没有载入。", "可以稍后重试，或先回到书卷页刷新。")
     );
   });
   bind("character-overview-redistill-button", "click", () => {
@@ -3142,25 +3289,29 @@ function bindEvents() {
       return;
     }
     if (!openCharacterOverviewIncrementalDistillViaBridge()) {
-      setStatus("redistill-status", "角色增量能力暂时没有载入。");
+      setFlowFailureStatus("redistill-status", "角色增量能力暂时没有载入。", "可以稍后重试，或回到书卷页继续蒸馏。", { affectsChatFlow: false });
     }
   });
   bind("character-overview-act-button", "click", () => {
     if (typeof openCharacterOverviewSessionMode === "function") {
-      openCharacterOverviewSessionMode("act").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+      openCharacterOverviewSessionMode("act").catch((error) =>
+        setDialogueSessionFailure(error.message || "这一幕暂时没有铺开。", "可以稍后重试，或先检查人物与场景卡。", true)
+      );
       return;
     }
     openCharacterOverviewSessionModeViaBridge("act").catch((error) =>
-      setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。")
+      setDialogueSessionFailure(error.message || "这一幕暂时没有铺开。", "可以稍后重试，或先检查人物与场景卡。", true)
     );
   });
   bind("character-overview-insert-button", "click", () => {
     if (typeof openCharacterOverviewSessionMode === "function") {
-      openCharacterOverviewSessionMode("insert").catch((error) => setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。"));
+      openCharacterOverviewSessionMode("insert").catch((error) =>
+        setDialogueSessionFailure(error.message || "这一幕暂时没有铺开。", "可以稍后重试，或先检查人物与场景卡。", true)
+      );
       return;
     }
     openCharacterOverviewSessionModeViaBridge("insert").catch((error) =>
-      setStatus("dialogue-session-status", error.message || "这一幕暂时没有铺开。")
+      setDialogueSessionFailure(error.message || "这一幕暂时没有铺开。", "可以稍后重试，或先检查人物与场景卡。", true)
     );
   });
   bind("character-overview-export-button", "click", () => {
@@ -3169,7 +3320,7 @@ function bindEvents() {
       return;
     }
     if (!openCurrentCharacterProfileFileViaBridge()) {
-      setStatus("character-overview-status", "当前人物原档暂时不可用。");
+      setFlowFailureStatus("character-overview-status", "当前人物原档暂时不可用。", "可以稍后重试，或先完成人物校对。", { affectsChatFlow: false });
     }
   });
   el("character-overview-key-fields")?.addEventListener("click", (event) => {
@@ -3251,12 +3402,12 @@ function bindEvents() {
   bind("recommend-scene-card-button", "click", handleRecommendSceneCard);
   bind("dialogue-live-scene-recommend", "click", (event) => {
     handleRecommendDialogueSceneCard(event).catch((error) => {
-      setStatus("dialogue-live-scene-status", error.message || "下一幕推荐失败。");
+      setFlowFailureStatus("dialogue-live-scene-status", error.message || "下一幕推荐失败。", "可以稍后重试，或手动切换场景卡。", { affectsChatFlow: false });
     });
   });
   bind("dialogue-live-scene-shift-recommend", "click", (event) => {
     handleRecommendDialogueSceneCard(event, { autoApply: true }).catch((error) => {
-      setStatus("dialogue-live-scene-status", error.message || "顺手切幕失败。");
+      setFlowFailureStatus("dialogue-live-scene-status", error.message || "顺手切幕失败。", "可以稍后重试，或手动切换场景卡。", { affectsChatFlow: false });
     });
   });
   bind("dialogue-live-scene-apply", "click", handleApplyDialogueSceneCard);
@@ -3289,7 +3440,7 @@ function bindEvents() {
   });
   bind("observe-quick-hint-send", "click", () => {
     applyQuickHint().catch((error) => {
-      setStatus("dialogue-session-status", error.message || "这句推进提示暂时没有送出去。");
+      setDialogueSessionFailure(error.message || "这句推进提示暂时没有送出去。", "可以稍后重试，或直接手写下一句。", true);
     });
   });
   bind("close-dialogue-memory-modal-button", "click", () => {

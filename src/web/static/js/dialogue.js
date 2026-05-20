@@ -788,7 +788,7 @@ function renderRunFallbackForDialogue(run) {
   sourceHistoryExpanded = false;
   characterReadinessExpanded = false;
   workSessionPreviewExpanded = false;
-  runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
+  runCreationPending = run.status === "running" && !isRunWorkflowComplete(run);
   if (typeof renderBookshelfDetail === "function") {
     renderBookshelfDetail(run);
   }

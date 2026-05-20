@@ -153,7 +153,7 @@ function applyRunViewFallback(run, options = {}) {
   sourceHistoryExpanded = false;
   characterReadinessExpanded = false;
   workSessionPreviewExpanded = false;
-  runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
+  runCreationPending = run.status === "running" && !isRunWorkflowComplete(run);
   if (!options.preserveDialogue) {
     resetDialogueView();
   }

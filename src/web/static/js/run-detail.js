@@ -44,7 +44,7 @@ function renderRunSummary(run) {
   const elapsedText = String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim();
   const progressCopy = String(run.progress?.message || "").trim() || "人物与关系会依次浮现。";
   const enrichedCopy =
-    elapsedText && run.summary?.status_text === "workflow_complete" ? `${progressCopy} · 本次用时 ${elapsedText}` : progressCopy;
+    elapsedText && isRunWorkflowComplete(run) ? `${progressCopy} · 本次用时 ${elapsedText}` : progressCopy;
   setText("progress-copy", enrichedCopy, "");
   setText("work-overview-next-step", buildWorkOverviewNextStep(run), "");
   setText("run-progress-review", buildWorkReviewStatus(run), "");
@@ -78,7 +78,7 @@ function buildWorkDistillStatus(run) {
 function renderWorkHeroMetrics(run) {
   const sourceName = String(getCurrentNovelSource(run)?.source_name || "").trim() || "当前书页";
   const characterTotal = getRunCharacterNames(run).length;
-  const statusText = humanizeSummary(run?.summary?.status_text);
+  const statusText = humanizeSummary(runLifecycleState(run));
   const elapsedText = String(run?.summary?.elapsed_text || run?.timing?.elapsed_text || "").trim() || "进行中";
   setText("run-hero-source", sourceName, "");
   setText("run-hero-character-total", characterTotal > 0 ? `${characterTotal} 位` : "0 位", "");
@@ -388,7 +388,7 @@ function buildWorkGraphSummaryState(run) {
     return WORK_OVERVIEW_STATE.buildWorkGraphSummaryState(run);
   }
   const hasGraph = Boolean(run?.artifact_index?.relation_graph?.relations_file);
-  const graphFailed = String(run?.summary?.graph_status || "").trim() === "failed" || String(run?.progress?.graph_status || "").trim() === "failed";
+  const graphFailed = runGraphStatus(run) === "failed";
   const hasCharacters = getRunCharacterNames(run).length > 0;
   if (hasGraph) {
     return { badgeText: "已完成", badgeTone: "stable", copy: "关系线已经能看，先看牵系和张力，再决定从哪种方式入场。" };
@@ -1130,7 +1130,7 @@ function renderRun(run, options = {}) {
   sourceHistoryExpanded = false;
   characterReadinessExpanded = false;
   workSessionPreviewExpanded = false;
-  runCreationPending = run.status === "running" && run.summary?.status_text !== "workflow_complete";
+  runCreationPending = run.status === "running" && !isRunWorkflowComplete(run);
   renderRunSummary(run);
   renderRunEvents(run);
   renderRunGraphLinks(run);

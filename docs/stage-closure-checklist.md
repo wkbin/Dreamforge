@@ -28,7 +28,8 @@
 ### 待完成
 
 - [x] 整理安装 / 更新 / 运行 / 导入导出的一份 runtime contract 文档
-- [ ] 做一轮跨平台主流程实机回归清单
+- [x] 做一轮跨平台主流程实机回归清单
+  - 已落地发版前 gate：`docs/release-regression-signoff.json` + `scripts/release_regression_gate.py`
 
 ## 阶段 2：让聊天真正“活起来”
 
@@ -56,11 +57,11 @@
 - [x] 内置小说 / 本地运行小说 / 导入小说包三类资产已基本分流
 - [x] 已有一批针对旧路径、Windows 路径和旧 manifest 的兼容修复
 
-### 部分完成
+### 已完成
 
-- [ ] package manifest 的兼容规则还没有形成正式冻结文档
-- [ ] schema version 已经有了，但兼容策略仍散在多个模块
-- [ ] 缺失 artifact / graph / payload 的降级策略还没有统一成一层
+- [x] package manifest 的兼容规则已形成正式冻结文档
+- [x] schema version 兼容策略已集中到包兼容入口（含未知版本拒绝与 legacy 回填）
+- [x] 缺失 artifact / graph / payload 的降级策略已统一进入兼容层（集中在 manifest compatibility）
 
 ### 待完成
 
@@ -83,4 +84,4 @@
 2. 再做一轮对话压缩质量提升
 3. 继续打磨时间推进 / 离场回场 / 场景推进自然度
 4. 继续减少前端 dual-path 遗留
-5. 做一轮跨平台主流程实机回归清单
+5. 做一轮跨平台主流程实机回归清单（已纳入发版 gate）

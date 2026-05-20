@@ -20,7 +20,14 @@ from .runtime_config import (
     estimate_text_length,
     is_model_configured_payload,
 )
-from .state import finalize_manifest_timing, format_elapsed_text, is_stop_requested
+from .state import (
+    derive_summary_graph_status,
+    derive_summary_status_text,
+    finalize_manifest_timing,
+    format_elapsed_text,
+    is_stop_requested,
+    project_manifest_summary,
+)
 from .status import refresh_run_manifest, stop_run_manifest
 from .utils import decode_base64_text, new_run_id, normalize_characters
 
@@ -34,6 +41,8 @@ __all__ = [
     "build_novel_source_entry",
     "build_package_filename",
     "build_runtime_config_for_run",
+    "derive_summary_graph_status",
+    "derive_summary_status_text",
     "classify_requested_characters",
     "decode_base64_text",
     "delete_run_group",
@@ -52,6 +61,7 @@ __all__ = [
     "normalize_characters",
     "normalize_model_settings",
     "prepare_restart_novel_source",
+    "project_manifest_summary",
     "refresh_run_manifest",
     "stop_run_manifest",
     "validate_model_settings",

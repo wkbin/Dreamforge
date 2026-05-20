@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from .compat import coerce_manifest_path, relative_to_run_dir
+from src.web.run_ops.state import project_manifest_summary
+
+from .compat import coerce_manifest_path, reconcile_discovered_artifacts, relative_to_run_dir
 
 
 def serialize_manifest(payload: dict[str, Any], *, run_id: str, file_urls: dict[str, str]) -> dict[str, Any]:
@@ -31,37 +33,19 @@ def discover_artifacts(
     relations_root = Path(str(workspace.get("relations_root", ""))).resolve() if workspace.get("relations_root") else None
 
     character_index = discover_character_cards(characters_root)
-    if character_index:
-        updated.setdefault("artifacts", {}).setdefault("character_dirs", {})
-        updated["artifacts"]["character_dirs"] = {
-            item["name"]: item["persona_dir"] for item in character_index
-        }
-        updated.setdefault("artifact_index", {})["characters"] = character_index
-        completed_names = [item["name"] for item in character_index]
-        updated.setdefault("progress", {})["completed_characters"] = completed_names
-        updated["progress"]["completed_count"] = len(completed_names)
-        if updated.get("locked_characters") and len(completed_names) >= len(updated["locked_characters"]):
-            if updated["progress"].get("graph_status") == "complete":
-                updated["summary"]["status_text"] = "waiting_for_verification"
-            else:
-                updated["summary"]["status_text"] = "graph_pending"
-            updated["progress"]["current_character"] = ""
-        updated["summary"]["characters_completed"] = len(completed_names)
-
     relation_graph = discover_relation_graph(relations_root, artifact_dir, run_dir)
-    if relation_graph:
-        updated.setdefault("artifacts", {})["relation_graph"] = relation_graph
-        updated.setdefault("artifact_index", {})["relation_graph"] = relation_graph
-        updated.setdefault("progress", {})["graph_status"] = "complete"
-        if updated["summary"].get("status_text") in {"waiting_for_payloads", "waiting_for_host_generation", "graph_pending"}:
-            updated["summary"]["status_text"] = "graph_ready"
-        updated["summary"]["graph_status"] = "complete"
+    updated = reconcile_discovered_artifacts(
+        updated,
+        character_index=character_index,
+        relation_graph=relation_graph,
+    )
 
     updated.setdefault("progress", {}).setdefault(
         "chunking",
         build_progress_chunking_from_artifacts(updated.get("artifacts", {}).get("chunking", {})),
     )
     updated.setdefault("summary", {})["chunking"] = build_summary_chunking(updated.get("progress", {}).get("chunking", {}))
+    project_manifest_summary(updated)
     return updated
 
 

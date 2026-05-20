@@ -91,6 +91,12 @@ class ReleaseSkillScriptTests(unittest.TestCase):
             self.assertIn("Web static asset version:", result.stdout)
             self.assertIn("Released skill archive:", result.stdout)
 
+    def test_release_skill_cli_accepts_release_tag_argument(self):
+        script_path = Path(__file__).resolve().parents[1] / "scripts" / "release_skill.py"
+        content = script_path.read_text(encoding="utf-8")
+        self.assertIn("--release-tag", content)
+        self.assertIn("release_tag", content)
+
 
 if __name__ == "__main__":
     unittest.main()
